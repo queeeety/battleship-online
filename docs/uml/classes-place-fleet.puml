@@ -1,0 +1,151 @@
+@startuml PlaceFleet_UseCaseClassDiagram
+title Use Case: Place Fleet - Participating Classes
+
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+hide empty members
+
+enum Orientation {
+  HORIZONTAL
+  VERTICAL
+}
+
+enum CellState {
+  EMPTY
+  OCCUPIED
+}
+
+enum GameState {
+  PLACEMENT
+  IN_PROGRESS
+}
+
+enum PlacementError {
+  OUT_OF_BOUNDS
+  OVERLAPS_SHIP
+  ALREADY_PLACED
+  FLEET_INCOMPLETE
+}
+
+class Game {
+  - state : GameState
+  + bothPlayersReady() : boolean
+  + beginBattle() : void
+}
+
+abstract class Player {
+  - id : UUID
+  - name : String
+  - isReady : boolean
+  + placeFleet(board : Board) : void
+  + confirmPlacement() : boolean
+  + {abstract} requestPlacement(s : Ship) : void
+}
+
+class HumanPlayer {
+  + requestPlacement(s : Ship) : void
+}
+
+class AIOpponent {
+  + requestPlacement(s : Ship) : void
+  - randomLayout() : void
+}
+
+class Board {
+  - width : int
+  - height : int
+  + placeShip(s : Ship, start : Coordinate, o : Orientation) : boolean
+  + isPlacementValid(s : Ship, start : Coordinate, o : Orientation) : boolean
+  + removeShip(s : Ship) : void
+  + randomisePlacement() : void
+  + isFleetComplete() : boolean
+  + cellsFor(s : Ship, start : Coordinate, o : Orientation) : List<Coordinate>
+}
+
+class Cell {
+  - state : CellState
+  + isOccupied() : boolean
+  + occupy(s : Ship) : void
+  + clear() : void
+}
+
+abstract class Ship {
+  - name : String
+  - length : int
+  - orientation : Orientation
+  - isPlaced : boolean
+  + rotate() : void
+  + occupies(c : Coordinate) : boolean
+}
+
+class Carrier {
+  - length : int = 5
+}
+class Battleship {
+  - length : int = 4
+}
+class Cruiser {
+  - length : int = 3
+}
+class Submarine {
+  - length : int = 3
+}
+class Destroyer {
+  - length : int = 2
+}
+
+class Fleet {
+  - ships : List<Ship>
+  + standardFleet() : Fleet
+  + allPlaced() : boolean
+  + remaining() : List<Ship>
+}
+
+class Coordinate {
+  - x : int
+  - y : int
+  + isWithinBounds(w : int, h : int) : boolean
+  + offset(dx : int, dy : int) : Coordinate
+}
+
+' ---------- Relationships ----------
+Game "1" o-- "2" Player : players >
+Game --> GameState
+
+Player <|-- HumanPlayer
+Player <|-- AIOpponent
+Player "1" *-- "1" Board : owns >
+
+Board "1" *-- "100" Cell : consists of >
+Board "1" o-- "1" Fleet : fleet >
+Board ..> PlacementError : rejects with >
+Board ..> Coordinate : validates >
+
+Fleet "1" o-- "5" Ship : ships >
+
+Ship <|-- Carrier
+Ship <|-- Battleship
+Ship <|-- Cruiser
+Ship <|-- Submarine
+Ship <|-- Destroyer
+Ship --> Orientation
+
+Cell "1" --> "1" Coordinate
+Cell "0..1" --> "0..1" Ship : holds >
+Cell --> CellState
+
+note bottom of Board
+  Placement validation runs client-side
+  for responsive feedback, then is
+  re-validated server-side on confirm:
+  the client must not be trusted with
+  fleet layout (brief, section 3.2.1).
+end note
+
+note right of Fleet
+  Fleet composition is a candidate for
+  the custom-rules variation invited by
+  the brief (section 1.2.1).
+end note
+
+@enduml

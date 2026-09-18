@@ -1,0 +1,145 @@
+@startuml GameOverRematch_UseCaseClassDiagram
+title Use Case: Game Over / Rematch - Participating Classes
+
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+hide empty members
+
+enum GameState {
+  IN_PROGRESS
+  FINISHED
+}
+
+enum LobbyStatus {
+  IN_PROGRESS
+  READY
+  FINISHED
+  ABANDONED
+}
+
+enum EndReason {
+  FLEET_DESTROYED
+  OPPONENT_FORFEIT
+  OPPONENT_DISCONNECTED
+  TURN_TIMEOUT
+}
+
+enum RematchStatus {
+  NONE
+  REQUESTED
+  ACCEPTED
+  DECLINED
+}
+
+class Lobby {
+  - status : LobbyStatus
+  + reset() : void
+  + abandon() : void
+}
+
+class Game {
+  - state : GameState
+  - winner : Player
+  - endReason : EndReason
+  - finishedAt : DateTime
+  + checkWinCondition() : boolean
+  + declareWinner(p : Player, r : EndReason) : void
+  + forfeit(p : Player) : void
+  + resultFor(p : Player) : GameResult
+}
+
+class GameResult {
+  - didWin : boolean
+  - shotsFired : int
+  - accuracy : float
+  - shipsSunk : int
+  + summary() : String
+}
+
+class RematchRequest {
+  - requestedBy : Player
+  - status : RematchStatus
+  - requestedAt : DateTime
+  + accept() : void
+  + decline() : void
+  + isMutual() : boolean
+}
+
+abstract class Player {
+  - id : UUID
+  - name : String
+  + hasLost() : boolean
+  + requestRematch() : RematchRequest
+}
+
+class HumanPlayer {
+  - connected : boolean
+  - disconnectedAt : DateTime
+  + hasExceededGracePeriod() : boolean
+}
+
+class AIOpponent {
+  + requestRematch() : RematchRequest
+}
+
+class Board {
+  + allShipsSunk() : boolean
+  + reset() : void
+}
+
+abstract class Ship {
+  - hits : int
+  + isSunk() : boolean
+}
+
+class Shot {
+  - result : ShotResult
+  + isHit() : boolean
+}
+
+enum ShotResult {
+  MISS
+  HIT
+  SUNK
+}
+
+' ---------- Relationships ----------
+Lobby "1" *-- "1" Game : runs >
+Lobby --> LobbyStatus
+
+Game "1" o-- "2" Player : players >
+Game "1" *-- "0..*" Shot : history >
+Game "1" --> "0..1" GameResult : produces >
+Game "1" --> "0..1" RematchRequest : pending >
+Game --> GameState
+Game --> EndReason
+
+RematchRequest --> RematchStatus
+RematchRequest "1" --> "1" Player : requested by >
+
+Player <|-- HumanPlayer
+Player <|-- AIOpponent
+Player "1" *-- "1" Board : owns >
+
+Board "1" o-- "5" Ship : fleet >
+Shot --> ShotResult
+
+GameResult ..> Shot : derived from >
+
+note bottom of Game
+  Win detection executes once per shot
+  and must be authoritative, so it
+  resides on the server (brief, 3.2.1).
+  A forfeit path covers disconnection
+  beyond the 60s grace period.
+end note
+
+note right of RematchRequest
+  Multiplayer rematch requires mutual
+  consent. Accepting resets the same
+  Lobby to PLACEMENT, so no new code
+  is issued. In single-player, the AI
+  accepts unconditionally.
+end note
+
+@enduml

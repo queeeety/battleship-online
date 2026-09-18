@@ -1,0 +1,123 @@
+@startuml FireShot_UseCaseClassDiagram
+title Use Case: Fire Shot - Participating Classes
+
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+hide empty members
+
+enum ShotResult {
+  MISS
+  HIT
+  SUNK
+}
+
+enum CellState {
+  EMPTY
+  OCCUPIED
+  HIT
+  MISS
+}
+
+enum GameState {
+  PLACEMENT
+  IN_PROGRESS
+  FINISHED
+}
+
+class Game {
+  - state : GameState
+  - currentTurn : Player
+  - winner : Player
+  - turnStartedAt : DateTime
+  + fireShot(shooter : Player, target : Coordinate) : Shot
+  + isPlayersTurn(p : Player) : boolean
+  + switchTurn() : void
+  + checkWinCondition() : boolean
+}
+
+abstract class Player {
+  - id : UUID
+  - name : String
+  + {abstract} chooseTarget() : Coordinate
+  + hasLost() : boolean
+}
+
+class HumanPlayer {
+  + chooseTarget() : Coordinate
+}
+
+class AIOpponent {
+  - huntQueue : List<Coordinate>
+  + chooseTarget() : Coordinate
+  - recordHit(c : Coordinate) : void
+}
+
+class Board {
+  + receiveShot(target : Coordinate) : ShotResult
+  + hasBeenTargeted(c : Coordinate) : boolean
+  + shipAt(c : Coordinate) : Ship
+  + allShipsSunk() : boolean
+}
+
+class Cell {
+  - state : CellState
+  + isAlreadyShot() : boolean
+  + markHit() : void
+  + markMiss() : void
+}
+
+abstract class Ship {
+  - name : String
+  - hits : int
+  - length : int
+  + registerHit() : void
+  + isSunk() : boolean
+  + occupies(c : Coordinate) : boolean
+}
+
+class Shot {
+  - result : ShotResult
+  - firedAt : DateTime
+  - sunkShipName : String
+  + isHit() : boolean
+}
+
+class Coordinate {
+  - x : int
+  - y : int
+  + isWithinBounds(w : int, h : int) : boolean
+}
+
+' ---------- Relationships exercised by this use case ----------
+Game "1" o-- "2" Player : players >
+Game "1" *-- "0..*" Shot : records >
+Game ..> Coordinate : validates >
+
+Player <|-- HumanPlayer
+Player <|-- AIOpponent
+Player "1" *-- "1" Board : owns >
+
+Board "1" *-- "100" Cell : consists of >
+Board "1" o-- "5" Ship : fleet >
+Board ..> ShotResult : returns >
+
+Cell "1" --> "1" Coordinate
+Cell --> CellState
+Shot --> ShotResult
+Shot "1" --> "1" Coordinate : at >
+Ship ..> Coordinate : occupies >
+Game --> GameState
+
+note bottom of Game
+  Server-authoritative: turn ownership,
+  shot resolution and win check execute
+  once per shot, so they reside on the
+  server (brief, section 3.2.1).
+end note
+
+note bottom of AIOpponent
+  Single-player only. Runs client-side:
+  only the one client needs this logic.
+end note
+
+@enduml

@@ -1,0 +1,109 @@
+@startuml JoinLobby_UseCaseClassDiagram
+title Use Case: Join Lobby - Participating Classes
+
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+hide empty members
+
+enum LobbyStatus {
+  WAITING
+  READY
+  IN_PROGRESS
+  FINISHED
+  ABANDONED
+}
+
+enum JoinError {
+  CODE_NOT_FOUND
+  LOBBY_FULL
+  GAME_ALREADY_FINISHED
+  INVALID_NAME
+}
+
+enum GameState {
+  PLACEMENT
+  IN_PROGRESS
+}
+
+class Lobby {
+  - code : String
+  - status : LobbyStatus
+  - createdAt : DateTime
+  + {static} generateCode() : String
+  + {static} findByCode(code : String) : Lobby
+  + join(name : String) : Player
+  + isFull() : boolean
+  + isJoinable() : boolean
+  + shareLink() : URL
+  + abandon() : void
+}
+
+class Game {
+  - id : UUID
+  - state : GameState
+  + create(host : Player) : Game
+  + addPlayer(p : Player) : boolean
+}
+
+abstract class Player {
+  - id : UUID
+  - name : String
+  - isReady : boolean
+}
+
+class HumanPlayer {
+  - sessionId : UUID
+  - connected : boolean
+  + restoreSeat(sessionId : UUID) : boolean
+}
+
+class Session {
+  - playerId : UUID
+  - lobbyCode : String
+  + persist() : void
+  + resolve() : Player
+}
+
+class LobbyCode {
+  - value : String
+  + isWellFormed() : boolean
+  + normalise() : String
+}
+
+class PlayerName {
+  - value : String
+  + isValid() : boolean
+  + sanitise() : String
+}
+
+' ---------- Relationships ----------
+Lobby "1" o-- "0..2" Player : seats >
+Lobby "1" *-- "1" Game : runs >
+Lobby "1" *-- "1" LobbyCode : identified by >
+Lobby ..> JoinError : rejects with >
+Lobby --> LobbyStatus
+
+Game "1" o-- "0..2" Player : players >
+Game --> GameState
+
+Player <|-- HumanPlayer
+Player "1" *-- "1" PlayerName : named by >
+
+HumanPlayer "1" --> "1" Session : restored from >
+Session ..> LobbyCode : references >
+
+note bottom of Lobby
+  Lobby lifecycle is shared state across
+  both clients, so it resides on the
+  server (brief, section 3.2.1).
+  Composition with Game: destroying the
+  lobby destroys the game.
+end note
+
+note right of Session
+  Persisted as a UUID in an HTTP-only
+  cookie so a mid-game refresh returns
+  the player to their seat.
+end note
+
+@enduml

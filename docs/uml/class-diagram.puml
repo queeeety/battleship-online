@@ -1,0 +1,179 @@
+@startuml MyBattleship_ClassDiagram
+title MyBattleship - Primary Class Diagram
+
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+hide empty members
+
+' ---------- Enumerations ----------
+enum LobbyStatus {
+  WAITING
+  READY
+  IN_PROGRESS
+  FINISHED
+  ABANDONED
+}
+
+enum GameState {
+  PLACEMENT
+  IN_PROGRESS
+  FINISHED
+}
+
+enum ShotResult {
+  MISS
+  HIT
+  SUNK
+}
+
+enum CellState {
+  EMPTY
+  OCCUPIED
+  HIT
+  MISS
+}
+
+enum Orientation {
+  HORIZONTAL
+  VERTICAL
+}
+
+enum Difficulty {
+  EASY
+  NORMAL
+}
+
+' ---------- Core ----------
+class Lobby {
+  - code : String
+  - status : LobbyStatus
+  - createdAt : DateTime
+  + generateCode() : String
+  + join(player : Player) : boolean
+  + isFull() : boolean
+  + abandon() : void
+}
+
+class Game {
+  - id : UUID
+  - state : GameState
+  - currentTurn : Player
+  - winner : Player
+  - turnStartedAt : DateTime
+  + start() : void
+  + fireShot(shooter : Player, target : Coordinate) : Shot
+  + switchTurn() : void
+  + checkWinCondition() : boolean
+  + forfeit(player : Player) : void
+}
+
+abstract class Player {
+  - id : UUID
+  - name : String
+  - isReady : boolean
+  + placeFleet(board : Board) : void
+  + {abstract} chooseTarget() : Coordinate
+  + hasLost() : boolean
+}
+
+class HumanPlayer {
+  - connected : boolean
+  + chooseTarget() : Coordinate
+  + disconnect() : void
+}
+
+class AIOpponent {
+  - difficulty : Difficulty
+  - huntQueue : List<Coordinate>
+  + chooseTarget() : Coordinate
+  - hunt() : Coordinate
+  - target() : Coordinate
+}
+
+class Board {
+  - width : int
+  - height : int
+  + placeShip(ship : Ship, start : Coordinate, o : Orientation) : boolean
+  + isPlacementValid(ship : Ship, start : Coordinate, o : Orientation) : boolean
+  + receiveShot(target : Coordinate) : ShotResult
+  + allShipsSunk() : boolean
+}
+
+class Cell {
+  - coordinate : Coordinate
+  - state : CellState
+  + markHit() : void
+  + markMiss() : void
+}
+
+abstract class Ship {
+  - name : String
+  - length : int
+  - hits : int
+  - orientation : Orientation
+  + registerHit() : void
+  + isSunk() : boolean
+  + occupies(c : Coordinate) : boolean
+}
+
+class Carrier {
+  - length : int = 5
+}
+class Battleship {
+  - length : int = 4
+}
+class Cruiser {
+  - length : int = 3
+}
+class Submarine {
+  - length : int = 3
+}
+class Destroyer {
+  - length : int = 2
+}
+
+class Shot {
+  - coordinate : Coordinate
+  - result : ShotResult
+  - firedAt : DateTime
+  + isHit() : boolean
+}
+
+class Coordinate {
+  - x : int
+  - y : int
+  + equals(other : Coordinate) : boolean
+}
+
+' ---------- Relationships ----------
+Lobby "1" o-- "2" Player : hosts >
+Lobby "1" *-- "1" Game : runs >
+
+Game "1" o-- "2" Player : players >
+Game "1" *-- "0..*" Shot : history >
+
+Player "1" *-- "1" Board : owns >
+Player <|-- HumanPlayer
+Player <|-- AIOpponent
+
+Board "1" *-- "100" Cell : consists of >
+Board "1" o-- "5" Ship : fleet >
+
+Ship <|-- Carrier
+Ship <|-- Battleship
+Ship <|-- Cruiser
+Ship <|-- Submarine
+Ship <|-- Destroyer
+
+Cell "1" --> "1" Coordinate
+Shot "1" --> "1" Coordinate
+Ship "1" --> "0..*" Coordinate : positions >
+
+Lobby --> LobbyStatus
+Game --> GameState
+Shot --> ShotResult
+Cell --> CellState
+Ship --> Orientation
+AIOpponent --> Difficulty
+
+@enduml
