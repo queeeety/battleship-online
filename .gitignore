@@ -1,0 +1,103 @@
+# ---------------------------------------------------------------------------
+# Project ignore rules.
+# Personal tooling (IDE config, OS junk) lives in the machine-wide
+# ~/.config/git/ignore instead of here.
+# ---------------------------------------------------------------------------
+
+# ── Node / package managers ────────────────────────────────────────────────
+node_modules/
+.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+.yarn/install-state.gz
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.npm/
+.node_repl_history
+*.tgz
+
+# ── Next.js ────────────────────────────────────────────────────────────────
+.next/
+out/
+build/
+dist/
+.vercel
+.swc/
+.turbo/
+next-env.d.ts
+
+# ── TypeScript ─────────────────────────────────────────────────────────────
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+.tscache/
+
+# ── Linters, formatters, bundler caches ────────────────────────────────────
+.eslintcache
+.stylelintcache
+.parcel-cache/
+.cache/
+.temp/
+.vite/
+.rollup.cache/
+
+# ── Java ───────────────────────────────────────────────────────────────────
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+hs_err_pid*
+replay_pid*
+target/
+classes/
+bin/
+cmake-build-*/
+
+# ...but build wrappers must stay in the repo
+!gradle/wrapper/gradle-wrapper.jar
+!.mvn/wrapper/maven-wrapper.jar
+
+# ── Build tools (Maven / Gradle / Ant) ─────────────────────────────────────
+.mvn/timing.properties
+release.properties
+dependency-reduced-pom.xml
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+buildNumber.properties
+.gradle/
+gradle-app.setting
+.gradletasknamecache
+build.xml.bak
+
+# ── Tests, logs, coverage ──────────────────────────────────────────────────
+*.log
+logs/
+coverage/
+.nyc_output/
+test-output/
+playwright-report/
+test-results/
+jacoco.exec
+.junit/
+
+# ── Environment & secrets ──────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.properties
+local.properties
+
+# ── Archives ───────────────────────────────────────────────────────────────
+*.zip
+*.tar.gz
+*.rar
