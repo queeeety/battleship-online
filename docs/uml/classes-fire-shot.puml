@@ -1,5 +1,5 @@
 @startuml FireShot_UseCaseClassDiagram
-title Use Case: Fire Shot - Participating Classes
+title Use Case: Fire Shot (incl. Auto-fire on Timeout) - Participating Classes
 
 skinparam classAttributeIconSize 0
 skinparam linetype ortho
@@ -24,74 +24,98 @@ enum GameState {
   FINISHED
 }
 
-class Game {
+enum GameType {
+  BEGINNER
+  ORIGINAL
+  QUICK_FIRE
+}
+
+class UIManager <<boundary>> {
+  + onCellClick(c : Coordinate) : void
+  + renderBoard(b : Board, isOwn : boolean) : void
+  + showCountdown(secondsLeft : int) : void
+}
+
+class NetworkHandler <<boundary>> {
+  - channel : Channel
+  + broadcast(g : Game) : void
+}
+
+class Server <<controller>> {
+  + fireShot(code : String, target : Coordinate) : Shot
+}
+
+class Game <<controller>> {
   - state : GameState
+  - gameType : GameType
   - currentTurn : Player
-  - winner : Player
   - turnStartedAt : DateTime
   + fireShot(shooter : Player, target : Coordinate) : Shot
-  + isPlayersTurn(p : Player) : boolean
+  + fireRandomShot(p : Player) : Shot
+  + isTurnExpired() : boolean
   + switchTurn() : void
+  + grantAbility(p : Player) : void
   + checkWinCondition() : boolean
 }
 
-abstract class Player {
+abstract class Player <<entity>> {
   - id : UUID
   - name : String
   + {abstract} chooseTarget() : Coordinate
   + hasLost() : boolean
 }
 
-class HumanPlayer {
+class HumanPlayer <<entity>> {
   + chooseTarget() : Coordinate
 }
 
-class AIOpponent {
+class AIOpponent <<entity>> {
   - huntQueue : List<Coordinate>
   + chooseTarget() : Coordinate
-  - recordHit(c : Coordinate) : void
+  - hunt() : Coordinate
+  - target() : Coordinate
 }
 
-class Board {
-  + receiveShot(target : Coordinate) : ShotResult
+class Board <<entity>> {
+  + receiveShot(target : Coordinate) : Shot
   + hasBeenTargeted(c : Coordinate) : boolean
-  + shipAt(c : Coordinate) : Ship
   + allShipsSunk() : boolean
 }
 
-class Cell {
+class Cell <<entity>> {
   - state : CellState
   + isAlreadyShot() : boolean
   + markHit() : void
   + markMiss() : void
 }
 
-abstract class Ship {
+abstract class Ship <<entity>> {
   - name : String
   - hits : int
   - length : int
   + registerHit() : void
   + isSunk() : boolean
-  + occupies(c : Coordinate) : boolean
 }
 
-class Shot {
+class Shot <<entity>> {
+  - coordinate : Coordinate
   - result : ShotResult
+  - shooter : Player
   - firedAt : DateTime
   - sunkShipName : String
   + isHit() : boolean
 }
 
-class Coordinate {
-  - x : int
-  - y : int
-  + isWithinBounds(w : int, h : int) : boolean
-}
-
 ' ---------- Relationships exercised by this use case ----------
+UIManager ..> Server : fireShot >
+Server ..> Game : resolves in one transaction >
+Server --> NetworkHandler : broadcasts result >
+NetworkHandler ..> UIManager : pushes to both clients >
+
 Game "1" o-- "2" Player : players >
 Game "1" *-- "0..*" Shot : records >
-Game ..> Coordinate : validates >
+Game --> GameState
+Game --> GameType
 
 Player <|-- HumanPlayer
 Player <|-- AIOpponent
@@ -99,25 +123,27 @@ Player "1" *-- "1" Board : owns >
 
 Board "1" *-- "100" Cell : consists of >
 Board "1" o-- "5" Ship : fleet >
-Board ..> ShotResult : returns >
+Board ..> Shot : creates >
 
-Cell "1" --> "1" Coordinate
 Cell --> CellState
+Cell "*" --> "0..1" Ship : holds >
 Shot --> ShotResult
-Shot "1" --> "1" Coordinate : at >
-Ship ..> Coordinate : occupies >
-Game --> GameState
+Shot "*" --> "1" Player : fired by >
 
 note bottom of Game
   Server-authoritative: turn ownership,
-  shot resolution and win check execute
-  once per shot, so they reside on the
-  server (brief, section 3.2.1).
+  shot resolution and win check run once
+  per shot, so they live on the server
+  (brief, 3.2.1). A hit keeps the turn,
+  a miss calls switchTurn(). If
+  isTurnExpired() (30/15/5 s by GameType),
+  fireRandomShot() fires for the player.
+  A SUNK result calls grantAbility().
 end note
 
 note bottom of AIOpponent
   Single-player only. Runs client-side:
-  only the one client needs this logic.
+  only one client needs this logic.
 end note
 
 @enduml

@@ -1,18 +1,19 @@
 @startuml GameOverRematch_UseCaseClassDiagram
-title Use Case: Game Over / Rematch - Participating Classes
+title Use Case: Game Over / Rematch (incl. Forfeit, Award Win on Disconnect) - Participating Classes
 
 skinparam classAttributeIconSize 0
 skinparam linetype ortho
 hide empty members
 
 enum GameState {
+  PLACEMENT
   IN_PROGRESS
   FINISHED
 }
 
 enum LobbyStatus {
+  WAITING
   IN_PROGRESS
-  READY
   FINISHED
   ABANDONED
 }
@@ -21,7 +22,6 @@ enum EndReason {
   FLEET_DESTROYED
   OPPONENT_FORFEIT
   OPPONENT_DISCONNECTED
-  TURN_TIMEOUT
 }
 
 enum RematchStatus {
@@ -31,13 +31,31 @@ enum RematchStatus {
   DECLINED
 }
 
-class Lobby {
+enum ShotResult {
+  MISS
+  HIT
+  SUNK
+}
+
+class UIManager <<boundary>> {
+  + showResult(r : GameResult) : void
+}
+
+class NetworkHandler <<boundary>> {
+  + onDisconnect(p : HumanPlayer) : void
+}
+
+class Server <<controller>> {
+  + requestRematch(code : String, accept : boolean) : RematchRequest
+}
+
+class Lobby <<controller>> {
   - status : LobbyStatus
   + reset() : void
   + abandon() : void
 }
 
-class Game {
+class Game <<controller>> {
   - state : GameState
   - winner : Player
   - endReason : EndReason
@@ -48,7 +66,7 @@ class Game {
   + resultFor(p : Player) : GameResult
 }
 
-class GameResult {
+class GameResult <<entity>> {
   - didWin : boolean
   - shotsFired : int
   - accuracy : float
@@ -56,7 +74,7 @@ class GameResult {
   + summary() : String
 }
 
-class RematchRequest {
+class RematchRequest <<entity>> {
   - requestedBy : Player
   - status : RematchStatus
   - requestedAt : DateTime
@@ -65,57 +83,54 @@ class RematchRequest {
   + isMutual() : boolean
 }
 
-abstract class Player {
+abstract class Player <<entity>> {
   - id : UUID
   - name : String
   + hasLost() : boolean
   + requestRematch() : RematchRequest
 }
 
-class HumanPlayer {
+class HumanPlayer <<entity>> {
   - connected : boolean
   - disconnectedAt : DateTime
   + hasExceededGracePeriod() : boolean
 }
 
-class AIOpponent {
-  + requestRematch() : RematchRequest
-}
+class AIOpponent <<entity>>
 
-class Board {
+class Board <<entity>> {
   + allShipsSunk() : boolean
   + reset() : void
 }
 
-abstract class Ship {
+abstract class Ship <<entity>> {
   - hits : int
   + isSunk() : boolean
 }
 
-class Shot {
+class Shot <<entity>> {
   - result : ShotResult
   + isHit() : boolean
 }
 
-enum ShotResult {
-  MISS
-  HIT
-  SUNK
-}
-
 ' ---------- Relationships ----------
+UIManager ..> GameResult : shows >
+UIManager ..> Server : requestRematch >
+NetworkHandler ..> Game : reports disconnect >
+Server ..> Lobby : resets on mutual accept >
+
 Lobby "1" *-- "1" Game : runs >
 Lobby --> LobbyStatus
 
 Game "1" o-- "2" Player : players >
 Game "1" *-- "0..*" Shot : history >
-Game "1" --> "0..1" GameResult : produces >
-Game "1" --> "0..1" RematchRequest : pending >
+Game "1" --> "0..2" GameResult : produces >
+Game "1" --> "0..1" RematchRequest : holds >
 Game --> GameState
 Game --> EndReason
 
 RematchRequest --> RematchStatus
-RematchRequest "1" --> "1" Player : requested by >
+RematchRequest "*" --> "1" Player : requested by >
 
 Player <|-- HumanPlayer
 Player <|-- AIOpponent
@@ -127,19 +142,19 @@ Shot --> ShotResult
 GameResult ..> Shot : derived from >
 
 note bottom of Game
-  Win detection executes once per shot
-  and must be authoritative, so it
-  resides on the server (brief, 3.2.1).
-  A forfeit path covers disconnection
-  beyond the 60s grace period.
+  Win detection runs once per shot and
+  must be authoritative, so it lives on
+  the server (brief, 3.2.1). If a
+  HumanPlayer has no presence for 60 s,
+  declareWinner(opponent,
+  OPPONENT_DISCONNECTED) is called.
 end note
 
 note right of RematchRequest
-  Multiplayer rematch requires mutual
-  consent. Accepting resets the same
-  Lobby to PLACEMENT, so no new code
-  is issued. In single-player, the AI
-  accepts unconditionally.
+  Multiplayer rematch needs both players
+  to agree. Accepting calls Lobby.reset():
+  same code, new Game in PLACEMENT.
+  In single-player the AI always accepts.
 end note
 
 @enduml

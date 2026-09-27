@@ -13,11 +13,14 @@ enum Orientation {
 enum CellState {
   EMPTY
   OCCUPIED
+  HIT
+  MISS
 }
 
 enum GameState {
   PLACEMENT
   IN_PROGRESS
+  FINISHED
 }
 
 enum PlacementError {
@@ -27,49 +30,51 @@ enum PlacementError {
   FLEET_INCOMPLETE
 }
 
-class Game {
+class UIManager <<boundary>> {
+  + renderBoard(b : Board, isOwn : boolean) : void
+  + onCellClick(c : Coordinate) : void
+}
+
+class Server <<controller>> {
+  + placeShips(code : String, layout : Board) : boolean
+}
+
+class Game <<controller>> {
   - state : GameState
-  + bothPlayersReady() : boolean
   + beginBattle() : void
 }
 
-abstract class Player {
+abstract class Player <<entity>> {
   - id : UUID
   - name : String
   - isReady : boolean
-  + placeFleet(board : Board) : void
+  + placeFleet(b : Board) : void
   + confirmPlacement() : boolean
-  + {abstract} requestPlacement(s : Ship) : void
 }
 
-class HumanPlayer {
-  + requestPlacement(s : Ship) : void
-}
+class HumanPlayer <<entity>>
 
-class AIOpponent {
-  + requestPlacement(s : Ship) : void
-  - randomLayout() : void
-}
+class AIOpponent <<entity>>
 
-class Board {
-  - width : int
-  - height : int
+class Board <<entity>> {
+  - width : int = 10
+  - height : int = 10
+  - ships : List<Ship>
+  + canPlace(s : Ship, start : Coordinate, o : Orientation) : boolean
   + placeShip(s : Ship, start : Coordinate, o : Orientation) : boolean
-  + isPlacementValid(s : Ship, start : Coordinate, o : Orientation) : boolean
   + removeShip(s : Ship) : void
-  + randomisePlacement() : void
+  + placeFleetRandomly() : void
   + isFleetComplete() : boolean
-  + cellsFor(s : Ship, start : Coordinate, o : Orientation) : List<Coordinate>
 }
 
-class Cell {
+class Cell <<entity>> {
+  - coordinate : Coordinate
   - state : CellState
-  + isOccupied() : boolean
   + occupy(s : Ship) : void
   + clear() : void
 }
 
-abstract class Ship {
+abstract class Ship <<entity>> {
   - name : String
   - length : int
   - orientation : Orientation
@@ -94,21 +99,18 @@ class Destroyer {
   - length : int = 2
 }
 
-class Fleet {
-  - ships : List<Ship>
-  + standardFleet() : Fleet
-  + allPlaced() : boolean
-  + remaining() : List<Ship>
-}
-
-class Coordinate {
+class Coordinate <<value>> {
   - x : int
   - y : int
   + isWithinBounds(w : int, h : int) : boolean
-  + offset(dx : int, dy : int) : Coordinate
 }
 
 ' ---------- Relationships ----------
+UIManager ..> Board : renders / validates >
+UIManager ..> Server : placeShips >
+Server ..> Board : re-validates >
+Server ..> Game : starts when both ready >
+
 Game "1" o-- "2" Player : players >
 Game --> GameState
 
@@ -117,11 +119,9 @@ Player <|-- AIOpponent
 Player "1" *-- "1" Board : owns >
 
 Board "1" *-- "100" Cell : consists of >
-Board "1" o-- "1" Fleet : fleet >
+Board "1" o-- "5" Ship : fleet >
 Board ..> PlacementError : rejects with >
 Board ..> Coordinate : validates >
-
-Fleet "1" o-- "5" Ship : ships >
 
 Ship <|-- Carrier
 Ship <|-- Battleship
@@ -131,21 +131,19 @@ Ship <|-- Destroyer
 Ship --> Orientation
 
 Cell "1" --> "1" Coordinate
-Cell "0..1" --> "0..1" Ship : holds >
+Cell "*" --> "0..1" Ship : holds >
 Cell --> CellState
 
 note bottom of Board
-  Placement validation runs client-side
-  for responsive feedback, then is
-  re-validated server-side on confirm:
-  the client must not be trusted with
-  fleet layout (brief, section 3.2.1).
+  Board.canPlace() runs on the client for
+  instant feedback, then Server.placeShips()
+  calls the same method again: the client is
+  never trusted with the layout (brief, 3.2.1).
 end note
 
-note right of Fleet
-  Fleet composition is a candidate for
-  the custom-rules variation invited by
-  the brief (section 1.2.1).
+note right of AIOpponent
+  Uses placeFleetRandomly() for its
+  own fleet (same as the Randomise button).
 end note
 
 @enduml
