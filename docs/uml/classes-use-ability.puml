@@ -1,0 +1,145 @@
+@startuml UseAbility_UseCaseClassDiagram
+title Use Case: Use Ability (Draw / Keep or Replace) - Participating Classes
+
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+hide empty members
+
+
+enum CellState {
+  EMPTY
+  OCCUPIED
+  HIT
+  MISS
+}
+
+class UIManager <<boundary>> {
+  + showAbility(a : Ability) : void
+  + promptKeepOrReplace(current : Ability, drawn : Ability) : boolean
+  + showScanResult(cells : List<Coordinate>) : void
+}
+
+class NetworkHandler <<boundary>> {
+  + broadcast(g : Game) : void
+  + sendPrivate(p : HumanPlayer, cells : List<Coordinate>) : void
+}
+
+class Server <<controller>> {
+  + useAbility(code : String, a : Ability, target : Coordinate) : void
+}
+
+class Game <<controller>> {
+  - currentTurn : Player
+  + grantAbility(p : Player) : void
+  + applyAbility(p : Player, target : Coordinate) : void
+}
+
+abstract class Player <<entity>> {
+  - heldAbility : Ability
+  + receiveAbility(drawn : Ability) : void
+}
+
+class HumanPlayer <<entity>>
+
+class AIOpponent <<entity>> {
+  + shouldUseAbility() : boolean
+}
+
+abstract class Ability <<entity>> {
+  - name : String
+  - usesTurnShot : boolean
+  - used : boolean
+  - holder : Player
+  + canUse(g : Game) : boolean
+  + {abstract} isValidTarget(b : Board, t : Coordinate) : boolean
+  + {abstract} apply(g : Game, b : Board, t : Coordinate) : void
+}
+
+class RadarSweep {
+  - usesTurnShot : boolean = true
+  + isValidTarget(b : Board, t : Coordinate) : boolean
+  + apply(g : Game, b : Board, t : Coordinate) : void
+}
+
+class LineScan {
+  - usesTurnShot : boolean = true
+  - isRow : boolean
+  + isValidTarget(b : Board, t : Coordinate) : boolean
+  + apply(g : Game, b : Board, t : Coordinate) : void
+}
+
+class DoubleShot {
+  - usesTurnShot : boolean = false
+  + isValidTarget(b : Board, t : Coordinate) : boolean
+  + apply(g : Game, b : Board, t : Coordinate) : void
+}
+
+class Reroute {
+  - usesTurnShot : boolean = true
+  + isValidTarget(b : Board, t : Coordinate) : boolean
+  + apply(g : Game, b : Board, t : Coordinate) : void
+  + validPositions(b : Board, s : Ship) : List<Coordinate>
+}
+
+class Board <<entity>> {
+  + scanArea(topLeft : Coordinate, size : int) : List<Coordinate>
+  + scanLine(index : int, isRow : boolean) : List<Coordinate>
+  + moveShip(s : Ship, start : Coordinate, o : Orientation) : boolean
+  + hasBeenTargeted(c : Coordinate) : boolean
+}
+
+class Cell <<entity>> {
+  - state : CellState
+  + isAlreadyShot() : boolean
+}
+
+abstract class Ship <<entity>> {
+  - hits : int
+  + isSunk() : boolean
+}
+
+' ---------- Relationships ----------
+UIManager ..> Server : useAbility >
+Server ..> Game : validates & applies >
+Server --> NetworkHandler : scan result to scanner only >
+
+Game ..> Ability : grants (random draw) >
+Game "1" o-- "2" Player : players >
+
+Player <|-- HumanPlayer
+Player <|-- AIOpponent
+Player "1" o-- "0..1" Ability : holds >
+Player "1" *-- "1" Board : owns >
+
+Ability <|-- RadarSweep
+Ability <|-- LineScan
+Ability <|-- DoubleShot
+Ability <|-- Reroute
+Ability ..> Board : applies to >
+
+Board "1" *-- "100" Cell : consists of >
+Board "1" o-- "5" Ship : fleet >
+Reroute ..> Ship : moves undamaged >
+
+note bottom of Game
+  grantAbility() runs when a Ship reports
+  isSunk(); the ability
+  goes to the owner of the sunk ship.
+  Reroute is redrawn if validPositions()
+  is empty for every undamaged ship.
+end note
+
+note right of Player
+  Max 1 held ability. If one is already
+  held, receiveAbility() asks via
+  UIManager.promptKeepOrReplace();
+  the AI decides itself.
+end note
+
+note bottom of Reroute
+  validPositions() excludes every square
+  the opponent has already fired at, so
+  an old miss can never become a lie.
+end note
+
+@enduml

@@ -1,5 +1,5 @@
 @startuml JoinLobby_UseCaseClassDiagram
-title Use Case: Join Lobby - Participating Classes
+title Use Case: Create / Join Lobby - Participating Classes
 
 skinparam classAttributeIconSize 0
 skinparam linetype ortho
@@ -7,7 +7,6 @@ hide empty members
 
 enum LobbyStatus {
   WAITING
-  READY
   IN_PROGRESS
   FINISHED
   ABANDONED
@@ -23,9 +22,35 @@ enum JoinError {
 enum GameState {
   PLACEMENT
   IN_PROGRESS
+  FINISHED
 }
 
-class Lobby {
+enum GameType {
+  BEGINNER
+  ORIGINAL
+  QUICK_FIRE
+}
+
+
+class UIManager <<boundary>> {
+  - currentScreen : Screen
+  + showScreen(s : Screen) : void
+  + showError(e : JoinError) : void
+}
+
+class NetworkHandler <<boundary>> {
+  - channel : Channel
+  + subscribe(code : String) : void
+  + trackPresence(p : HumanPlayer) : void
+}
+
+class Server <<controller>> {
+  + createLobby(name : String, type : GameType) : Lobby
+  + joinLobby(code : String, name : String) : HumanPlayer
+  + restoreSeat(sessionId : UUID) : HumanPlayer
+}
+
+class Lobby <<controller>> {
   - code : String
   - status : LobbyStatus
   - createdAt : DateTime
@@ -38,72 +63,58 @@ class Lobby {
   + abandon() : void
 }
 
-class Game {
+class Game <<controller>> {
   - id : UUID
   - state : GameState
-  + create(host : Player) : Game
+  - gameType : GameType
   + addPlayer(p : Player) : boolean
 }
 
-abstract class Player {
+abstract class Player <<entity>> {
   - id : UUID
   - name : String
   - isReady : boolean
 }
 
-class HumanPlayer {
+class HumanPlayer <<entity>> {
   - sessionId : UUID
   - connected : boolean
-  + restoreSeat(sessionId : UUID) : boolean
-}
-
-class Session {
-  - playerId : UUID
-  - lobbyCode : String
-  + persist() : void
-  + resolve() : Player
-}
-
-class LobbyCode {
-  - value : String
-  + isWellFormed() : boolean
-  + normalise() : String
-}
-
-class PlayerName {
-  - value : String
-  + isValid() : boolean
-  + sanitise() : String
+  + reconnect() : void
 }
 
 ' ---------- Relationships ----------
+UIManager ..> Server : createLobby / joinLobby >
+UIManager ..> JoinError : displays >
+UIManager --> NetworkHandler : subscribes >
+Server "1" --> "0..*" Lobby : manages >
+Server ..> HumanPlayer : issues sessionId >
+NetworkHandler ..> HumanPlayer : tracks presence >
+
 Lobby "1" o-- "0..2" Player : seats >
 Lobby "1" *-- "1" Game : runs >
-Lobby "1" *-- "1" LobbyCode : identified by >
 Lobby ..> JoinError : rejects with >
 Lobby --> LobbyStatus
 
 Game "1" o-- "0..2" Player : players >
 Game --> GameState
+Game --> GameType
 
 Player <|-- HumanPlayer
-Player "1" *-- "1" PlayerName : named by >
-
-HumanPlayer "1" --> "1" Session : restored from >
-Session ..> LobbyCode : references >
 
 note bottom of Lobby
   Lobby lifecycle is shared state across
   both clients, so it resides on the
   server (brief, section 3.2.1).
-  Composition with Game: destroying the
-  lobby destroys the game.
+  Code: 6 chars from A-Z / 2-9, without
+  0, O, 1, I, L. Composition with Game:
+  removing the lobby removes the game.
 end note
 
-note right of Session
-  Persisted as a UUID in an HTTP-only
-  cookie so a mid-game refresh returns
-  the player to their seat.
+note right of HumanPlayer
+  sessionId comes from Supabase
+  anonymous sign-in, so a mid-game
+  refresh returns the player to their
+  seat (Server.restoreSeat).
 end note
 
 @enduml

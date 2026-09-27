@@ -1,0 +1,83 @@
+@startuml PlayVsAI_UseCaseClassDiagram
+title Use Case: Play vs AI (incl. Choose Difficulty) - Participating Classes
+
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+hide empty members
+
+enum Difficulty {
+  EASY
+  NORMAL
+}
+
+
+class UIManager <<boundary>> {
+  - currentScreen : Screen
+  + showScreen(s : Screen) : void
+  + renderBoard(b : Board, isOwn : boolean) : void
+  + onCellClick(c : Coordinate) : void
+}
+
+class Game <<controller>> {
+  - currentTurn : Player
+  + beginBattle() : void
+  + fireShot(shooter : Player, target : Coordinate) : Shot
+  + switchTurn() : void
+  + checkWinCondition() : boolean
+}
+
+abstract class Player <<entity>> {
+  - name : String
+  + {abstract} chooseTarget() : Coordinate
+}
+
+class HumanPlayer <<entity>> {
+  + chooseTarget() : Coordinate
+}
+
+class AIOpponent <<entity>> {
+  - difficulty : Difficulty
+  - huntQueue : List<Coordinate>
+  + chooseTarget() : Coordinate
+  + shouldUseAbility() : boolean
+  - hunt() : Coordinate
+  - target() : Coordinate
+}
+
+class Board <<entity>> {
+  + placeFleetRandomly() : void
+  + receiveShot(target : Coordinate) : Shot
+  + hasBeenTargeted(c : Coordinate) : boolean
+}
+
+class Shot <<entity>> {
+  - result : ShotResult
+  + isHit() : boolean
+}
+
+' ---------- Relationships ----------
+UIManager ..> Game : calls directly >
+Game "1" o-- "2" Player : players >
+Game "1" *-- "0..*" Shot : history >
+Player <|-- HumanPlayer
+Player <|-- AIOpponent
+Player "1" *-- "1" Board : owns >
+AIOpponent --> Difficulty
+AIOpponent ..> Board : reads opponent's shots >
+AIOpponent ..> Shot : remembers hits >
+
+note bottom of Game
+  Client-only: Server and NetworkHandler
+  are not involved. The same Game, Board
+  and Ship classes run in the browser, so
+  the rules are identical to multiplayer.
+end note
+
+note right of AIOpponent
+  NORMAL: hunt on a checkerboard
+  (row + col even), then target the
+  4 neighbours of an unsunk hit.
+  EASY: random untargeted cell.
+end note
+
+@enduml

@@ -1,179 +1,377 @@
 @startuml MyBattleship_ClassDiagram
-title MyBattleship - Primary Class Diagram
+title MyBattleship - Primary Class Diagram (15 classes + subclasses)
 
 skinparam classAttributeIconSize 0
-skinparam linetype ortho
+skinparam packageStyle rectangle
+skinparam nodesep 40
+skinparam ranksep 60
 hide empty members
 
-' ---------- Enumerations ----------
-enum LobbyStatus {
-  WAITING
-  READY
-  IN_PROGRESS
-  FINISHED
-  ABANDONED
+' =====================================================
+' Boundary classes (client side)
+' =====================================================
+package "Boundary" {
+  class UIManager <<boundary>> {
+    - currentScreen : Screen
+    + showScreen(s : Screen) : void
+    + renderBoard(b : Board, isOwn : boolean) : void
+    + onCellClick(c : Coordinate) : void
+    + showError(e : JoinError) : void
+    + showCountdown(secondsLeft : int) : void
+    + showAbility(a : Ability) : void
+    + promptKeepOrReplace(current : Ability, drawn : Ability) : boolean
+    + showScanResult(cells : List<Coordinate>) : void
+    + showResult(r : GameResult) : void
+  }
+
+  class NetworkHandler <<boundary>> {
+    - channel : Channel
+    + subscribe(code : String) : void
+    + broadcast(g : Game) : void
+    + trackPresence(p : HumanPlayer) : void
+    + onDisconnect(p : HumanPlayer) : void
+    + sendPrivate(p : HumanPlayer, cells : List<Coordinate>) : void
+    + resync(code : String) : void
+  }
 }
 
-enum GameState {
-  PLACEMENT
-  IN_PROGRESS
-  FINISHED
+' =====================================================
+' Controller classes
+' =====================================================
+package "Controllers" {
+  class Server <<controller>> {
+    + createLobby(name : String, type : GameType) : Lobby
+    + joinLobby(code : String, name : String) : HumanPlayer
+    + placeShips(code : String, layout : Board) : boolean
+    + fireShot(code : String, target : Coordinate) : Shot
+    + useAbility(code : String, a : Ability, target : Coordinate) : void
+    + requestRematch(code : String, accept : boolean) : RematchRequest
+    + getMyState(code : String) : Game
+    + restoreSeat(sessionId : UUID) : HumanPlayer
+  }
+
+  class Lobby <<controller>> {
+    - code : String
+    - status : LobbyStatus
+    - createdAt : DateTime
+    + {static} generateCode() : String
+    + {static} findByCode(code : String) : Lobby
+    + join(name : String) : Player
+    + isFull() : boolean
+    + isJoinable() : boolean
+    + shareLink() : URL
+    + reset() : void
+    + abandon() : void
+  }
+
+  class Game <<controller>> {
+    - id : UUID
+    - state : GameState
+    - gameType : GameType
+    - currentTurn : Player
+    - winner : Player
+    - turnStartedAt : DateTime
+    - endReason : EndReason
+    - finishedAt : DateTime
+    + addPlayer(p : Player) : boolean
+    + beginBattle() : void
+    + fireShot(shooter : Player, target : Coordinate) : Shot
+    + fireRandomShot(p : Player) : Shot
+    + isTurnExpired() : boolean
+    + switchTurn() : void
+    + grantAbility(p : Player) : void
+    + applyAbility(p : Player, target : Coordinate) : void
+    + checkWinCondition() : boolean
+    + declareWinner(p : Player, r : EndReason) : void
+    + forfeit(p : Player) : void
+    + resultFor(p : Player) : GameResult
+  }
 }
 
-enum ShotResult {
-  MISS
-  HIT
-  SUNK
+' =====================================================
+' Entity classes
+' =====================================================
+package "Entities" {
+  abstract class Player <<entity>> {
+    - id : UUID
+    - name : String
+    - isReady : boolean
+    - heldAbility : Ability
+    + placeFleet(b : Board) : void
+    + confirmPlacement() : boolean
+    + {abstract} chooseTarget() : Coordinate
+    + receiveAbility(drawn : Ability) : void
+    + hasLost() : boolean
+    + requestRematch() : RematchRequest
+  }
+
+  class HumanPlayer <<entity>> {
+    - sessionId : UUID
+    - connected : boolean
+    - disconnectedAt : DateTime
+    + chooseTarget() : Coordinate
+    + disconnect() : void
+    + reconnect() : void
+    + hasExceededGracePeriod() : boolean
+  }
+
+  class AIOpponent <<entity>> {
+    - difficulty : Difficulty
+    - huntQueue : List<Coordinate>
+    + chooseTarget() : Coordinate
+    + shouldUseAbility() : boolean
+    - hunt() : Coordinate
+    - target() : Coordinate
+  }
+
+  class Board <<entity>> {
+    - width : int = 10
+    - height : int = 10
+    - ships : List<Ship>
+    + canPlace(s : Ship, start : Coordinate, o : Orientation) : boolean
+    + placeShip(s : Ship, start : Coordinate, o : Orientation) : boolean
+    + removeShip(s : Ship) : void
+    + placeFleetRandomly() : void
+    + isFleetComplete() : boolean
+    + receiveShot(target : Coordinate) : Shot
+    + hasBeenTargeted(c : Coordinate) : boolean
+    + allShipsSunk() : boolean
+    + scanArea(topLeft : Coordinate, size : int) : List<Coordinate>
+    + scanLine(index : int, isRow : boolean) : List<Coordinate>
+    + moveShip(s : Ship, start : Coordinate, o : Orientation) : boolean
+    + reset() : void
+  }
+
+  class Cell <<entity>> {
+    - coordinate : Coordinate
+    - state : CellState
+    + occupy(s : Ship) : void
+    + clear() : void
+    + markHit() : void
+    + markMiss() : void
+    + isAlreadyShot() : boolean
+  }
+
+  abstract class Ship <<entity>> {
+    - name : String
+    - length : int
+    - hits : int
+    - orientation : Orientation
+    - isPlaced : boolean
+    + rotate() : void
+    + occupies(c : Coordinate) : boolean
+    + registerHit() : void
+    + isSunk() : boolean
+  }
+
+  class Carrier {
+    - length : int = 5
+  }
+  class Battleship {
+    - length : int = 4
+  }
+  class Cruiser {
+    - length : int = 3
+  }
+  class Submarine {
+    - length : int = 3
+  }
+  class Destroyer {
+    - length : int = 2
+  }
+
+  class Shot <<entity>> {
+    - coordinate : Coordinate
+    - result : ShotResult
+    - shooter : Player
+    - firedAt : DateTime
+    - sunkShipName : String
+    + isHit() : boolean
+  }
+
+  class RematchRequest <<entity>> {
+    - requestedBy : Player
+    - status : RematchStatus
+    - requestedAt : DateTime
+    + accept() : void
+    + decline() : void
+    + isMutual() : boolean
+  }
+
+  class GameResult <<entity>> {
+    - didWin : boolean
+    - shotsFired : int
+    - accuracy : float
+    - shipsSunk : int
+    + summary() : String
+  }
+
+  class Coordinate <<value>> {
+    - x : int
+    - y : int
+    + isWithinBounds(w : int, h : int) : boolean
+    + equals(other : Coordinate) : boolean
+  }
 }
 
-enum CellState {
-  EMPTY
-  OCCUPIED
-  HIT
-  MISS
+' =====================================================
+' Abilities (Teddy) - always on, single game mode
+' =====================================================
+package "Abilities" {
+  abstract class Ability <<entity>> {
+    - name : String
+    - usesTurnShot : boolean
+    - used : boolean
+    - holder : Player
+    + canUse(g : Game) : boolean
+    + {abstract} isValidTarget(b : Board, t : Coordinate) : boolean
+    + {abstract} apply(g : Game, b : Board, t : Coordinate) : void
+  }
+
+  class RadarSweep {
+    - usesTurnShot : boolean = true
+    + isValidTarget(b : Board, t : Coordinate) : boolean
+    + apply(g : Game, b : Board, t : Coordinate) : void
+  }
+  class LineScan {
+    - usesTurnShot : boolean = true
+    - isRow : boolean
+    + isValidTarget(b : Board, t : Coordinate) : boolean
+    + apply(g : Game, b : Board, t : Coordinate) : void
+  }
+  class DoubleShot {
+    - usesTurnShot : boolean = false
+    + isValidTarget(b : Board, t : Coordinate) : boolean
+    + apply(g : Game, b : Board, t : Coordinate) : void
+  }
+  class Reroute {
+    - usesTurnShot : boolean = true
+    + isValidTarget(b : Board, t : Coordinate) : boolean
+    + apply(g : Game, b : Board, t : Coordinate) : void
+    + validPositions(b : Board, s : Ship) : List<Coordinate>
+  }
 }
 
-enum Orientation {
-  HORIZONTAL
-  VERTICAL
+' =====================================================
+' Enumerations
+' =====================================================
+package "Enumerations" {
+  enum LobbyStatus {
+    WAITING
+    IN_PROGRESS
+    FINISHED
+    ABANDONED
+  }
+  enum GameState {
+    PLACEMENT
+    IN_PROGRESS
+    FINISHED
+  }
+  enum GameType {
+    BEGINNER
+    ORIGINAL
+    QUICK_FIRE
+  }
+  enum Difficulty {
+    EASY
+    NORMAL
+  }
+  enum ShotResult {
+    MISS
+    HIT
+    SUNK
+  }
+  enum CellState {
+    EMPTY
+    OCCUPIED
+    HIT
+    MISS
+  }
+  enum Orientation {
+    HORIZONTAL
+    VERTICAL
+  }
+  enum EndReason {
+    FLEET_DESTROYED
+    OPPONENT_FORFEIT
+    OPPONENT_DISCONNECTED
+  }
+  enum RematchStatus {
+    NONE
+    REQUESTED
+    ACCEPTED
+    DECLINED
+  }
+  enum Screen {
+    HOME
+    LOBBY
+    PLACEMENT
+    BATTLE
+    RESULT
+  }
 }
 
-enum Difficulty {
-  EASY
-  NORMAL
-}
+' =====================================================
+' Relationships
+' =====================================================
+' --- boundary / controller wiring ---
+UIManager --> NetworkHandler : receives updates >
+UIManager ..> Server : calls actions >
+UIManager ..> Board : renders >
+UIManager ..> GameResult : shows >
+Server "1" --> "0..*" Lobby : manages >
+Server --> NetworkHandler : broadcasts via >
+Server ..> Game : validates & resolves >
+NetworkHandler ..> HumanPlayer : tracks presence >
 
-' ---------- Core ----------
-class Lobby {
-  - code : String
-  - status : LobbyStatus
-  - createdAt : DateTime
-  + generateCode() : String
-  + join(player : Player) : boolean
-  + isFull() : boolean
-  + abandon() : void
-}
-
-class Game {
-  - id : UUID
-  - state : GameState
-  - currentTurn : Player
-  - winner : Player
-  - turnStartedAt : DateTime
-  + start() : void
-  + fireShot(shooter : Player, target : Coordinate) : Shot
-  + switchTurn() : void
-  + checkWinCondition() : boolean
-  + forfeit(player : Player) : void
-}
-
-abstract class Player {
-  - id : UUID
-  - name : String
-  - isReady : boolean
-  + placeFleet(board : Board) : void
-  + {abstract} chooseTarget() : Coordinate
-  + hasLost() : boolean
-}
-
-class HumanPlayer {
-  - connected : boolean
-  + chooseTarget() : Coordinate
-  + disconnect() : void
-}
-
-class AIOpponent {
-  - difficulty : Difficulty
-  - huntQueue : List<Coordinate>
-  + chooseTarget() : Coordinate
-  - hunt() : Coordinate
-  - target() : Coordinate
-}
-
-class Board {
-  - width : int
-  - height : int
-  + placeShip(ship : Ship, start : Coordinate, o : Orientation) : boolean
-  + isPlacementValid(ship : Ship, start : Coordinate, o : Orientation) : boolean
-  + receiveShot(target : Coordinate) : ShotResult
-  + allShipsSunk() : boolean
-}
-
-class Cell {
-  - coordinate : Coordinate
-  - state : CellState
-  + markHit() : void
-  + markMiss() : void
-}
-
-abstract class Ship {
-  - name : String
-  - length : int
-  - hits : int
-  - orientation : Orientation
-  + registerHit() : void
-  + isSunk() : boolean
-  + occupies(c : Coordinate) : boolean
-}
-
-class Carrier {
-  - length : int = 5
-}
-class Battleship {
-  - length : int = 4
-}
-class Cruiser {
-  - length : int = 3
-}
-class Submarine {
-  - length : int = 3
-}
-class Destroyer {
-  - length : int = 2
-}
-
-class Shot {
-  - coordinate : Coordinate
-  - result : ShotResult
-  - firedAt : DateTime
-  + isHit() : boolean
-}
-
-class Coordinate {
-  - x : int
-  - y : int
-  + equals(other : Coordinate) : boolean
-}
-
-' ---------- Relationships ----------
-Lobby "1" o-- "2" Player : hosts >
+' --- aggregation / composition ---
+Lobby "1" o-- "0..2" Player : seats >
 Lobby "1" *-- "1" Game : runs >
-
 Game "1" o-- "2" Player : players >
 Game "1" *-- "0..*" Shot : history >
-
+Game "1" --> "0..2" GameResult : produces >
+Game "1" --> "0..1" RematchRequest : holds >
+Game ..> Ability : grants >
 Player "1" *-- "1" Board : owns >
-Player <|-- HumanPlayer
-Player <|-- AIOpponent
-
+Player "1" o-- "0..1" Ability : holds >
 Board "1" *-- "100" Cell : consists of >
 Board "1" o-- "5" Ship : fleet >
+Cell "*" --> "0..1" Ship : holds >
+Shot "*" --> "1" Player : fired by >
+RematchRequest "*" --> "1" Player : requested by >
+GameResult ..> Shot : derived from >
+Ability ..> Board : applies to >
 
+' --- generalisation ---
+Player <|-- HumanPlayer
+Player <|-- AIOpponent
 Ship <|-- Carrier
 Ship <|-- Battleship
 Ship <|-- Cruiser
 Ship <|-- Submarine
 Ship <|-- Destroyer
+Ability <|-- RadarSweep
+Ability <|-- LineScan
+Ability <|-- DoubleShot
+Ability <|-- Reroute
 
-Cell "1" --> "1" Coordinate
-Shot "1" --> "1" Coordinate
-Ship "1" --> "0..*" Coordinate : positions >
+note right of GameType
+  Turn limit per type:
+  BEGINNER 30 s, ORIGINAL 15 s,
+  QUICK_FIRE 5 s (server-enforced
+  from turnStartedAt).
+end note
 
-Lobby --> LobbyStatus
-Game --> GameState
-Shot --> ShotResult
-Cell --> CellState
-Ship --> Orientation
-AIOpponent --> Difficulty
+note bottom of Server
+  Stateless: loads Lobby/Game from
+  the database on every request, so
+  no client can change state directly
+  (brief, section 3.2.1).
+end note
+
+note bottom of AIOpponent
+  Single-player only. Runs client-side:
+  only one client needs this logic.
+end note
 
 @enduml
