@@ -1,83 +1,100 @@
-@startuml MyBattleship_UseCase_Battle
-title MyBattleship - Use Case Detail: Battle and Abilities
+@startuml MyBattleship_UseCase_Overview
+title MyBattleship - Use Case Overview
 
+left to right direction
 skinparam packageStyle rectangle
-skinparam nodesep 25
-skinparam ranksep 45
+skinparam nodesep 12
+skinparam ranksep 70
+skinparam shadowing false
 skinparam usecase {
   BackgroundColor #F5F9FF
   BorderColor #33567F
 }
+skinparam actorStyle awesome
 
-actor Attacker
-actor "Timer\n<<system clock>>" as Timer
-actor Defender
+actor Player
+actor Host
+actor Guest
+actor Timer
+
+Player <|-- Host
+Player <|-- Guest
 
 rectangle "MyBattleship System" {
-  usecase "Use Ability" as UC_Ability
-  usecase "Fire Shot" as UC_Fire
-  usecase "Auto-fire on Timeout" as UC_Auto
-  usecase "Resolve Shot" as UC_Resolve
-  usecase "Sink Ship" as UC_Sink
-  usecase "Declare Winner" as UC_Win
-  usecase "Draw Ability" as UC_Draw
-  usecase "Keep or Replace Ability" as UC_Keep
 
-  usecase "Radar Sweep" as UC_Radar
-  usecase "Line Scan" as UC_Line
-  usecase "Double Shot" as UC_Double
-  usecase "Reroute" as UC_Reroute
+  package "Setup" {
+    usecase "Play vs AI" as UC_AI
+    usecase "Choose Difficulty" as UC_Diff
+    usecase "Create Lobby" as UC_Create
+    usecase "Choose Game Type" as UC_Type
+    usecase "Share Lobby Code" as UC_Share
+    usecase "Join Lobby" as UC_Join
+    usecase "Join by Code" as UC_JoinCode
+    usecase "Join by Link" as UC_JoinLink
+    usecase "Enter Display Name" as UC_Name
+    usecase "Place Fleet" as UC_Place
+    usecase "Randomise Placement" as UC_Rand
+  }
+
+  package "Battle" {
+    usecase "Take Turn" as UC_Turn
+    usecase "Fire Shot" as UC_Fire
+    usecase "Use Ability" as UC_Ability
+    usecase "Keep or Replace Ability" as UC_Keep
+    usecase "Forfeit" as UC_Forfeit
+    usecase "Game Over / Rematch" as UC_Result
+  }
+
+  package "Resilience" {
+    usecase "Restore Seat" as UC_Restore
+    usecase "Auto-fire on Timeout" as UC_Auto
+    usecase "Award Win on Disconnect" as UC_DC
+  }
 }
 
-Attacker --> UC_Fire
-Attacker --> UC_Ability
-Timer --> UC_Auto
-Defender --> UC_Keep
+' ---------- Actor associations ----------
+Player -- UC_AI
+Player -- UC_Place
+Player -- UC_Turn
+Player -- UC_Keep
+Player -- UC_Forfeit
+Player -- UC_Result
+Player -- UC_Restore
+Host -- UC_Create
+Guest -- UC_Join
+Timer -- UC_Auto
+Timer -- UC_DC
 
-UC_Ability .> UC_Fire : <<extend>>
-UC_Auto .> UC_Fire : <<include>>
-UC_Fire ..> UC_Resolve : <<include>>
-UC_Sink ..> UC_Resolve : <<extend>>
-UC_Win ..> UC_Resolve : <<extend>>
-UC_Sink ..> UC_Draw : <<include>>
-UC_Keep ..> UC_Draw : <<extend>>
+' ---------- Include ----------
+UC_AI ..> UC_Place : <<include>>
+UC_AI ..> UC_Turn : <<include>>
+UC_Create ..> UC_Type : <<include>>
+UC_Turn ..> UC_Result : <<include>>
+UC_Auto ..> UC_Fire : <<include>>
 
-UC_Ability <|-- UC_Radar
-UC_Ability <|-- UC_Line
-UC_Ability <|-- UC_Double
-UC_Ability <|-- UC_Reroute
+' ---------- Extend ----------
+UC_Diff .> UC_AI : <<extend>>
+UC_Share .> UC_Create : <<extend>>
+UC_Name .> UC_Create : <<extend>>
+UC_Name .> UC_Join : <<extend>>
+UC_Rand .> UC_Place : <<extend>>
+UC_Fire .> UC_Turn : <<extend>>
+UC_Ability .> UC_Turn : <<extend>>
+UC_Keep .> UC_Turn : <<extend>>
 
-note top of Attacker
-  Attacker and Defender are
-  roles of Player; they swap
-  as turns pass.
-end note
+' ---------- Generalisation ----------
+UC_Join <|-- UC_JoinCode
+UC_Join <|-- UC_JoinLink
 
-note bottom of UC_Sink
-  Condition: shot hit the last
-  undamaged cell of a ship (Scenario 4).
-end note
-
-note bottom of UC_Draw
-  Ability goes to the owner of the sunk
-  ship. Reroute is redrawn if no
-  undamaged ship can move.
-end note
-
-note bottom of UC_Keep
-  Condition: Defender already
-  holds an ability (Scenario 5).
-end note
-
-note bottom of UC_Win
-  Condition: every opposing
-  ship is sunk (BR-10, Scenario 7).
-end note
-
-note right of UC_Fire
-  An already-targeted cell can't be
-  selected, so no shot is sent (BR-09,
-  Scenario 8); re-checked on server (SEC-02).
-end note
+legend right
+  |= Use case |= Note |
+  | Enter Display Name | Optional. Not needed for AI mode; spec assumes none for multiplayer (conflicts with tech design doc) |
+  | Use Ability | On your own turn, before firing. Scans and Reroute use the turn's shot; Double Shot does not |
+  | Keep or Replace Ability | Only when a ship of yours is sunk while you already hold an ability |
+  | Fire Shot | Skipped when an ability has used the turn's shot. A hit fires again; a miss passes the turn |
+  | Auto-fire on Timeout | Random shot when the game type's limit runs out (30 / 15 / 5 s); paused while the player is away |
+  | Award Win on Disconnect | 60 s with no presence during battle |
+  | Play vs AI | AIOpponent is a Player subclass inside the system, not an actor. Abilities are always on |
+endlegend
 
 @enduml
