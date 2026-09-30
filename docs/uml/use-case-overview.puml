@@ -1,79 +1,71 @@
-@startuml MyBattleship_UseCase_Battle
-title MyBattleship - Use Case Detail: Take Turn, Abilities and Game Over
-
-left to right direction
-skinparam packageStyle rectangle
-skinparam nodesep 12
-skinparam ranksep 70
-skinparam shadowing false
-skinparam usecase {
-  BackgroundColor #F5F9FF
-  BorderColor #33567F
-}
-skinparam actorStyle awesome
-
-actor Attacker
-actor Defender
+@startuml
+title MyBattleship - Use Case Diagram
+skinparam linetype ortho
+ 
 actor Timer
+actor Host
+actor Guest
+
 
 rectangle "MyBattleship System" {
-
-  package "The turn" {
-    usecase "Take Turn" as UC_Turn
-    usecase "Fire Shot" as UC_Fire
-    usecase "Auto-fire on Timeout" as UC_Auto
-    usecase "Resolve Shot" as UC_Resolve
-    usecase "Sink Ship" as UC_Sink
-    usecase "Game Over / Rematch" as UC_Win
+ 
+  rectangle "Getting into a Game" {
+    usecase "Create Lobby" as CreateLobby
+    usecase "Join Lobby" as JoinLobby
+    usecase "Place Fleet" as PlaceFleet
+    usecase "Randomise Fleet" as RandomiseFleet
   }
-
-  package "Abilities" {
-    usecase "Use Ability" as UC_Ability
-    usecase "Radar Sweep" as UC_Radar
-    usecase "Line Scan" as UC_Line
-    usecase "Double Shot" as UC_Double
-    usecase "Reroute" as UC_Reroute
-    usecase "Grant Ability" as UC_Draw
-    usecase "Keep or Replace Ability" as UC_Keep
+ 
+  rectangle "The turn" {
+    usecase "Auto-fire on Timeout" as AutoFire
+    usecase "Fire Shot" as FireShot
+    usecase "Resolve Shot" as ResolveShot
+    usecase "Take Turn" as TakeTurn
+    usecase "Sink Ship" as SinkShip
+    usecase "Game Over / Rematch" as GameOver
+  }
+ 
+  rectangle "Abilities" {
+    usecase "Grant Ability" as GrantAbility
+    usecase "Keep or Replace Ability" as KeepReplace
+    usecase "Use Ability" as UseAbility
+    usecase "Reroute" as Reroute
+    usecase "Double Shot" as DoubleShot
+    usecase "Line Scan" as LineScan
+    usecase "Radar Sweep" as RadarSweep
   }
 }
-
-Attacker -- UC_Turn
-Timer -- UC_Auto
-Defender -- UC_Keep
-
-' ---------- Extend ----------
-UC_Fire .> UC_Turn : <<extend>>
-UC_Ability .> UC_Turn : <<extend>>
-UC_Sink .> UC_Resolve : <<extend>>
-UC_Win .> UC_Resolve : <<extend>>
-UC_Keep .> UC_Draw : <<extend>>
-
-' ---------- Include ----------
-UC_Auto ..> UC_Fire : <<include>>
-UC_Fire ..> UC_Resolve : <<include>>
-UC_Sink ..> UC_Draw : <<include>>
-
-' ---------- Generalisation ----------
-UC_Ability <|-- UC_Radar
-UC_Ability <|-- UC_Line
-UC_Ability <|-- UC_Double
-UC_Ability <|-- UC_Reroute
-
-legend right
-  |= Use case |= Note |
-  | Actors | Attacker and Defender are roles of Player and swap each turn. The AI fills either role |
-  | Take Turn | Both branches are conditional: an ability only if one is held, a shot unless an ability used it |
-  | Fire Shot | An already-targeted square cannot be selected and does not end the turn |
-  | Resolve Shot | A hit fires again; a miss passes the turn |
-  | Sink Ship | The shot hit the last undamaged cell of a ship |
-  | Grant Ability | Always on. Goes to the owner of the sunk ship, drawn on the server, one held at a time |
-  | Keep or Replace Ability | Only when the Defender already holds an unused ability |
-  | Radar Sweep | 3x3 area inside the board with at least one unshot square; ship squares highlighted green to the scanner only |
-  | Line Scan | A row or column with at least one unshot square; ship squares highlighted green to the scanner only |
-  | Double Shot | Does not use the turn's shot: the next miss that turn does not end it |
-  | Reroute | Moves one undamaged ship to a valid position the opponent has not targeted; redrawn if none exists |
-  | Game Over / Rematch | All opposing ships sunk, a forfeit, or a 60 s disconnect. Rematch needs both; the AI always accepts |
-endlegend
-
+ 
+actor Attacker
+actor Defender
+ 
+Timer -- AutoFire
+ 
+Host -- CreateLobby
+Host -- PlaceFleet
+Guest -- JoinLobby
+Guest -- PlaceFleet
+ 
+Defender -- KeepReplace
+ 
+TakeTurn -- Attacker
+ 
+RandomiseFleet ..> PlaceFleet : <<extend>>
+ 
+AutoFire ..> FireShot : <<include>>
+FireShot ..> TakeTurn : <<extend>>
+FireShot ..> ResolveShot : <<include>>
+ResolveShot ..> GameOver : <<extend>>
+ 
+SinkShip ..> ResolveShot : <<extend>>
+SinkShip ..> GrantAbility : <<include>>
+GrantAbility ..> KeepReplace : <<extend>>
+UseAbility ..> TakeTurn : <<extend>>
+ 
+UseAbility <|-- Reroute
+UseAbility <|-- DoubleShot
+UseAbility <|-- LineScan
+UseAbility <|-- RadarSweep
+ 
 @enduml
+ 
