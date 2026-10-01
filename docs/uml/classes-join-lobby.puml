@@ -53,6 +53,7 @@ class Server <<controller>> {
 class Lobby <<controller>> {
   - code : String
   - status : LobbyStatus
+  - gameType : GameType
   - createdAt : DateTime
   + {static} generateCode() : String
   + {static} findByCode(code : String) : Lobby
@@ -85,7 +86,7 @@ class HumanPlayer <<entity>> {
 ' ---------- Relationships ----------
 UIManager ..> Server : createLobby / joinLobby >
 UIManager ..> JoinError : displays >
-UIManager --> NetworkHandler : subscribes >
+NetworkHandler ..> UIManager : pushes updates >
 Server "1" --> "0..*" Lobby : manages >
 Server ..> HumanPlayer : issues sessionId >
 NetworkHandler ..> HumanPlayer : tracks presence >
@@ -94,8 +95,9 @@ Lobby "1" o-- "0..2" Player : seats >
 Lobby "1" *-- "1" Game : runs >
 Lobby ..> JoinError : rejects with >
 Lobby --> LobbyStatus
+Lobby --> GameType
 
-Game "1" o-- "0..2" Player : players >
+Game "1" o-- "2" Player : players >
 Game --> GameState
 Game --> GameType
 

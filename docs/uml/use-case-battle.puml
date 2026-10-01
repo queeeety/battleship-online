@@ -1,0 +1,83 @@
+@startuml MyBattleship_UseCase_Battle
+title MyBattleship - Use Case Detail: Battle and Abilities
+
+skinparam packageStyle rectangle
+skinparam nodesep 25
+skinparam ranksep 45
+skinparam usecase {
+  BackgroundColor #F5F9FF
+  BorderColor #33567F
+}
+
+actor Attacker
+actor "Timer\n<<system clock>>" as Timer
+actor Defender
+
+rectangle "MyBattleship System" {
+  usecase "Use Ability" as UC_Ability
+  usecase "Fire Shot" as UC_Fire
+  usecase "Auto-fire on Timeout" as UC_Auto
+  usecase "Resolve Shot" as UC_Resolve
+  usecase "Sink Ship" as UC_Sink
+  usecase "Declare Winner" as UC_Win
+  usecase "Draw Ability" as UC_Draw
+  usecase "Keep or Replace Ability" as UC_Keep
+
+  usecase "Radar Sweep" as UC_Radar
+  usecase "Line Scan" as UC_Line
+  usecase "Double Shot" as UC_Double
+  usecase "Reroute" as UC_Reroute
+}
+
+Attacker --> UC_Fire
+Attacker --> UC_Ability
+Timer --> UC_Auto
+Defender --> UC_Keep
+
+UC_Ability .> UC_Fire : <<extend>>
+UC_Auto .> UC_Fire : <<include>>
+UC_Fire ..> UC_Resolve : <<include>>
+UC_Sink ..> UC_Resolve : <<extend>>
+UC_Win ..> UC_Resolve : <<extend>>
+UC_Sink ..> UC_Draw : <<include>>
+UC_Keep ..> UC_Draw : <<extend>>
+
+UC_Ability <|-- UC_Radar
+UC_Ability <|-- UC_Line
+UC_Ability <|-- UC_Double
+UC_Ability <|-- UC_Reroute
+
+note top of Attacker
+  Attacker and Defender are
+  roles of Player; they swap
+  as turns pass.
+end note
+
+note bottom of UC_Sink
+  Condition: shot hit the last
+  undamaged cell of a ship (Scenario 4).
+end note
+
+note bottom of UC_Draw
+  Ability goes to the owner of the sunk
+  ship. Reroute is redrawn if no
+  undamaged ship can move.
+end note
+
+note bottom of UC_Keep
+  Condition: Defender already
+  holds an ability (Scenario 5).
+end note
+
+note bottom of UC_Win
+  Condition: every opposing
+  ship is sunk (BR-10, Scenario 7).
+end note
+
+note right of UC_Fire
+  An already-targeted cell can't be
+  selected, so no shot is sent (BR-09,
+  Scenario 8); re-checked on server (SEC-02).
+end note
+
+@enduml

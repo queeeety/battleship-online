@@ -1,5 +1,5 @@
 @startuml MyBattleship_ClassDiagram
-title MyBattleship - Primary Class Diagram (15 classes + subclasses)
+title MyBattleship - Primary Class Diagram (15 classes + Coordinate value type + subclasses)
 
 skinparam classAttributeIconSize 0
 skinparam packageStyle rectangle
@@ -53,6 +53,7 @@ package "Controllers" {
   class Lobby <<controller>> {
     - code : String
     - status : LobbyStatus
+    - gameType : GameType
     - createdAt : DateTime
     + {static} generateCode() : String
     + {static} findByCode(code : String) : Lobby
@@ -154,7 +155,7 @@ package "Entities" {
 
   abstract class Ship <<entity>> {
     - name : String
-    - length : int
+    # length : int
     - hits : int
     - orientation : Orientation
     - isPlaced : boolean
@@ -165,19 +166,19 @@ package "Entities" {
   }
 
   class Carrier {
-    - length : int = 5
+    # length : int = 5
   }
   class Battleship {
-    - length : int = 4
+    # length : int = 4
   }
   class Cruiser {
-    - length : int = 3
+    # length : int = 3
   }
   class Submarine {
-    - length : int = 3
+    # length : int = 3
   }
   class Destroyer {
-    - length : int = 2
+    # length : int = 2
   }
 
   class Shot <<entity>> {
@@ -220,32 +221,31 @@ package "Entities" {
 package "Abilities" {
   abstract class Ability <<entity>> {
     - name : String
-    - usesTurnShot : boolean
+    # usesTurnShot : boolean
     - used : boolean
-    - holder : Player
     + canUse(g : Game) : boolean
     + {abstract} isValidTarget(b : Board, t : Coordinate) : boolean
     + {abstract} apply(g : Game, b : Board, t : Coordinate) : void
   }
 
   class RadarSweep {
-    - usesTurnShot : boolean = true
+    # usesTurnShot : boolean = true
     + isValidTarget(b : Board, t : Coordinate) : boolean
     + apply(g : Game, b : Board, t : Coordinate) : void
   }
   class LineScan {
-    - usesTurnShot : boolean = true
+    # usesTurnShot : boolean = true
     - isRow : boolean
     + isValidTarget(b : Board, t : Coordinate) : boolean
     + apply(g : Game, b : Board, t : Coordinate) : void
   }
   class DoubleShot {
-    - usesTurnShot : boolean = false
+    # usesTurnShot : boolean = false
     + isValidTarget(b : Board, t : Coordinate) : boolean
     + apply(g : Game, b : Board, t : Coordinate) : void
   }
   class Reroute {
-    - usesTurnShot : boolean = true
+    # usesTurnShot : boolean = true
     + isValidTarget(b : Board, t : Coordinate) : boolean
     + apply(g : Game, b : Board, t : Coordinate) : void
     + validPositions(b : Board, s : Ship) : List<Coordinate>
@@ -302,6 +302,18 @@ package "Enumerations" {
     ACCEPTED
     DECLINED
   }
+  enum JoinError {
+    CODE_NOT_FOUND
+    LOBBY_FULL
+    GAME_ALREADY_FINISHED
+    INVALID_NAME
+  }
+  enum PlacementError {
+    OUT_OF_BOUNDS
+    OVERLAPS_SHIP
+    ALREADY_PLACED
+    FLEET_INCOMPLETE
+  }
   enum Screen {
     HOME
     LOBBY
@@ -315,7 +327,7 @@ package "Enumerations" {
 ' Relationships
 ' =====================================================
 ' --- boundary / controller wiring ---
-UIManager --> NetworkHandler : receives updates >
+NetworkHandler ..> UIManager : pushes updates >
 UIManager ..> Server : calls actions >
 UIManager ..> Board : renders >
 UIManager ..> GameResult : shows >
@@ -341,6 +353,9 @@ Shot "*" --> "1" Player : fired by >
 RematchRequest "*" --> "1" Player : requested by >
 GameResult ..> Shot : derived from >
 Ability ..> Board : applies to >
+Lobby ..> JoinError : rejects with >
+UIManager ..> JoinError : displays >
+Board ..> PlacementError : rejects with >
 
 ' --- generalisation ---
 Player <|-- HumanPlayer
