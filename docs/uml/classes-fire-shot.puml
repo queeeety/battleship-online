@@ -92,7 +92,7 @@ class Cell <<entity>> {
 abstract class Ship <<entity>> {
   - name : String
   - hits : int
-  - length : int
+  # length : int
   + registerHit() : void
   + isSunk() : boolean
 }

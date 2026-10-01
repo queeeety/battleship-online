@@ -76,7 +76,7 @@ class Cell <<entity>> {
 
 abstract class Ship <<entity>> {
   - name : String
-  - length : int
+  # length : int
   - orientation : Orientation
   - isPlaced : boolean
   + rotate() : void
@@ -84,19 +84,19 @@ abstract class Ship <<entity>> {
 }
 
 class Carrier {
-  - length : int = 5
+  # length : int = 5
 }
 class Battleship {
-  - length : int = 4
+  # length : int = 4
 }
 class Cruiser {
-  - length : int = 3
+  # length : int = 3
 }
 class Submarine {
-  - length : int = 3
+  # length : int = 3
 }
 class Destroyer {
-  - length : int = 2
+  # length : int = 2
 }
 
 class Coordinate <<value>> {
