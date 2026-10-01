@@ -45,6 +45,7 @@ package "Controllers" {
     + placeShips(code : String, layout : Board) : boolean
     + fireShot(code : String, target : Coordinate) : Shot
     + useAbility(code : String, a : Ability, target : Coordinate) : void
+    + forfeit(code : String) : void
     + requestRematch(code : String, accept : boolean) : RematchRequest
     + getMyState(code : String) : Game
     + restoreSeat(sessionId : UUID) : HumanPlayer

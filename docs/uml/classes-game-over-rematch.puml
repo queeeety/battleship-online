@@ -46,6 +46,7 @@ class NetworkHandler <<boundary>> {
 }
 
 class Server <<controller>> {
+  + forfeit(code : String) : void
   + requestRematch(code : String, accept : boolean) : RematchRequest
 }
 
@@ -118,6 +119,7 @@ UIManager ..> GameResult : shows >
 UIManager ..> Server : requestRematch >
 NetworkHandler ..> Game : reports disconnect >
 Server ..> Lobby : resets on mutual accept >
+Server ..> Game : forfeits for caller >
 
 Lobby "1" *-- "1" Game : runs >
 Lobby --> LobbyStatus
