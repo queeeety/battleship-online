@@ -1,119 +1,60 @@
-@startuml MyBattleship_UseCase_Overview
-title MyBattleship - Use Case Overview
-
-skinparam packageStyle rectangle
-skinparam nodesep 25
-skinparam ranksep 45
-skinparam usecase {
-  BackgroundColor #F5F9FF
-  BorderColor #33567F
-}
+@startuml MyBattleship_UseCases
+title MyBattleship – Use Case Diagram
+left to right direction
+skinparam nodesep 12
+skinparam linetype ortho
 
 actor Player
-actor Host
-actor Guest
-actor "Timer\n<<system clock>>" as Timer
 
-Player <|-- Host
-Player <|-- Guest
-
-rectangle "MyBattleship System" {
-
-  rectangle "Client (browser)" {
-    usecase "Play vs AI" as UC_AI
-    usecase "Choose Difficulty" as UC_Diff
-    usecase "Create Lobby" as UC_Create
-    usecase "Choose Game Type" as UC_Type
-    usecase "Share Lobby Code" as UC_Share
-    usecase "Join Lobby" as UC_Join
-    usecase "Join by Code" as UC_JoinCode
-    usecase "Join by Link" as UC_JoinLink
-    usecase "Enter Display Name" as UC_Name
-
-    usecase "Place Fleet" as UC_Place
-    usecase "Randomise Placement" as UC_Rand
-    usecase "Play Battle" as UC_Battle
-    usecase "Fire Shot" as UC_Fire
-    usecase "Use Ability" as UC_Ability
-    usecase "Forfeit" as UC_Forfeit
-    usecase "View Result" as UC_Result
-    usecase "Rematch" as UC_Rematch
-  }
-
-  rectangle "Server (authoritative)" {
-    usecase "Validate Placement" as UC_Validate
-    usecase "Resolve Shot" as UC_Resolve
-    usecase "Restore Seat" as UC_Restore
-    usecase "Auto-fire on Timeout" as UC_Auto
-    usecase "Award Win on Disconnect" as UC_DC
-  }
+rectangle "MyBattleship Client (browser)" as Client {
+  usecase "Start Game" as UC1
+  usecase "Create Lobby" as Create
+  usecase "Join Lobby" as Join
+  usecase "Play vs AI" as AI
+  usecase "Place Fleet" as UC2
+  usecase "Fire Shot" as UC3
+  usecase "Use Ability" as UC4
+  usecase "Game Over / Rematch" as UC5
+  usecase "Forfeit" as Forfeit
 }
 
-' ---------- Actor associations ----------
-Player --> UC_AI
-Host --> UC_Create
-Guest --> UC_Join
-Player --> UC_Place
-Player --> UC_Battle
-Player --> UC_Forfeit
-Player --> UC_Rematch
-Player --> UC_Restore
-Timer --> UC_Auto
-Timer --> UC_DC
+rectangle "MyBattleship Server" as Server {
+  usecase "Generate Lobby Code" as GenCode
+  usecase "Validate Lobby Code" as ValCode
+  usecase "Validate Placement" as ValPlace
+  usecase "Resolve Shot" as Resolve
+  usecase "Grant Ability" as Grant
+  usecase "Apply Ability Effect" as Apply
+  usecase "Fire Random Shot" as RandShot
+  usecase "Detect Disconnect" as Disconnect
+  usecase "Build Game Result" as Result
+}
 
-' ---------- Include (base always does it) ----------
-UC_AI ..> UC_Place : <<include>>
-UC_AI ..> UC_Battle : <<include>>
-UC_Create ..> UC_Type : <<include>>
-UC_Battle ..> UC_Fire : <<include>>
-UC_Battle ..> UC_Result : <<include>>
-UC_Auto ..> UC_Fire : <<include>>
-UC_Fire ..> UC_Resolve : <<include>>
+actor Timer
 
-' ---------- Extend (optional / conditional) ----------
-UC_Diff .> UC_AI : <<extend>>
-UC_Share ..> UC_Create : <<extend>>
-UC_Name ..> UC_Create : <<extend>>
-UC_Name ..> UC_Join : <<extend>>
-UC_Rand .> UC_Place : <<extend>>
-UC_Validate .> UC_Place : <<extend>>
-UC_Ability .> UC_Fire : <<extend>>
-UC_Rematch ..> UC_Result : <<extend>>
+Player --> UC1
+Player --> UC2
+Player --> UC3
+Player --> UC4
+Player --> UC5
+Player --> Forfeit
 
-' ---------- Use case generalisation ----------
-UC_Join <|-- UC_JoinCode
-UC_Join <|-- UC_JoinLink
+UC1 <|-- Create
+UC1 <|-- Join
+UC1 <|-- AI
 
-note bottom of UC_Name
-  Optional: a blank name becomes
-  "Player###" (Scenario 1). Resolves F-02.
-end note
+Create ..> GenCode : <<include>>
+Join ..> ValCode : <<include>>
+UC2 ..> ValPlace : <<include>>
+UC3 ..> Resolve : <<include>>
+UC4 ..> Apply : <<include>>
+UC5 ..> Result : <<include>>
 
-note bottom of UC_Auto
-  Random valid shot when the turn
-  timer expires (F-30); paused while
-  the current player is away (R-03).
-end note
+Forfeit ..> UC5 : <<include>>
+Resolve <.. Grant : <<extend>>
+UC3 <.. RandShot : <<extend>>
+UC5 <.. Disconnect : <<extend>>
 
-note bottom of UC_DC
-  60 s with no presence during
-  battle: opponent wins (R-02).
-end note
-
-note top of UC_AI
-  AIOpponent is a Player subclass
-  inside the system, so it is not
-  drawn as an external actor.
-end note
-
-note bottom of UC_Validate
-  Multiplayer only: the server re-checks
-  the layout. In AI mode the browser does it.
-end note
-
-note bottom of UC_Resolve
-  Runs on the server in multiplayer and in
-  the browser in AI mode (same Game class).
-end note
-
+RandShot <-- Timer
+Disconnect <-- Timer
 @enduml
