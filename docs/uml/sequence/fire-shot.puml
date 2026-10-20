@@ -45,8 +45,9 @@ Cell --> Board : false
 alt a Ship occupies H8
   Board -> Cell : markHit()
   Board -> Ship : registerHit()
-  Ship --> Board : isSunk()
-  alt ship.isSunk()
+  Board -> Ship : isSunk()
+  Ship --> Board : sunk
+  alt sunk
     Board -> Shot : <<create>> Shot(H8, SUNK, shooter, sunkShipName)
   else ship still afloat
     Board -> Shot : <<create>> Shot(H8, HIT, shooter)
