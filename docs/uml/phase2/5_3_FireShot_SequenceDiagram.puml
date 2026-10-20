@@ -1,0 +1,94 @@
+@startuml 5_3_FireShot_SequenceDiagram
+' MyBattleship -- GroupXXAssign2.pdf, section 5.3: Fire Shot
+' Scenario: UC3 Fire Shot, scenarios 2.5, 2.6, 2.9 and 2.10.
+title UC3 Fire Shot -- Hit, Miss, Sunk and Timeout (Sequence Diagram, UML 2.x)
+
+skinparam sequenceMessageAlign first
+autonumber
+
+actor "Cian\n(current turn)" as Player
+actor "timer : Timer" as Timer
+boundary "ui : UIManager" as UI
+control "server : Server" as Server
+control "game : Game" as Game
+entity "oppBoard : Board" as Board
+entity "cell : Cell" as Cell
+entity "ship : Ship" as Ship
+entity "shot : Shot" as Shot
+boundary "net : NetworkHandler" as Net
+boundary "oppUI : UIManager" as OppUI
+
+Player -> UI : onCellClick(H8)
+activate UI
+
+opt cell.isAlreadyShot()
+  UI --> Player : no highlight, click ignored (UC3 2a)
+end
+
+UI -> Server : fireShot(code, H8)
+activate Server
+Server -> Game : fireShot(shooter, H8)
+activate Game
+
+opt turn timer expired before this click
+  Timer -> Game : turnTimerExpired
+  Game -> Game : isTurnExpired()
+  Game -> Game : fireRandomShot(currentTurn)
+  note right of Game : Turn timer by GameType:\n30 s / 15 s / 5 s (UC3 *a)
+end
+
+Game -> Board : receiveShot(H8)
+activate Board
+Board -> Cell : isAlreadyShot()
+Cell --> Board : false
+
+alt a Ship occupies H8
+  Board -> Cell : markHit()
+  Board -> Ship : registerHit()
+  Ship --> Board : isSunk()
+  alt ship.isSunk()
+    Board -> Shot : <<create>> Shot(H8, SUNK, shooter, sunkShipName)
+  else ship still afloat
+    Board -> Shot : <<create>> Shot(H8, HIT, shooter)
+  end
+else no Ship at H8
+  Board -> Cell : markMiss()
+  Board -> Shot : <<create>> Shot(H8, MISS, shooter)
+end
+Board --> Game : shot
+deactivate Board
+
+alt shot.result == SUNK
+  ref over Game : 5.4 Use Ability\n(grant to the sunk ship's owner)
+end
+
+alt oppBoard.allShipsSunk()
+  ref over Game, Net : 5.2 Game Over / Rematch
+else shot.isHit()
+  Game -> Game : currentTurn unchanged
+  note right of Game : A hit fires again (UC3 4a)
+else shot.result == MISS and doubleShotActive
+  Game -> Game : doubleShotActive = false
+  note right of Game : DoubleShot absorbs this miss (UC4 7a)
+else shot.result == MISS
+  Game -> Game : switchTurn()
+  Game -> Game : turnStartedAt = now
+end
+
+Game --> Server : shot
+deactivate Game
+Server -> Net : broadcast(game)
+activate Net
+Net --> UI : renderBoard(result)
+Net --> OppUI : renderBoard(result)
+deactivate Net
+Server --> UI : shot
+deactivate Server
+UI --> Player : hit / miss / "You sunk their Destroyer"
+deactivate UI
+
+opt current player loses presence
+  Net -> Game : onDisconnect(p)
+  note right of Net : Turn timer pauses; after 60 s\nthe opponent wins (UC3 *b)
+end
+@enduml

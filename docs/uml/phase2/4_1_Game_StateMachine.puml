@@ -1,0 +1,47 @@
+@startuml 4_1_Game_StateMachine
+' MyBattleship -- GroupXXAssign2.pdf, section 4.1: Game (state diagram)
+' Models the Game class lifecycle (GameState enum). InProgress is expanded in section 4.4.
+title MyBattleship -- Game Lifecycle (State Machine)
+
+hide empty description
+skinparam nodesep 55
+skinparam ranksep 75
+skinparam padding 5
+skinparam defaultFontSize 13
+skinparam ArrowFontSize 12
+skinparam StateFontSize 14
+skinparam StateAttributeFontSize 12
+skinparam state {
+  BackgroundColor White
+  BorderColor Black
+  ArrowColor Black
+}
+
+[*] --> Placement : addPlayer(p)\n[lobby seats == 2]\n/ create empty Boards
+
+state Placement : entry / both players given 5 ships
+state Placement : do / await confirmPlacement()
+
+state InProgress <<composite>> : entry / beginBattle(), currentTurn chosen at random
+state InProgress : do / turn cycle, expanded in section 4.4 (Turn Cycle)
+
+state Finished : entry / declareWinner(p, endReason), finishedAt = now
+state Finished : do / hold RematchRequest
+
+Placement --> Placement : confirmPlacement()\n[one player isReady, other not]\n/ show waiting state
+Placement --> Placement : placeShips(layout)\n[not canPlace(...)]\n/ return PlacementError
+Placement --> InProgress : confirmPlacement()\n[both players isReady and server re-validated]\n/ turnStartedAt = now
+Placement --> Finished : graceExpired\n[no presence > 60 s during placement]\n/ declareWinner(OPPONENT_DISCONNECTED)
+
+InProgress --> Finished : shotResolved\n[allShipsSunk() on either Board]\n/ declareWinner(FLEET_DESTROYED)
+InProgress --> Finished : forfeit(p)\n[player selects Forfeit]\n/ declareWinner(OPPONENT_FORFEIT)
+InProgress --> Finished : graceExpired\n[no presence > 60 s]\n/ declareWinner(OPPONENT_DISCONNECTED)
+
+Finished --> Placement : rematchAnswered(accept)\n[isMutual()]\n/ Board.reset(), new Game in same Lobby
+Finished --> [*] : lobbyAbandoned\n[not isMutual()]
+
+note bottom of InProgress
+  Composite state. Its sub-states, events and
+  guards are shown in section 4.4 (Turn Cycle).
+end note
+@enduml
