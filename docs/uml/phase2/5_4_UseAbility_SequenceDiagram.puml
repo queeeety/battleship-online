@@ -31,7 +31,7 @@ group Grant (called from 5.3 Fire Shot when a Ship is sunk)
   else owner already holds an unused ability
     Game -> Net : sendPrivate(owner, keepOrReplace(current, drawn))
     Net --> UI : promptKeepOrReplace(current, drawn)
-    UI --> Owner : "Keep Radar Sweep or take Line Scan?"
+    UI --> Owner : "Keep current or take drawn?"
     Owner -> UI : selects Keep
     UI -> Server : keepOrReplace(code, KEEP)
     Server -> Player : receiveAbility(kept)
@@ -53,7 +53,7 @@ group Use (on the holder's own turn, before firing)
   Ability --> Game : owner's turn, before firing, not used
 
   alt not ability.isValidTarget(oppBoard, E4)
-    Game --> Server : PlacementError / invalid target
+    Game --> Server : invalid target
     Server --> UI : reject
     UI --> Owner : choose another target (UC4 4a)
   else valid target
