@@ -1,0 +1,120 @@
+@startuml 5_1_StartGame_SequenceDiagram
+' MyBattleship -- GroupXXAssign2.pdf, section 5.1: Start Game
+' Scenario: UC1 Start Game (Create Lobby, Join Lobby, Play vs AI), scenarios 2.1 and 2.2.
+title UC1 Start Game -- Create Lobby, Join Lobby or Play vs AI (Sequence Diagram, UML 2.x)
+
+skinparam sequenceMessageAlign first
+autonumber
+
+actor "Cian\n(host)" as Host
+boundary "hostUI : UIManager" as HostUI
+control "server : Server" as Server
+control "lobby : Lobby" as Lobby
+control "game : Game" as Game
+boundary "net : NetworkHandler" as Net
+boundary "guestUI : UIManager" as GuestUI
+actor "Aoife\n(guest)" as Guest
+entity "ai : AIOpponent" as AI
+
+alt#Gold #WhiteSmoke multiplayer: host selects Create Lobby
+
+Host -> HostUI : enters name "Cian91", selects Create Lobby
+activate HostUI
+HostUI -> Server : createLobby(name, ORIGINAL)
+activate Server
+
+alt name length > 16
+  Server --> HostUI : JoinError.INVALID_NAME
+  HostUI --> Host : showError(INVALID_NAME)
+else name blank
+  Server -> Server : assignRandomName()
+end
+
+Server -> Lobby : <<create>> Lobby(gameType)
+activate Lobby
+loop while code already in use
+  Lobby -> Lobby : generateCode()
+end
+Lobby --> Server : lobby (code = "4F7K2M")
+Server -> Lobby : join("Cian91")
+Lobby -> Lobby : seat host as Player 1
+Lobby --> Server : hostPlayer : HumanPlayer
+Server --> HostUI : lobby, sessionId
+deactivate Server
+HostUI -> Net : subscribe("4F7K2M")
+activate Net
+HostUI --> Host : showScreen(Lobby), shareLink()
+deactivate HostUI
+
+Guest -> GuestUI : enters code "4F7K2M", leaves name blank
+activate GuestUI
+GuestUI -> Server : joinLobby("4F7K2M", "")
+activate Server
+Server -> Lobby : findByCode("4F7K2M")
+Lobby --> Server : lobby
+
+alt lobby not found
+  Server --> GuestUI : JoinError.CODE_NOT_FOUND
+  GuestUI --> Guest : showError("Lobby not found")
+else lobby.isFull()
+  Server --> GuestUI : JoinError.LOBBY_FULL
+  GuestUI --> Guest : showError("Lobby is full")
+else lobby.status == FINISHED
+  Server --> GuestUI : JoinError.GAME_ALREADY_FINISHED
+  GuestUI --> Guest : showError("Game has ended")
+else lobby.isJoinable()
+  Server -> Server : assignRandomName() : "Player482"
+  Server -> Lobby : join("Player482")
+  Lobby --> Server : guestPlayer : HumanPlayer
+  Server -> Game : <<create>> Game(gameType)
+  activate Game
+  Server -> Game : addPlayer(hostPlayer)
+  Server -> Game : addPlayer(guestPlayer)
+  Game --> Server : state = PLACEMENT
+  Server -> Net : broadcast(game)
+  Net --> HostUI : both players seated
+  Net --> GuestUI : both players seated
+  Server --> GuestUI : lobby, sessionId
+  deactivate Server
+  GuestUI --> Guest : showScreen(Placement)
+end
+deactivate GuestUI
+
+opt player reloads the page
+  GuestUI -> Server : restoreSeat(sessionId)
+  activate Server
+  Server -> Lobby : findByCode("4F7K2M")
+  Server --> GuestUI : getMyState(code) : game
+  deactivate Server
+  note right of GuestUI : Seat matched by sessionId,\nnever by display name (UC1 *a)
+end
+
+ref over HostUI, GuestUI, Game : UC2 Place Fleet
+
+deactivate Net
+deactivate Lobby
+deactivate Game
+
+else single player: host selects Play vs AI (UC1 2a)
+
+Host -> HostUI : selects Play vs AI, chooses NORMAL difficulty
+activate HostUI
+note right of HostUI : No name, lobby, code or Server:\nthe Game runs in the browser (4.7)
+HostUI -> Game : <<create>> Game(gameType)
+activate Game
+HostUI -> AI : <<create>> AIOpponent(NORMAL)
+activate AI
+Game -> Game : addPlayer(humanPlayer)
+Game -> Game : addPlayer(ai)
+AI -> AI : placeFleetRandomly()
+note right of AI : Same Board method as the\nRandomise button (UC2 *a)
+Game --> HostUI : state = PLACEMENT
+HostUI --> Host : showScreen(Placement)
+deactivate HostUI
+
+ref over HostUI, Game : UC2 Place Fleet
+
+deactivate AI
+deactivate Game
+end
+@enduml

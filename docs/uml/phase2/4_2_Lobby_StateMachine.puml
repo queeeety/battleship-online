@@ -1,0 +1,49 @@
+@startuml 4_2_Lobby_StateMachine
+' MyBattleship -- GroupXXAssign2.pdf, section 4.2: Lobby (state diagram)
+' Models the Lobby class lifecycle (LobbyStatus enum from the analysis class list).
+title MyBattleship -- Lobby Lifecycle (State Machine)
+
+hide empty description
+skinparam nodesep 55
+skinparam ranksep 75
+skinparam padding 5
+skinparam defaultFontSize 13
+skinparam ArrowFontSize 12
+skinparam StateFontSize 14
+skinparam StateAttributeFontSize 12
+skinparam state {
+  BackgroundColor White
+  BorderColor Black
+  ArrowColor Black
+}
+
+[*] --> Waiting : createLobby(name, gameType)\n[name length 1..16 or blank]\n/ generateCode(), seat host
+
+state Waiting : entry / shareLink() shown to host
+state Waiting : do / await second player
+
+state InProgress : entry / Game created in PLACEMENT
+state InProgress : do / run match (see section 4.1 (Game))
+
+state Finished : entry / results built from shot history
+state Abandoned : entry / code stops resolving
+
+Waiting --> Waiting : joinLobby(code)\n[isFull() or not isJoinable()]\n/ return JoinError
+Waiting --> InProgress : joinLobby(code)\n[isJoinable() and not isFull()]\n/ seat guest, notify both clients
+Waiting --> Abandoned : hostPresenceLost\n[no host presence > 30 s and no guest seated]\n/ abandon()
+
+InProgress --> Finished : gameEnded(endReason)\n[winner declared]\n/ status = FINISHED
+
+Finished --> InProgress : rematchAnswered(accept)\n[isMutual()]\n/ reset(), same code reused
+Finished --> Abandoned : rematchAnswered(accept)\n[not isMutual() or no answer]\n/ abandon()
+Finished --> Abandoned : sweep\n[idle > 24 h]\n/ abandon()
+
+Abandoned --> [*] : cleanup\n[row deleted]
+
+note right of Waiting
+  Guard source: requirement 1.1
+  "delete a waiting lobby if the host is
+  disconnected for 30 seconds before a
+  guest joins".
+end note
+@enduml

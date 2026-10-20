@@ -1,0 +1,99 @@
+@startuml 5_2_GameOverRematch_SequenceDiagram
+' MyBattleship -- GroupXXAssign2.pdf, section 5.2: Game Over / Rematch
+' Scenario: UC5 Game Over / Rematch, scenario 2.10. Referenced from 5.3 Fire Shot.
+title UC5 Game Over / Rematch -- Win, Forfeit, Disconnect and Rematch (Sequence Diagram, UML 2.x)
+
+skinparam sequenceMessageAlign first
+autonumber
+
+actor "Cian\n(winner)" as Winner
+actor "timer : Timer" as Timer
+boundary "winnerUI : UIManager" as WinUI
+control "server : Server" as Server
+control "lobby : Lobby" as Lobby
+control "game : Game" as Game
+entity "result : GameResult" as Result
+entity "rematch : RematchRequest" as Rematch
+boundary "net : NetworkHandler" as Net
+boundary "loserUI : UIManager" as LoseUI
+actor "Aoife\n(loser)" as Loser
+
+alt last ship sunk
+  Game -> Game : checkWinCondition()
+  activate Game
+  Game -> Game : declareWinner(shooter, FLEET_DESTROYED)
+else player selects Forfeit
+  Loser -> LoseUI : selects Forfeit
+  LoseUI -> Server : forfeit(code)
+  activate Server
+  Server -> Game : forfeit(loser)
+  Game -> Game : declareWinner(opponent, OPPONENT_FORFEIT)
+  deactivate Server
+else no presence for 60 s
+  Net -> Game : onDisconnect(loser)
+  Timer -> Game : gracePeriodElapsed
+  Game -> Game : hasExceededGracePeriod()
+  Game -> Game : declareWinner(opponent, OPPONENT_DISCONNECTED)
+  note right of Game : Timer paused while disconnected (1.1)
+end
+
+Game -> Game : finishedAt = now, state = FINISHED
+Game -> Result : <<create>> resultFor(winner)
+activate Result
+Result -> Result : didWin, shotsFired, accuracy, shipsSunk\nfrom the Shot history
+Result --> Game : winnerResult
+Game -> Result : resultFor(loser)
+Result --> Game : loserResult
+deactivate Result
+Game -> Lobby : status = FINISHED
+activate Lobby
+Game -> Net : broadcast(game)
+activate Net
+Net --> WinUI : showResult(winnerResult)
+Net --> LoseUI : showResult(loserResult)
+deactivate Net
+deactivate Game
+WinUI --> Winner : "You win", opponent layout revealed
+LoseUI --> Loser : "You lose", opponent layout revealed
+
+Winner -> WinUI : selects Rematch
+WinUI -> Server : requestRematch(code, true)
+activate Server
+Server -> Rematch : <<create>> RematchRequest(requestedBy = winner)
+activate Rematch
+Rematch --> Server : status = REQUESTED
+Server -> Net : broadcast(game)
+Net --> LoseUI : "[Name] wants a rematch"
+deactivate Server
+
+alt opponent accepts
+  Loser -> LoseUI : selects Accept
+  LoseUI -> Server : requestRematch(code, true)
+  activate Server
+  Server -> Rematch : accept()
+  Rematch --> Server : isMutual() == true
+  Server -> Lobby : reset()
+  Lobby -> Game : <<create>> new Game(same gameType)
+  note right of Lobby : Same 6-character code reused (UC5 6)
+  Server -> Net : broadcast(game)
+  Net --> WinUI : showScreen(Placement)
+  Net --> LoseUI : showScreen(Placement)
+  deactivate Server
+  ref over WinUI, LoseUI : UC2 Place Fleet
+else opponent declines or does not answer
+  Loser -> LoseUI : selects Home
+  LoseUI -> Server : requestRematch(code, false)
+  activate Server
+  Server -> Rematch : decline()
+  Rematch --> Server : status = DECLINED
+  Server -> Lobby : abandon()
+  Lobby --> Server : status = ABANDONED
+  deactivate Server
+  note right of Lobby : Lobby abandoned, code stops working (UC5 5a)
+else opponent is the AIOpponent
+  Server -> Rematch : accept()
+  note right of Rematch : The computer always accepts (UC5 5b)
+end
+deactivate Rematch
+deactivate Lobby
+@enduml

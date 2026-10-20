@@ -1,0 +1,106 @@
+@startuml 5_4_UseAbility_SequenceDiagram
+' MyBattleship -- GroupXXAssign2.pdf, section 5.4: Use Ability
+' Scenario: UC4 Use Ability, scenarios 2.6, 2.7 and 2.8. Referenced from 5.3 Fire Shot.
+title UC4 Use Ability -- Grant, Keep or Replace, and Apply (Sequence Diagram, UML 2.x)
+
+skinparam sequenceMessageAlign first
+autonumber
+
+actor "Aoife\n(ability holder)" as Owner
+boundary "ownerUI : UIManager" as UI
+control "server : Server" as Server
+control "game : Game" as Game
+entity "owner : Player" as Player
+entity "ability : Ability" as Ability
+entity "ownBoard : Board" as OwnBoard
+entity "oppBoard : Board" as OppBoard
+boundary "net : NetworkHandler" as Net
+boundary "oppUI : UIManager" as OppUI
+
+group Grant (called from 5.3 Fire Shot when a Ship is sunk)
+  Game -> Game : grantAbility(owner)
+  activate Game
+  loop while drawn == Reroute and Reroute.validPositions(ownBoard, s).isEmpty() for every undamaged Ship
+    Game -> Game : draw again from the other three
+    note right of Game : UC4 1a
+  end
+  Game -> Ability : <<create>> RadarSweep
+  alt owner.heldAbility == null
+    Game -> Player : receiveAbility(drawn)
+    Player --> Game : held
+  else owner already holds an unused ability
+    Game -> Net : sendPrivate(owner, keepOrReplace(current, drawn))
+    Net --> UI : promptKeepOrReplace(current, drawn)
+    UI --> Owner : "Keep Radar Sweep or take Line Scan?"
+    Owner -> UI : selects Keep
+    UI -> Server : keepOrReplace(code, KEEP)
+    Server -> Player : receiveAbility(kept)
+    note right of Player : UC4 2a: exactly one\nability is held afterwards
+  end
+  Game -> Net : broadcast(game)
+  Net --> OppUI : "[Name] was granted an ability"
+  deactivate Game
+end
+
+group Use (on the holder's own turn, before firing)
+  Owner -> UI : selects Radar Sweep, targets area E4-G6
+  activate UI
+  UI -> Server : useAbility(code, ability, E4)
+  activate Server
+  Server -> Game : applyAbility(owner, E4)
+  activate Game
+  Game -> Ability : canUse(game)
+  Ability --> Game : owner's turn, before firing, not used
+
+  alt not ability.isValidTarget(oppBoard, E4)
+    Game --> Server : PlacementError / invalid target
+    Server --> UI : reject
+    UI --> Owner : choose another target (UC4 4a)
+  else valid target
+    Game -> Ability : apply(game, oppBoard, E4)
+    activate Ability
+    alt ability is RadarSweep
+      Ability -> OppBoard : scanArea(E4, 3)
+      OppBoard --> Ability : [F5, F6] unshot ship squares
+    else ability is LineScan
+      Ability -> OppBoard : scanLine(index, isRow)
+      OppBoard --> Ability : unshot ship squares on that line
+    else ability is Reroute
+      Ability -> OwnBoard : validPositions(ownBoard, ship)
+      Ability -> OwnBoard : moveShip(ship, start, orientation)
+      note right of OwnBoard : Destination excludes every square\nthe opponent has already fired at
+    else ability is DoubleShot
+      Ability -> Game : doubleShotActive = true
+    end
+    Ability --> Game : applied, used = true
+    deactivate Ability
+
+    alt ability.usesTurnShot
+      Game -> Game : switchTurn()
+      note right of Game : Scans and Reroute consume\nthe turn's shot (UC4 7)
+    else not ability.usesTurnShot
+      Game -> Game : turn continues, player still fires
+      ref over Game : 5.3 Fire Shot
+    end
+  end
+
+  Game --> Server : result
+  deactivate Game
+  Server -> Net : sendPrivate(owner, [F5, F6])
+  activate Net
+  Net --> UI : showScanResult([F5, F6])
+  Server -> Net : broadcast(game)
+  Net --> OppUI : "[Name] used Radar Sweep"
+  note right of OppUI : The opponent never learns\nwhat the scan revealed (1.2)
+  deactivate Net
+  Server --> UI : ok
+  deactivate Server
+  UI --> Owner : green scan markers on F5, F6
+  deactivate UI
+end
+
+opt holder is the AIOpponent
+  Game -> Game : AIOpponent.shouldUseAbility()
+  note right of Game : UC4 3a: the computer decides\nby the same rules
+end
+@enduml

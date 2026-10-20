@@ -1,0 +1,60 @@
+@startuml 4_3_Ability_SubStateDiagram
+' MyBattleship -- GroupXXAssign2.pdf, section 4.3: Ability (sub-state diagram)
+' Expands Player.heldAbility within Game::InProgress. Covers UC4 Use Ability.
+title MyBattleship -- Ability Lifecycle (Sub-State Machine of Player.heldAbility)
+
+hide empty description
+skinparam nodesep 55
+skinparam ranksep 75
+skinparam padding 5
+skinparam defaultFontSize 13
+skinparam ArrowFontSize 12
+skinparam StateFontSize 14
+skinparam StateAttributeFontSize 12
+skinparam state {
+  BackgroundColor White
+  BorderColor Black
+  ArrowColor Black
+}
+
+state "Player.heldAbility within Game::InProgress" as Lifecycle {
+
+  [*] --> NoAbility : beginBattle()\n[heldAbility == null]
+
+  state NoAbility : do / ability slot empty
+  state Drawn : entry / Game.grantAbility(p) draws 1 of 4 at random
+  state Held : entry / used = false, shown on the owner's screen
+  state ChoicePending : do / prompt keep current or replace with drawn
+  state Armed : entry / doubleShotActive = true
+  state Used : entry / used = true, ability discarded
+  state Discarded : entry / ability removed without being used
+
+  NoAbility --> Drawn : shipSunk(owner)\n[a Ship of owner isSunk()]
+  Held --> Drawn : shipSunk(owner)\n[owner already holds an unused ability]
+
+  Drawn --> Drawn : drawCompleted(a)\n[a is Reroute and Reroute.validPositions(b, s).isEmpty() for every undamaged Ship]\n/ draw again from the other three
+  Drawn --> Held : receiveAbility(drawn)\n[heldAbility == null]
+  Drawn --> ChoicePending : receiveAbility(drawn)\n[heldAbility != null]
+
+  ChoicePending --> Held : keepOrReplace(choice)\n[choice == REPLACE]\n/ discard current, hold drawn
+  ChoicePending --> Held : keepOrReplace(choice)\n[choice == KEEP]\n/ discard drawn, keep current
+
+  Held --> Held : useAbility(a, target)\n[not a.canUse(g) or not a.isValidTarget(b, target)]\n/ reject, nothing consumed
+  Held --> Used : useAbility(a, target)\n[a.canUse(g) and a.isValidTarget(b, target) and a.usesTurnShot]\n/ apply(), turn's shot consumed
+  Held --> Armed : useAbility(a, target)\n[a.canUse(g) and a is DoubleShot]\n/ apply(), player still fires
+
+  Armed --> Used : shotResolved(result)\n[result == MISS]\n/ doubleShotActive = false, turn continues
+  Armed --> Armed : shotResolved(result)\n[result == HIT or result == SUNK]\n/ flag still set, player fires again
+
+  Used --> NoAbility : abilityDiscarded\n[turn resolved]
+  Held --> Discarded : gameEnded(endReason)\n[Game state == FINISHED]
+  Armed --> Discarded : gameEnded(endReason)\n[Game state == FINISHED]
+  Discarded --> [*] : slotCleared\n[Game state == FINISHED]\n/ heldAbility = null
+}
+
+note bottom of Lifecycle
+  One ability per player at a time (requirement 1.2).
+  Scan results reach only the player who scanned;
+  Reroute cannot land on an already-targeted square.
+end note
+@enduml
