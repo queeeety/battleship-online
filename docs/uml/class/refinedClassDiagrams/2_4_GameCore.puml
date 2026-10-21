@@ -1,0 +1,149 @@
+@startuml 2_4_GameCore
+title Figure 2.4 - Lobby, Game and players
+skinparam classAttributeIconSize 0
+skinparam nodesep 30
+skinparam ranksep 45
+skinparam linetype ortho
+skinparam dpi 150
+hide empty members
+
+
+class Lobby <<controller>> {
+  - {static} CODE_CHARS : string
+  - {static} CODE_LENGTH : number = 6
+  - code : string
+  - status : LobbyStatus
+  - gameType : GameType
+  - createdAt : Date
+  - players : Player[]
+  - game : Game
+  + {static} generateCode() : string
+  + {static} findByCode(code : string) : Lobby | null
+  + join(name : string) : Player
+  + isFull() : boolean
+  + isJoinable() : boolean
+  + shareLink() : string
+  + reset() : void
+  + abandon() : void
+}
+class Game <<controller>> {
+  - id : string
+  - state : GameState
+  - gameType : GameType
+  - players : Player[]
+  - shots : Shot[]
+  - currentTurn : Player | null
+  - winner : Player | null
+  - turnStartedAt : Date | null
+  - endReason : EndReason | null
+  - finishedAt : Date | null
+  - doubleShotActive : boolean
+  - rematchRequest : RematchRequest | null
+  + addPlayer(p : Player) : boolean
+  + beginBattle() : void
+  + fireShot(shooter : Player, target : Coordinate) : Shot
+  + fireRandomShot(p : Player) : Shot
+  + isTurnExpired() : boolean
+  + switchTurn() : void
+  + grantAbility(p : Player) : void
+  + applyAbility(p : Player, target : Coordinate) : void
+  + checkWinCondition() : boolean
+  + declareWinner(p : Player, r : EndReason) : void
+  + forfeit(p : Player) : void
+  + resultFor(p : Player) : GameResult
+}
+abstract class Player <<entity>> {
+  - id : string
+  - name : string
+  - isReady : boolean
+  - heldAbility : Ability | null
+  - offeredAbility : Ability | null
+  # board : Board
+  + placeFleet(b : Board) : void
+  + confirmPlacement() : boolean
+  + {abstract} chooseTarget() : Coordinate
+  + receiveAbility(drawn : Ability) : void
+  + resolveOffer(keep : boolean) : void
+  + hasLost() : boolean
+  + requestRematch() : RematchRequest
+}
+class HumanPlayer <<entity>> {
+  - {static} GRACE_PERIOD_MS : number = 60000
+  - sessionId : string
+  - connected : boolean
+  - disconnectedAt : Date | null
+  + chooseTarget() : Coordinate
+  + disconnect() : void
+  + reconnect() : void
+  + hasExceededGracePeriod() : boolean
+}
+class AIOpponent <<entity>> {
+  - difficulty : Difficulty
+  - huntQueue : Coordinate[]
+  + chooseTarget() : Coordinate
+  + shouldUseAbility() : boolean
+  - hunt() : Coordinate
+  - target() : Coordinate
+}
+class Shot <<entity>> {
+  - coordinate : Coordinate
+  - result : ShotResult
+  - shooter : Player
+  - firedAt : Date
+  - sunkShipName : string | null
+  + isHit() : boolean
+}
+class RematchRequest <<entity>> {
+  - requestedBy : Player
+  - status : RematchStatus
+  - requestedAt : Date
+  + accept() : void
+  + decline() : void
+  + isMutual() : boolean
+}
+class GameResult <<entity>> {
+  - didWin : boolean
+  - shotsFired : number
+  - accuracy : number
+  - shipsSunk : number
+  + summary() : string
+}
+abstract class Ability <<entity>> #F4F4F4;line.dashed;line:999999
+class Board <<entity>> #F4F4F4;line.dashed;line:999999
+class GameRepository <<persistence>> #F4F4F4;line.dashed;line:999999
+class NetworkHandler <<boundary>> #F4F4F4;line.dashed;line:999999
+class ResultScreen <<boundary>> #F4F4F4;line.dashed;line:999999
+class Server <<controller>> #F4F4F4;line.dashed;line:999999
+class TurnBanner <<boundary>> #F4F4F4;line.dashed;line:999999
+
+TurnBanner ..> Game : reads turn from >
+ResultScreen ..> GameResult : displays >
+NetworkHandler ..> HumanPlayer : tracks presence >
+Server "1" --> "0..*" Lobby : manages >
+Server ..> Game : validates & resolves >
+GameRepository ..> Lobby : persists >
+GameRepository ..> Game : persists >
+Lobby "1" o-- "0..2" Player : seats >
+Lobby "1" *-- "1" Game : runs >
+Game "1" o-- "2" Player : players >
+Game "1" *-- "0..*" Shot : history >
+Game "1" --> "0..2" GameResult : produces >
+Game "1" *-- "0..1" RematchRequest : holds >
+Game ..> Ability : grants >
+Player "1" *-- "1" Board : owns >
+Player "1" o-- "0..1" Ability : heldAbility >
+Player "1" o-- "0..1" Ability : offeredAbility >
+Shot "0..*" --> "1" Player : fired by >
+RematchRequest "0..*" --> "1" Player : requested by >
+GameResult ..> Shot : derived from >
+Player <|-- HumanPlayer
+Player <|-- AIOpponent
+note bottom of AIOpponent
+  Single-player only. Runs in the browser
+  with the same Game / Board classes;
+  Server and NetworkHandler are not used.
+end note
+legend bottom right
+  Grey dashed boxes are classes detailed in another figure.
+endlegend
+@enduml

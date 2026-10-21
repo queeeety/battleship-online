@@ -36,8 +36,8 @@ state "Player.heldAbility within Game::InProgress" as Lifecycle {
   Drawn --> Held : receiveAbility(drawn)\n[heldAbility == null]
   Drawn --> ChoicePending : receiveAbility(drawn)\n[heldAbility != null]
 
-  ChoicePending --> Held : keepOrReplace(choice)\n[choice == REPLACE]\n/ discard current, hold drawn
-  ChoicePending --> Held : keepOrReplace(choice)\n[choice == KEEP]\n/ discard drawn, keep current
+  ChoicePending --> Held : chooseAbility(keep)\n[not keep]\n/ discard current, hold drawn
+  ChoicePending --> Held : chooseAbility(keep)\n[keep]\n/ discard drawn, keep current
 
   Held --> Held : useAbility(a, target)\n[not a.canUse(g) or not a.isValidTarget(b, target)]\n/ reject, nothing consumed
   Held --> Used : useAbility(a, target)\n[a.canUse(g) and a.isValidTarget(b, target) and a.usesTurnShot]\n/ apply(), turn's shot consumed

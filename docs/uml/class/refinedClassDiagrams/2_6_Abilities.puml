@@ -1,0 +1,66 @@
+@startuml 2_6_Abilities
+title Figure 2.6 - Abilities
+skinparam classAttributeIconSize 0
+skinparam nodesep 30
+skinparam ranksep 45
+skinparam linetype ortho
+skinparam dpi 150
+hide empty members
+
+
+abstract class Ability <<entity>> {
+  - name : string
+  # usesTurnShot : boolean
+  - used : boolean
+  + canUse(g : Game) : boolean
+  + {abstract} isValidTarget(b : Board, t : Coordinate) : boolean
+  + {abstract} apply(g : Game, b : Board, t : Coordinate) : void
+}
+class RadarSweep {
+  - {static} AREA_SIZE : number = 3
+  # usesTurnShot : boolean = true
+  + isValidTarget(b : Board, t : Coordinate) : boolean
+  + apply(g : Game, b : Board, t : Coordinate) : void
+}
+class LineScan {
+  # usesTurnShot : boolean = true
+  - isRow : boolean
+  + setDirection(isRow : boolean) : void
+  + isValidTarget(b : Board, t : Coordinate) : boolean
+  + apply(g : Game, b : Board, t : Coordinate) : void
+}
+class DoubleShot {
+  # usesTurnShot : boolean = false
+  + isValidTarget(b : Board, t : Coordinate) : boolean
+  + apply(g : Game, b : Board, t : Coordinate) : void
+}
+class Reroute {
+  # usesTurnShot : boolean = true
+  - ship : Ship | null
+  - orientation : Orientation
+  + selectShip(s : Ship) : void
+  + setOrientation(o : Orientation) : void
+  + isValidTarget(b : Board, t : Coordinate) : boolean
+  + apply(g : Game, b : Board, t : Coordinate) : void
+  + validPositions(b : Board, s : Ship) : Coordinate[]
+}
+class AbilityCard <<boundary>> #F4F4F4;line.dashed;line:999999
+class Board <<entity>> #F4F4F4;line.dashed;line:999999
+class Game <<controller>> #F4F4F4;line.dashed;line:999999
+abstract class Player <<entity>> #F4F4F4;line.dashed;line:999999
+abstract class Ship <<entity>> #F4F4F4;line.dashed;line:999999
+
+AbilityCard ..> Ability : displays >
+Game ..> Ability : grants >
+Player "1" o-- "0..1" Ability : heldAbility >
+Player "1" o-- "0..1" Ability : offeredAbility >
+Reroute "0..1" --> "0..1" Ship : moves >
+Ability ..> Board : applies to >
+Ability <|-- RadarSweep
+Ability <|-- LineScan
+Ability <|-- DoubleShot
+Ability <|-- Reroute
+legend bottom right
+  Grey dashed boxes are classes detailed in another figure.
+endlegend
+@enduml

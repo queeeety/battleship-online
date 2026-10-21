@@ -1,0 +1,96 @@
+@startuml 2_5_BoardFleet
+title Figure 2.5 - Board, cells and fleet
+skinparam classAttributeIconSize 0
+skinparam nodesep 30
+skinparam ranksep 45
+skinparam linetype ortho
+skinparam dpi 150
+hide empty members
+
+
+class Board <<entity>> {
+  - {static} SIZE : number = 10
+  - width : number
+  - height : number
+  - cells : Cell[][]
+  - ships : Ship[]
+  + canPlace(s : Ship, start : Coordinate, o : Orientation) : boolean
+  + placeShip(s : Ship, start : Coordinate, o : Orientation) : boolean
+  + removeShip(s : Ship) : void
+  + placeFleetRandomly() : void
+  + isFleetComplete() : boolean
+  + receiveShot(target : Coordinate) : Shot
+  + hasBeenTargeted(c : Coordinate) : boolean
+  + allShipsSunk() : boolean
+  + scanArea(topLeft : Coordinate, size : number) : Coordinate[]
+  + scanLine(index : number, isRow : boolean) : Coordinate[]
+  + moveShip(s : Ship, start : Coordinate, o : Orientation) : boolean
+  + getCell(c : Coordinate) : Cell
+  + reset() : void
+}
+class Cell <<entity>> {
+  - coordinate : Coordinate
+  - state : CellState
+  - ship : Ship | null
+  + occupy(s : Ship) : void
+  + clear() : void
+  + markHit() : void
+  + markMiss() : void
+  + isAlreadyShot() : boolean
+}
+abstract class Ship <<entity>> {
+  - name : string
+  # length : number
+  - hits : number
+  - orientation : Orientation
+  - isPlaced : boolean
+  - start : Coordinate | null
+  + rotate() : void
+  + occupies(c : Coordinate) : boolean
+  + registerHit() : void
+  + isSunk() : boolean
+}
+class Carrier {
+  # length : number = 5
+}
+class Battleship {
+  # length : number = 4
+}
+class Cruiser {
+  # length : number = 3
+}
+class Submarine {
+  # length : number = 3
+}
+class Destroyer {
+  # length : number = 2
+}
+class Coordinate <<value>> {
+  - x : number
+  - y : number
+  + isWithinBounds(w : number, h : number) : boolean
+  + equals(other : Coordinate) : boolean
+}
+abstract class Ability <<entity>> #F4F4F4;line.dashed;line:999999
+class BoardView <<boundary>> #F4F4F4;line.dashed;line:999999
+abstract class Player <<entity>> #F4F4F4;line.dashed;line:999999
+class Reroute  #F4F4F4;line.dashed;line:999999
+class ShipPlacer <<boundary>> #F4F4F4;line.dashed;line:999999
+
+BoardView ..> Board : renders >
+ShipPlacer ..> Board : places ships on >
+Player "1" *-- "1" Board : owns >
+Board "1" *-- "100" Cell : consists of >
+Board "1" o-- "5" Ship : fleet >
+Cell "0..5" --> "0..1" Ship : occupied by >
+Reroute "0..1" --> "0..1" Ship : moves >
+Ability ..> Board : applies to >
+Ship <|-- Carrier
+Ship <|-- Battleship
+Ship <|-- Cruiser
+Ship <|-- Submarine
+Ship <|-- Destroyer
+legend bottom right
+  Grey dashed boxes are classes detailed in another figure.
+endlegend
+@enduml

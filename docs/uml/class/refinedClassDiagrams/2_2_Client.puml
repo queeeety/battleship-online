@@ -1,0 +1,128 @@
+@startuml 2_2_Client
+title Figure 2.2 - Client (browser): UI components, network and timer
+skinparam classAttributeIconSize 0
+skinparam nodesep 30
+skinparam ranksep 45
+skinparam linetype ortho
+skinparam dpi 150
+hide empty members
+
+BoardView -[hidden]right- ShipPlacer
+ShipPlacer -[hidden]right- TurnBanner
+TurnBanner -[hidden]down- AbilityCard
+ShipPlacer -[hidden]down- ResultScreen
+Timer -[hidden]down- NetworkHandler
+class UIManager <<boundary>> {
+  - currentScreen : Screen
+  - ownBoard : BoardView
+  - enemyBoard : BoardView
+  + showScreen(s : Screen) : void
+  + renderBoard(b : Board, isOwn : boolean) : void
+  + onCellClick(c : Coordinate) : void
+  + showError(e : JoinError) : void
+  + showCountdown(secondsLeft : number) : void
+  + showAbility(a : Ability) : void
+  + promptKeepOrReplace(current : Ability, drawn : Ability) : boolean
+  + showScanResult(cells : Coordinate[]) : void
+  + showResult(r : GameResult) : void
+}
+class BoardView <<boundary>> {
+  - isOwn : boolean
+  - clickable : boolean
+  - cells : CellView[]
+  + render(b : Board, shots : Shot[]) : void
+  + highlight(cells : Coordinate[]) : void
+  + setClickable(on : boolean) : void
+  + onCellClick(c : Coordinate) : void
+}
+class CellView <<boundary>> {
+  - coordinate : Coordinate
+  - state : CellState
+  - scanned : boolean
+  + render() : void
+  + focus() : void
+}
+class ShipPlacer <<boundary>> {
+  - selectedShip : Ship | null
+  - orientation : Orientation
+  + selectShip(s : Ship) : void
+  + rotate() : void
+  + showDropOutline(c : Coordinate) : void
+  + dropAt(c : Coordinate) : boolean
+  + randomise() : void
+  + confirm() : void
+}
+class TurnBanner <<boundary>> {
+  - isMyTurn : boolean
+  - turnNumber : number
+  - secondsLeft : number
+  + update(g : Game) : void
+  + onForfeit() : void
+}
+class AbilityCard <<boundary>> {
+  - ability : Ability | null
+  - armed : boolean
+  + show(a : Ability) : void
+  + showKeepOrReplace(current : Ability, drawn : Ability) : void
+  + arm() : void
+  + cancel() : void
+}
+class ResultScreen <<boundary>> {
+  - result : GameResult
+  + show(r : GameResult, revealed : Board) : void
+  + showRematchPrompt(fromName : string) : void
+  + onRematch() : void
+  + onHome() : void
+}
+class NetworkHandler <<boundary>> {
+  - channel : Channel | null
+  + subscribe(code : string) : void
+  + broadcast(g : Game) : void
+  + trackPresence(p : HumanPlayer) : void
+  + onDisconnect(p : HumanPlayer) : void
+  + sendPrivate(p : HumanPlayer, payload : object) : void
+  + resync(code : string) : void
+}
+class Timer <<boundary>> {
+  - limitMs : number
+  - startedAt : Date | null
+  + start(limitMs : number) : void
+  + stop() : void
+  + secondsLeft() : number
+  + hasExpired() : boolean
+}
+abstract class Ability <<entity>> #F4F4F4;line.dashed;line:999999
+class Board <<entity>> #F4F4F4;line.dashed;line:999999
+class Game <<controller>> #F4F4F4;line.dashed;line:999999
+class GameResult <<entity>> #F4F4F4;line.dashed;line:999999
+class HumanPlayer <<entity>> #F4F4F4;line.dashed;line:999999
+class Server <<controller>> #F4F4F4;line.dashed;line:999999
+
+UIManager "1" *-- "2" BoardView : draws >
+BoardView "1" *-- "100" CellView : made of >
+UIManager "1" *-- "1" ShipPlacer : places fleet with >
+UIManager "1" *-- "1" TurnBanner : shows turn in >
+UIManager "1" *-- "1" AbilityCard : shows ability in >
+UIManager "1" *-- "1" ResultScreen : ends game with >
+UIManager "1" --> "0..1" Timer : counts down with >
+BoardView ..> Board : renders >
+ShipPlacer ..> Board : places ships on >
+TurnBanner ..> Game : reads turn from >
+AbilityCard ..> Ability : displays >
+ResultScreen ..> GameResult : displays >
+NetworkHandler ..> UIManager : pushes updates >
+UIManager ..> Server : calls actions >
+Timer ..> Server : claimTimeout() >
+NetworkHandler ..> HumanPlayer : tracks presence >
+Server "1" --> "1" NetworkHandler : broadcasts via >
+note bottom of Timer
+  Client-side countdown. On expiry the
+  waiting client calls Server.claimTimeout();
+  the server re-checks turnStartedAt /
+  disconnectedAt (turnTimerExpired,
+  gracePeriodElapsed in 6.2 and 6.3).
+end note
+legend bottom right
+  Grey dashed boxes are classes detailed in another figure.
+endlegend
+@enduml
