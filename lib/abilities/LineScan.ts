@@ -21,3 +21,4 @@ export class LineScan extends Ability
 
     public apply(g: Game, b: Board, t: Coordinate): void {}
 }
+

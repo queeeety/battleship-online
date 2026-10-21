@@ -43,3 +43,4 @@ export class UIManager
 
     public getCurrentScreen(): Screen { return this.currentScreen; }
 }
+

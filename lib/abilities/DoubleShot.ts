@@ -18,3 +18,4 @@ export class DoubleShot extends Ability
     public apply(g: Game, b: Board, t: Coordinate): void {}
 }
 
+
