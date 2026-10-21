@@ -29,11 +29,11 @@ group Grant (called from 5.3 Fire Shot when a Ship is sunk)
     Game -> Player : receiveAbility(drawn)
     Player --> Game : held
   else owner already holds an unused ability
-    Game -> Net : sendPrivate(owner, keepOrReplace(current, drawn))
+    Game -> Net : sendPrivate(owner, [current, drawn])
     Net --> UI : promptKeepOrReplace(current, drawn)
     UI --> Owner : "Keep current or take drawn?"
     Owner -> UI : selects Keep
-    UI -> Server : keepOrReplace(code, KEEP)
+    UI -> Server : chooseAbility(code, true)
     Server -> Player : receiveAbility(kept)
     note right of Player : UC4 2a: exactly one\nability is held afterwards
   end

@@ -1,0 +1,88 @@
+@startuml 2_3_Server
+title Figure 2.3 - Server (server actions) and its helpers
+skinparam classAttributeIconSize 0
+skinparam nodesep 30
+skinparam ranksep 45
+skinparam linetype ortho
+skinparam dpi 150
+hide empty members
+
+RequestValidator -[hidden]down- SessionManager
+RateLimiter -[hidden]down- GameRepository
+class Server <<controller>> {
+  - repo : GameRepository
+  - validator : RequestValidator
+  - sessions : SessionManager
+  - limiter : RateLimiter
+  + createLobby(name : string, type : GameType) : Lobby
+  + joinLobby(code : string, name : string) : HumanPlayer
+  + placeShips(code : string, layout : Board) : boolean
+  + fireShot(code : string, target : Coordinate) : Shot
+  + useAbility(code : string, a : Ability, target : Coordinate) : void
+  + chooseAbility(code : string, keep : boolean) : void
+  + claimTimeout(code : string) : void
+  + forfeit(code : string) : void
+  + requestRematch(code : string, accept : boolean) : RematchRequest
+  + getMyState(code : string) : Game
+  + restoreSeat(sessionId : string) : HumanPlayer
+  - assignRandomName() : string
+}
+class RequestValidator <<utility>> {
+  - codeSchema : ZodSchema
+  - nameSchema : ZodSchema
+  - coordinateSchema : ZodSchema
+  - layoutSchema : ZodSchema
+  + parseCode(raw : unknown) : string
+  + parseName(raw : unknown) : string | null
+  + parseCoordinate(raw : unknown) : Coordinate
+  + parseLayout(raw : unknown) : Board
+}
+class SessionManager <<utility>> {
+  - client : SupabaseClient
+  + signInAnonymously() : string
+  + currentSessionId() : string
+  + verifySeat(code : string, sessionId : string) : boolean
+}
+class RateLimiter <<utility>> {
+  - maxRequests : number
+  - windowMs : number
+  + allow(sessionId : string, action : string) : boolean
+}
+class GameRepository <<persistence>> {
+  - client : SupabaseClient
+  + loadLobby(code : string) : Lobby | null
+  + saveLobby(l : Lobby) : void
+  + loadGame(code : string) : Game
+  + saveGame(g : Game) : void
+  + loadFleet(code : string, p : Player) : Board
+  + saveFleet(code : string, p : Player, b : Board) : void
+  + runShotTransaction(code : string, shooter : Player, target : Coordinate) : Shot
+}
+class Game <<controller>> #F4F4F4;line.dashed;line:999999
+class Lobby <<controller>> #F4F4F4;line.dashed;line:999999
+class NetworkHandler <<boundary>> #F4F4F4;line.dashed;line:999999
+class Timer <<boundary>> #F4F4F4;line.dashed;line:999999
+class UIManager <<boundary>> #F4F4F4;line.dashed;line:999999
+
+UIManager ..> Server : calls actions >
+Timer ..> Server : claimTimeout() >
+Server "1" --> "1" NetworkHandler : broadcasts via >
+Server "1" *-- "1" RequestValidator : validates with >
+Server "1" *-- "1" SessionManager : identifies caller with >
+Server "1" *-- "1" RateLimiter : throttles with >
+Server "1" *-- "1" GameRepository : loads / saves via >
+Server "1" --> "0..*" Lobby : manages >
+Server ..> Game : validates & resolves >
+GameRepository ..> Lobby : persists >
+GameRepository ..> Game : persists >
+note bottom of Server
+  Stateless: every action runs
+  RateLimiter -> RequestValidator (Zod)
+  -> SessionManager.verifySeat()
+  -> GameRepository load / write,
+  so no client can change state directly.
+end note
+legend bottom right
+  Grey dashed boxes are classes detailed in another figure.
+endlegend
+@enduml

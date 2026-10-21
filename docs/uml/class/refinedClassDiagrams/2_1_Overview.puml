@@ -1,0 +1,111 @@
+@startuml 2_1_Overview
+title Figure 2.1 - Overview: classes and structural relationships (members and dependencies in Figures 2.2-2.7)
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam linetype ortho
+skinparam nodesep 45
+skinparam ranksep 70
+skinparam dpi 150
+hide members
+hide circle
+
+package "Client (browser)" {
+  class UIManager <<boundary>>
+  class BoardView <<boundary>>
+  class CellView <<boundary>>
+  class ShipPlacer <<boundary>>
+  class TurnBanner <<boundary>>
+  class AbilityCard <<boundary>>
+  class ResultScreen <<boundary>>
+  class Timer <<boundary>>
+  class NetworkHandler <<boundary>>
+}
+package "Server (server actions)" {
+  class Server <<controller>>
+  class RequestValidator <<utility>>
+  class SessionManager <<utility>>
+  class RateLimiter <<utility>>
+  class GameRepository <<persistence>>
+}
+package "Domain: game" {
+  class Lobby <<controller>>
+  class Game <<controller>>
+  class Shot <<entity>>
+  class RematchRequest <<entity>>
+  class GameResult <<entity>>
+  abstract class Player <<entity>>
+  class HumanPlayer <<entity>>
+  class AIOpponent <<entity>>
+}
+package "Domain: board and fleet" {
+  class Board <<entity>>
+  class Cell <<entity>>
+  abstract class Ship <<entity>>
+  class Carrier 
+  class Battleship 
+  class Cruiser 
+  class Submarine 
+  class Destroyer 
+  class Coordinate <<value>>
+}
+package "Abilities" {
+  abstract class Ability <<entity>>
+  class RadarSweep 
+  class LineScan 
+  class DoubleShot 
+  class Reroute 
+}
+
+UIManager "1" *-- "2" BoardView : draws >
+BoardView "1" *-- "100" CellView : made of >
+UIManager "1" *-- "1" ShipPlacer : places fleet with >
+UIManager "1" *-- "1" TurnBanner : shows turn in >
+UIManager "1" *-- "1" AbilityCard : shows ability in >
+UIManager "1" *-- "1" ResultScreen : ends game with >
+UIManager "1" --> "0..1" Timer : counts down with >
+Server "1" --> "1" NetworkHandler : broadcasts via >
+Server "1" *-- "1" RequestValidator : validates with >
+Server "1" *-- "1" SessionManager : identifies caller with >
+Server "1" *-- "1" RateLimiter : throttles with >
+Server "1" *-- "1" GameRepository : loads / saves via >
+Server "1" --> "0..*" Lobby : manages >
+Lobby "1" o-- "0..2" Player : seats >
+Lobby "1" *-- "1" Game : runs >
+Game "1" o-- "2" Player : players >
+Game "1" *-- "0..*" Shot : history >
+Game "1" --> "0..2" GameResult : produces >
+Game "1" *-- "0..1" RematchRequest : holds >
+Player "1" *-- "1" Board : owns >
+Player "1" o-- "0..1" Ability : heldAbility >
+Player "1" o-- "0..1" Ability : offeredAbility >
+Board "1" *-- "100" Cell : consists of >
+Board "1" o-- "5" Ship : fleet >
+Cell "0..5" --> "0..1" Ship : occupied by >
+Shot "0..*" --> "1" Player : fired by >
+RematchRequest "0..*" --> "1" Player : requested by >
+Reroute "0..1" --> "0..1" Ship : moves >
+Player <|-- HumanPlayer
+Player <|-- AIOpponent
+Ship <|-- Carrier
+Ship <|-- Battleship
+Ship <|-- Cruiser
+Ship <|-- Submarine
+Ship <|-- Destroyer
+Ability <|-- RadarSweep
+Ability <|-- LineScan
+Ability <|-- DoubleShot
+Ability <|-- Reroute
+
+' layout: stack the packages top to bottom
+CellView -[hidden]down- Server
+RequestValidator -[hidden]down- Lobby
+SessionManager -[hidden]down- Lobby
+HumanPlayer -[hidden]down- Board
+AIOpponent -[hidden]down- Ability
+
+legend bottom right
+  Solid lines only: associations, aggregation (o), composition (*), inheritance.
+  Dependencies (dashed) are shown in the detail figures.
+  Coordinate is a value type used by most classes.
+endlegend
+@enduml

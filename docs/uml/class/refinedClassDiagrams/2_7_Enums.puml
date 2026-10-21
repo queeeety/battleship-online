@@ -1,0 +1,83 @@
+@startuml 2_7_Enums
+title Figure 2.7 - Enumerations
+skinparam classAttributeIconSize 0
+skinparam nodesep 30
+skinparam ranksep 45
+skinparam linetype ortho
+skinparam dpi 150
+hide empty members
+
+left to right direction
+enum LobbyStatus {
+  WAITING
+  IN_PROGRESS
+  FINISHED
+  ABANDONED
+}
+enum GameState {
+  PLACEMENT
+  IN_PROGRESS
+  FINISHED
+}
+enum GameType {
+  BEGINNER
+  ORIGINAL
+  QUICK_FIRE
+}
+enum Difficulty {
+  EASY
+  NORMAL
+}
+enum ShotResult {
+  MISS
+  HIT
+  SUNK
+}
+enum CellState {
+  EMPTY
+  OCCUPIED
+  HIT
+  MISS
+}
+enum Orientation {
+  HORIZONTAL
+  VERTICAL
+}
+enum EndReason {
+  FLEET_DESTROYED
+  OPPONENT_FORFEIT
+  OPPONENT_DISCONNECTED
+}
+enum RematchStatus {
+  NONE
+  REQUESTED
+  ACCEPTED
+  DECLINED
+}
+enum JoinError {
+  CODE_NOT_FOUND
+  LOBBY_FULL
+  GAME_ALREADY_FINISHED
+  INVALID_NAME
+}
+enum PlacementError {
+  OUT_OF_BOUNDS
+  OVERLAPS_SHIP
+  ALREADY_PLACED
+  FLEET_INCOMPLETE
+}
+enum Screen {
+  HOME
+  LOBBY
+  PLACEMENT
+  BATTLE
+  RESULT
+}
+
+note right of GameType
+  Turn limit per type:
+  BEGINNER 30 s, ORIGINAL 15 s,
+  QUICK_FIRE 5 s (server-enforced
+  from Game.turnStartedAt).
+end note
+@enduml
