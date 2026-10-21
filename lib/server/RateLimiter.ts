@@ -14,3 +14,4 @@ export class RateLimiter
 
     public allow(sessionId: string, action: string): boolean { return false; }
 }
+

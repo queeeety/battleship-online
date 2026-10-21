@@ -32,3 +32,4 @@ export class GameRepository
 
     public runShotTransaction(code: string, shooter: Player, target: Coordinate): Shot { throw new Error("not implemented"); }
 }
+
