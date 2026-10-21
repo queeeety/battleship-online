@@ -80,7 +80,7 @@ class NetworkHandler <<boundary>> {
   + broadcast(g : Game) : void
   + trackPresence(p : HumanPlayer) : void
   + onDisconnect(p : HumanPlayer) : void
-  + sendPrivate(p : HumanPlayer, payload : object) : void
+  + sendPrivate(p : HumanPlayer, payload : PrivatePayload) : void
   + resync(code : string) : void
 }
 class Timer <<boundary>> {
@@ -121,6 +121,12 @@ note bottom of Timer
   the server re-checks turnStartedAt /
   disconnectedAt (turnTimerExpired,
   gracePeriodElapsed in 6.2 and 6.3).
+end note
+note bottom of NetworkHandler
+  PrivatePayload is either a scan result
+  (cells) or the keep-or-replace ability
+  offer (current, drawn). Only the owner
+  receives it.
 end note
 legend bottom right
   Grey dashed boxes are classes detailed in another figure.

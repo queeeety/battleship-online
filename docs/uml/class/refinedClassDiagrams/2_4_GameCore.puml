@@ -51,6 +51,7 @@ class Game <<controller>> {
   + declareWinner(p : Player, r : EndReason) : void
   + forfeit(p : Player) : void
   + resultFor(p : Player) : GameResult
+  + setDoubleShotActive(on : boolean) : void
 }
 abstract class Player <<entity>> {
   - id : string
