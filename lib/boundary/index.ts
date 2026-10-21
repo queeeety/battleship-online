@@ -5,3 +5,10 @@
 
 export * from "./UIManager";
 export * from "./NetworkHandler";
+export * from "./BoardView";
+export * from "./CellView";
+export * from "./ShipPlacer";
+export * from "./TurnBanner";
+export * from "./AbilityCard";
+export * from "./ResultScreen";
+export * from "./Timer";

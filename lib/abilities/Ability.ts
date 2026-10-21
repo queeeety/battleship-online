@@ -1,4 +1,4 @@
-import type { Game } from "../entities/game";
+import type { Game } from "../controllers";
 import type { Board, Coordinate } from "../entities/board";
 
 /**
@@ -23,7 +23,7 @@ export abstract class Ability
 
     public abstract isValidTarget(b: Board, t: Coordinate): boolean;
 
-    public abstract apply(g: Game, b: Board, t: Coordinate): Coordinate[];
+    public abstract apply(g: Game, b: Board, t: Coordinate): void;
 
     public getName(): string { return this.name; }
 

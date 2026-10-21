@@ -7,4 +7,5 @@ export * from "./enums";
 export * from "./entities";
 export * from "./abilities";
 export * from "./controllers";
+export * from "./server";
 export * from "./boundary";

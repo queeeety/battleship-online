@@ -1,7 +1,7 @@
 import { Board } from "../board";
 import type { Coordinate } from "../board";
 import type { Ability } from "../../abilities";
-import type { RematchRequest, Shot } from "../game";
+import type { RematchRequest } from "../game";
 
 /**
  * A player in a match, either a person or the AI.
@@ -30,7 +30,7 @@ export abstract class Player
 
     public confirmPlacement(): boolean { return false; }
 
-    public abstract chooseTarget(shotsFired: Shot[]): Coordinate;
+    public abstract chooseTarget(): Coordinate;
 
     public receiveAbility(drawn: Ability): void {}
 

@@ -1,13 +1,8 @@
-import type { Game } from "../entities/game";
+import type { Game } from "../controllers";
 import type { HumanPlayer } from "../entities/players";
 import type { Coordinate } from "../entities/board";
-import type { Ability } from "../abilities";
 
 type Channel = object;
-
-export type PrivatePayload =
-    | { kind: "scanResult"; cells: Coordinate[] }
-    | { kind: "keepOrReplace"; current: Ability; drawn: Ability };
 
 /**
  * Boundary class for the network.
@@ -31,7 +26,7 @@ export class NetworkHandler
 
     public onDisconnect(p: HumanPlayer): void {}
 
-    public sendPrivate(p: HumanPlayer, payload: PrivatePayload): void {}
+    public sendPrivate(p: HumanPlayer, cells: Coordinate[]): void {}
 
     public resync(code: string): void {}
 }

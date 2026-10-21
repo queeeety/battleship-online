@@ -3,6 +3,7 @@ import type { GameResult } from "../entities/game";
 import type { Ability } from "../abilities";
 import { Screen } from "../enums";
 import type { JoinError } from "../enums";
+import { BoardView } from "./BoardView";
 
 /**
  * Boundary class for the player.
@@ -12,10 +13,14 @@ import type { JoinError } from "../enums";
 export class UIManager
 {
     private currentScreen: Screen;
+    private ownBoard: BoardView;
+    private enemyBoard: BoardView;
 
     constructor()
     {
         this.currentScreen = Screen.HOME;
+        this.ownBoard = new BoardView(true);
+        this.enemyBoard = new BoardView(false);
     }
 
     public showScreen(s: Screen): void { this.currentScreen = s; }

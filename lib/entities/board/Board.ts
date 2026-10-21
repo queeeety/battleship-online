@@ -2,7 +2,6 @@ import type { Cell } from "./Cell";
 import type { Coordinate } from "./Coordinate";
 import type { Ship } from "../ships";
 import type { Shot } from "../game";
-import type { Player } from "../players";
 import type { Orientation } from "../../enums";
 import { BOARD_SIZE } from "../../config";
 
@@ -12,6 +11,8 @@ import { BOARD_SIZE } from "../../config";
  */
 export class Board
 {
+    private static readonly SIZE: number = BOARD_SIZE;
+
     private width: number;
     private height: number;
     private cells: Cell[][];
@@ -19,8 +20,8 @@ export class Board
 
     constructor()
     {
-        this.width = BOARD_SIZE;
-        this.height = BOARD_SIZE;
+        this.width = Board.SIZE;
+        this.height = Board.SIZE;
         this.cells = [];
         this.ships = [];
     }
@@ -35,7 +36,7 @@ export class Board
 
     public isFleetComplete(): boolean { return false; }
 
-    public receiveShot(target: Coordinate, shooter: Player): Shot { throw new Error("not implemented"); }
+    public receiveShot(target: Coordinate): Shot { throw new Error("not implemented"); }
 
     public hasBeenTargeted(c: Coordinate): boolean { return false; }
 

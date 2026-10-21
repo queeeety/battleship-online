@@ -1,5 +1,5 @@
 import { Ability } from "./Ability";
-import type { Game } from "../entities/game";
+import type { Game } from "../controllers";
 import type { Board, Coordinate } from "../entities/board";
 
 /**
@@ -19,5 +19,5 @@ export class LineScan extends Ability
 
     public isValidTarget(b: Board, t: Coordinate): boolean { return false; }
 
-    public apply(g: Game, b: Board, t: Coordinate): Coordinate[] { return []; }
+    public apply(g: Game, b: Board, t: Coordinate): void {}
 }

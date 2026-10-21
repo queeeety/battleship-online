@@ -1,6 +1,6 @@
 import { Player } from "./Player";
 import type { Coordinate } from "../board";
-import type { Shot } from "../game";
+import { DISCONNECT_GRACE_PERIOD_MS } from "../../config";
 
 /**
  * A real person playing through the browser.
@@ -8,6 +8,8 @@ import type { Shot } from "../game";
  */
 export class HumanPlayer extends Player
 {
+    private static readonly GRACE_PERIOD_MS: number = DISCONNECT_GRACE_PERIOD_MS;
+
     private sessionId: string;
     private connected: boolean;
     private disconnectedAt: Date | null;
@@ -20,7 +22,7 @@ export class HumanPlayer extends Player
         this.disconnectedAt = null;
     }
 
-    public chooseTarget(shotsFired: Shot[]): Coordinate { throw new Error("not implemented"); }
+    public chooseTarget(): Coordinate { throw new Error("not implemented"); }
 
     public disconnect(): void {}
 

@@ -1,10 +1,8 @@
-import { GameState } from "../../enums";
-import type { GameType, EndReason } from "../../enums";
-import type { Coordinate } from "../board";
-import type { Player } from "../players";
-import type { Shot } from "./Shot";
-import type { GameResult } from "./GameResult";
-import type { RematchRequest } from "./RematchRequest";
+import { GameState } from "../enums";
+import type { GameType, EndReason } from "../enums";
+import type { Coordinate } from "../entities/board";
+import type { Player } from "../entities/players";
+import type { Shot, GameResult, RematchRequest } from "../entities/game";
 
 /**
  * Runs one match from placement to game over.

@@ -1,6 +1,5 @@
 import { Player } from "./Player";
 import type { Coordinate } from "../board";
-import type { Shot } from "../game";
 import type { Difficulty } from "../../enums";
 
 /**
@@ -20,7 +19,7 @@ export class AIOpponent extends Player
         this.huntQueue = [];
     }
 
-    public chooseTarget(shotsFired: Shot[]): Coordinate { throw new Error("not implemented"); }
+    public chooseTarget(): Coordinate { throw new Error("not implemented"); }
 
     public shouldUseAbility(): boolean { return false; }
 

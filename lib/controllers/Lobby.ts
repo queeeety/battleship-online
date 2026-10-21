@@ -1,7 +1,8 @@
 import { LobbyStatus } from "../enums";
 import type { GameType } from "../enums";
-import { Game } from "../entities/game";
+import { Game } from "./Game";
 import type { Player } from "../entities/players";
+import { LOBBY_CODE_CHARS, LOBBY_CODE_LENGTH } from "../config";
 
 /**
  * A private room that two players join with a 6 character code.
@@ -9,6 +10,9 @@ import type { Player } from "../entities/players";
  */
 export class Lobby
 {
+    private static readonly CODE_CHARS: string = LOBBY_CODE_CHARS;
+    private static readonly CODE_LENGTH: number = LOBBY_CODE_LENGTH;
+
     private code: string;
     private status: LobbyStatus;
     private createdAt: Date;

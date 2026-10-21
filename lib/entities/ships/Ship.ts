@@ -27,17 +27,11 @@ export abstract class Ship
 
     public rotate(): void {}
 
-    public place(start: Coordinate, o: Orientation): void {}
-
-    public unplace(): void {}
-
     public occupies(c: Coordinate): boolean { return false; }
 
     public registerHit(): void {}
 
     public isSunk(): boolean { return false; }
-
-    public isDamaged(): boolean { return false; }
 
     public getName(): string { return this.name; }
 

@@ -2,8 +2,10 @@ import type { GameType } from "../enums";
 import type { Lobby } from "./Lobby";
 import type { HumanPlayer } from "../entities/players";
 import type { Board, Coordinate } from "../entities/board";
-import type { Game, Shot, RematchRequest } from "../entities/game";
+import type { Game } from "./Game";
+import type { Shot, RematchRequest } from "../entities/game";
 import type { Ability } from "../abilities";
+import { GameRepository, RequestValidator, SessionManager, RateLimiter } from "../server";
 
 /**
  * The single authority for lobbies and games.
@@ -12,7 +14,18 @@ import type { Ability } from "../abilities";
  */
 export class Server
 {
-    constructor() {}
+    private repo: GameRepository;
+    private validator: RequestValidator;
+    private sessions: SessionManager;
+    private limiter: RateLimiter;
+
+    constructor()
+    {
+        this.repo = new GameRepository();
+        this.validator = new RequestValidator();
+        this.sessions = new SessionManager();
+        this.limiter = new RateLimiter();
+    }
 
     public createLobby(name: string, type: GameType): Lobby { throw new Error("not implemented"); }
 
