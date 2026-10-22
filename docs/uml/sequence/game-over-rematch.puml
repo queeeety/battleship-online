@@ -92,7 +92,7 @@ else opponent declines or does not answer
   note right of Lobby : Lobby abandoned, code stops working (UC5 5a)
 else opponent is the AIOpponent
   Server -> Rematch : accept()
-  note right of Rematch : The computer always accepts (UC5 5b)
+  note right of Rematch : The computer always accepts (UC5 5c)
 end
 deactivate Rematch
 deactivate Lobby
