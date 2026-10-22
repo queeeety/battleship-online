@@ -55,7 +55,7 @@ group Use (on the holder's own turn, before firing)
   alt not ability.isValidTarget(oppBoard, E4)
     Game --> Server : invalid target
     Server --> UI : reject
-    UI --> Owner : choose another target (UC4 4a)
+    UI --> Owner : choose another target (UC4 4b)
   else valid target
     Game -> Ability : apply(game, oppBoard, E4)
     activate Ability

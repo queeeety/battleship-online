@@ -10,7 +10,7 @@ frame "sd UseAbility" {
   rectangle "ability : Ability" as Ability
   rectangle "ownBoard : Board" as OwnBoard
   rectangle "oppBoard : Board" as OppBoard
-  Owner -down- UI : ⇡ 1.4.1.1 : "Keep current or take drawn?"\n↓ 2 [owner already holds an unused ability] : selects Keep\n↓ 4 : selects Radar Sweep, targets area E4-G6\n⇡ 4.2 [not ability.isValidTarget(oppBoard, E4)] : choose another target (UC4 4a)\n⇡ 4.3 : green scan markers on F5, F6
+  Owner -down- UI : ⇡ 1.4.1.1 : "Keep current or take drawn?"\n↓ 2 [owner already holds an unused ability] : selects Keep\n↓ 4 : selects Radar Sweep, targets area E4-G6\n⇡ 4.2 [not ability.isValidTarget(oppBoard, E4)] : choose another target (UC4 4b)\n⇡ 4.3 : green scan markers on F5, F6
   UI -down- Net : ⇡ 1.4.1 : promptKeepOrReplace(current, drawn)\n⇡ 4.1.3.1 : showScanResult([F5, F6])
   OppUI -down- Net : ⇡ 3.1 : "[Name] was granted an ability"\n⇡ 4.1.4.1 : &#34;[Name] used Radar Sweep&#34;
   UI -down- Server : ↓ 2.1 : chooseAbility(code, true)\n↓ 4.1 : useAbility(code, ability, E4)\n⇡ 4.1.2 [not ability.isValidTarget(oppBoard, E4)] : reject\n⇡ 4.1.5 : ok

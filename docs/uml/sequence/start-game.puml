@@ -95,7 +95,7 @@ deactivate Net
 deactivate Lobby
 deactivate Game
 
-else single player: host selects Play vs AI (UC1 2a)
+else single player: host selects Play vs AI (UC1 3a)
 
 Host -> HostUI : selects Play vs AI, chooses NORMAL difficulty
 activate HostUI
