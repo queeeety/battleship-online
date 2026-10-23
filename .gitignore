@@ -1,6 +1,6 @@
 # ---------------------------------------------------------------------------
 # Project ignore rules.
-# Personal tooling (IDE config, OS junk) lives in the machine-wide
+# # Personal tooling (IDE config) lives in the machine-wide
 # ~/.config/git/ignore instead of here.
 # ---------------------------------------------------------------------------
 
@@ -101,3 +101,6 @@ local.properties
 *.zip
 *.tar.gz
 *.rar
+
+# ── OS files ───────────────────────────────────────────────────────────────
+.DS_Store
