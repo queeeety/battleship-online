@@ -21,7 +21,7 @@ the requirements spec or the tech design doc. Tick every box that applies, then 
 each change in the table so the docs can be brought back in line.
 -->
 
-**Reference docs:** [Tech design doc](https://docs.google.com/document/d/1R3S3VhuUzgUJUNVGs8mgUITunHbGeH3u_3mQNCmNeqw/edit?tab=t.dbq53rnylz67) · [UML diagrams](https://gitlab.computing.dcu.ie/nathan.pascale2/ooad-battleship-project2026/-/tree/main/docs/uml)
+**Reference docs:** [Tech design doc](https://docs.google.com/document/d/1R3S3VhuUzgUJUNVGs8mgUITunHbGeH3u_3mQNCmNeqw/edit?tab=t.dbq53rnylz67) · [UML diagrams](https://gitlab.computing.dcu.ie/nathan.pascale2/ooad-battleship-project2026/-/tree/main/docs/uml) · [Progress checklist](https://docs.google.com/document/d/1R3S3VhuUzgUJUNVGs8mgUITunHbGeH3u_3mQNCmNeqw/edit?tab=t.7773udk3yp9r)
 
 - [ ] Added methods, fields or classes that aren't in the UML / CRC cards
 - [ ] Changed a signature from the UML (parameters, return types, visibility)
@@ -51,3 +51,4 @@ each change in the table so the docs can be brought back in line.
 - [ ] Branched off `main` with a descriptive name
 - [ ] No secrets, `.env` files or personal config committed
 - [ ] Reviewer assigned
+- [ ] Progress checklist updated (tick anything this MR finishes)
