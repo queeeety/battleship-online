@@ -19,4 +19,4 @@ const STANDARD_FLEET: ReadonlyArray<() => Ship> = [
 
 export const FLEET_SIZE = STANDARD_FLEET.length;
 
-export function createStandardFleet(): Ship[] { return []; }
+export function createStandardFleet(): Ship[] { return STANDARD_FLEET.map(make => make()); }
