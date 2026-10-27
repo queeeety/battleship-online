@@ -20,6 +20,9 @@ export class AudioManager
 
     public playForShot(result: ShotResult): void
     {
+        if (!AUDIO_ENABLED) {
+            return;
+        }
         void result;
         throw new Error("not yet");
     }
