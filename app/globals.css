@@ -1,26 +1,113 @@
 @import "tailwindcss";
+@import "./styles/tokens.css";
+
+/* dark: follows data-theme on <html> */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* --font-plex-* come from next/font in app/layout.tsx */
+  --font-sans: var(--font-plex-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* motion */
+  --mb-dur-1: 120ms; /* hover, colour */
+  --mb-dur-2: 200ms; /* panels, dialogs */
+  --mb-dur-3: 600ms; /* ping ring */
+  --mb-ease: cubic-bezier(.2, 0, 0, 1);
+  --mb-sweep-period: 4s;
 }
 
+/* Tailwind defaults with the same names: use the tokens */
+@theme inline reference {
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+}
+
+/* colours */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-surface-000: var(--surface-000);
+  --color-surface-100: var(--surface-100);
+  --color-surface-200: var(--surface-200);
+  --color-water: var(--water);
+  --color-grid: var(--grid);
+  --color-line: var(--line);
+  --color-line-control: var(--line-control);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-sonar: var(--sonar);
+  --color-sonar-strong: var(--sonar-strong);
+  --color-sonar-soft: var(--sonar-soft);
+  --color-on-sonar: var(--on-sonar);
+  --color-sweep: var(--sweep);
+  --color-hit: var(--hit);
+  --color-hit-soft: var(--hit-soft);
+  --color-on-hit: var(--on-hit);
+  --color-sunk: var(--sunk);
+  --color-sunk-soft: var(--sunk-soft);
+  --color-miss: var(--miss);
+  --color-ship: var(--ship);
+  --color-ship-edge: var(--ship-edge);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-on-danger: var(--on-danger);
+  --color-scrim: var(--scrim);
+  --color-focus: var(--focus);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* text styles; spacing and sizes are used as variables, e.g. gap-(--space-5) */
+@theme {
+  /* sans */
+  --text-display: 40px;
+  --text-display--line-height: 44px;
+  --text-display--letter-spacing: -0.01em;
+  --text-display--font-weight: 600;
+  --text-title: 24px;
+  --text-title--line-height: 30px;
+  --text-title--font-weight: 600;
+  --text-heading: 17px;
+  --text-heading--line-height: 24px;
+  --text-heading--font-weight: 600;
+  --text-body: 15px;
+  --text-body--line-height: 22px;
+  --text-body--font-weight: 400;
+  --text-body-strong: 15px;
+  --text-body-strong--line-height: 22px;
+  --text-body-strong--font-weight: 500;
+  --text-small: 13px;
+  --text-small--line-height: 18px;
+  --text-small--font-weight: 400;
+
+  /* mono: pair with font-mono */
+  --text-readout: 44px;
+  --text-readout--line-height: 48px;
+  --text-readout--letter-spacing: 0.04em;
+  --text-readout--font-weight: 500;
+  --text-readout-sm: 20px;
+  --text-readout-sm--line-height: 24px;
+  --text-readout-sm--font-weight: 500;
+  --text-label: 11px;
+  --text-label--line-height: 16px;
+  --text-label--letter-spacing: 0.08em;
+  --text-label--font-weight: 500;
+  --text-coord: 12px;
+  --text-coord--line-height: 16px;
+  --text-coord--font-weight: 400;
+  --text-log: 13px;
+  --text-log--line-height: 20px;
+  --text-log--font-weight: 400;
+}
+
+@layer base {
+  body {
+    @apply bg-surface-000 text-body text-ink;
   }
-}
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
 }
