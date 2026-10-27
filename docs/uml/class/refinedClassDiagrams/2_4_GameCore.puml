@@ -43,7 +43,7 @@ class Game <<controller>> {
   + beginBattle() : void
   + fireShot(shooter : Player, target : Coordinate) : Shot
   + fireRandomShot(p : Player) : Shot
-  + isTurnExpired() : boolean
+  + isTurnExpired(now : Date = new Date()) : boolean
   + switchTurn() : void
   + grantAbility(p : Player) : void
   + applyAbility(p : Player, target : Coordinate) : void
@@ -52,6 +52,7 @@ class Game <<controller>> {
   + forfeit(p : Player) : void
   + resultFor(p : Player) : GameResult
   + setDoubleShotActive(on : boolean) : void
+  + opponentOf(p : Player) : Player
 }
 abstract class Player <<entity>> {
   - id : string
@@ -65,6 +66,9 @@ abstract class Player <<entity>> {
   + {abstract} chooseTarget() : Coordinate
   + receiveAbility(drawn : Ability) : void
   + resolveOffer(keep : boolean) : void
+  + consumeAbility() : void
+  + clearAbilities() : void
+  + recordShot(s : Shot) : void
   + hasLost() : boolean
   + requestRematch() : RematchRequest
 }
@@ -81,10 +85,22 @@ class HumanPlayer <<entity>> {
 class AIOpponent <<entity>> {
   - difficulty : Difficulty
   - huntQueue : Coordinate[]
+  - targeted : Set<string>
+  - activeHits : Coordinate[]
   + chooseTarget() : Coordinate
+  + recordShot(s : Shot) : void
   + shouldUseAbility() : boolean
+  + chooseAbilityTarget() : Coordinate
+  + toJSON() : AIMemory
+  + {static} fromJSON(m : AIMemory) : AIOpponent
   - hunt() : Coordinate
   - target() : Coordinate
+}
+class AIMemory <<value>> {
+  + difficulty : Difficulty
+  + targeted : string[]
+  + activeHits : {x, y}[]
+  + huntQueue : {x, y}[]
 }
 class Shot <<entity>> {
   - coordinate : Coordinate
@@ -139,10 +155,14 @@ RematchRequest "0..*" --> "1" Player : requested by >
 GameResult ..> Shot : derived from >
 Player <|-- HumanPlayer
 Player <|-- AIOpponent
+AIOpponent ..> AIMemory : saved as >
+Game ..> Player : recordShot(shot) >
 note bottom of AIOpponent
   Single-player only. Runs in the browser
   with the same Game / Board classes;
   Server and NetworkHandler are not used.
+  Learns only from its own Shots through
+  recordShot(), never from the opponent's ships.
 end note
 legend bottom right
   Grey dashed boxes are classes detailed in another figure.

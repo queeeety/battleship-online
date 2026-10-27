@@ -37,7 +37,7 @@ opt turn timer expired before this click
   note right of Game : Turn timer by GameType:\n30 s / 15 s / 5 s (UC3 *a)
 end
 
-Game -> Board : receiveShot(H8)
+Game -> Board : receiveShot(H8, shooter)
 activate Board
 Board -> Cell : isAlreadyShot()
 Cell --> Board : false
@@ -58,6 +58,8 @@ else no Ship at H8
 end
 Board --> Game : shot
 deactivate Board
+Game -> Game : turnStartedAt = now
+note right of Game : Every resolved shot restarts\nthe turn clock (30/15/5 s)
 
 alt shot.result == SUNK
   ref over Game : 5.4 Use Ability\n(grant to the sunk ship's owner)
@@ -73,7 +75,6 @@ else shot.result == MISS and doubleShotActive
   note right of Game : DoubleShot absorbs this miss (UC4 7a)
 else shot.result == MISS
   Game -> Game : switchTurn()
-  Game -> Game : turnStartedAt = now
 end
 
 Game --> Server : shot

@@ -52,7 +52,7 @@ class Game <<controller>> {
   - turnStartedAt : DateTime
   + fireShot(shooter : Player, target : Coordinate) : Shot
   + fireRandomShot(p : Player) : Shot
-  + isTurnExpired() : boolean
+  + isTurnExpired(now : DateTime = now) : boolean
   + switchTurn() : void
   + grantAbility(p : Player) : void
   + checkWinCondition() : boolean
@@ -77,7 +77,7 @@ class AIOpponent <<entity>> {
 }
 
 class Board <<entity>> {
-  + receiveShot(target : Coordinate) : Shot
+  + receiveShot(target : Coordinate, shooter : Player) : Shot
   + hasBeenTargeted(c : Coordinate) : boolean
   + allShipsSunk() : boolean
 }
