@@ -1,9 +1,37 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
+import {
+  AbilityCard,
+  AbilityDraw,
+  Board,
+  FleetStatus,
+  Legend,
+  PlayerChip,
+  RematchPanel,
+  ResultSummary,
+  Ship,
+  TurnIndicator,
+  TurnTimer,
+  type RematchState,
+  type ShipPlacement,
+  type ShipType,
+} from "@/components/game";
 import { Banner, Button, Dialog, Icon, Logo, TextField, type IconName } from "@/components/ui";
-import { ForfeitDialogDemo, GameSetupDemo, JoinCodeDemo, ToastDemo } from "./demos";
+import {
+  AbilityCardDemo,
+  AbilityDrawDemo,
+  FleetPlacementDemo,
+  ForfeitDialogDemo,
+  GameSetupDemo,
+  JoinCodeDemo,
+  LobbyCodeDemo,
+  ShotLogDemo,
+  TargetBoardDemo,
+  ToastDemo,
+  TurnTimerDemo,
+} from "./demos";
 
 export const metadata: Metadata = {
   title: "Design system",
@@ -14,6 +42,22 @@ const ICON_NAMES: IconName[] = [
   "copy", "flag", "rotate", "shuffle", "offline", "player", "ai", "check", "close",
   "arrow-left", "info", "warning",
 ];
+
+const SHIP_TYPES: ShipType[] = ["carrier", "battleship", "cruiser", "submarine", "destroyer"];
+
+const OWN_SHIPS: ShipPlacement[] = [
+  { type: "carrier", x: 1, y: 1, orientation: "horizontal" },
+  { type: "battleship", x: 8, y: 2, orientation: "vertical", status: "damaged" },
+  { type: "cruiser", x: 2, y: 5, orientation: "vertical" },
+  { type: "submarine", x: 5, y: 7, orientation: "horizontal", status: "sunk" },
+  { type: "destroyer", x: 4, y: 4, orientation: "horizontal" },
+];
+
+const OWN_MARKS = {
+  I4: "hit", C3: "miss", G3: "miss", A9: "miss", F8: "sunk", G8: "sunk", H8: "sunk", J10: "miss", E6: "miss",
+} as const;
+
+const REMATCH_STATES: RematchState[] = ["none", "requested-by-you", "requested-by-opponent", "accepted", "declined"];
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -38,6 +82,11 @@ export default function DesignPage() {
 
       <main className="mx-auto grid w-full max-w-5xl gap-(--space-5) px-(--space-6) py-(--space-7)">
         <h1 className="text-title">Basic UI</h1>
+        <nav className="mb-row text-small" aria-label="Sections">
+          <a className="text-sonar underline" href="#game">
+            Jump to game components
+          </a>
+        </nav>
 
         <Section title="Logo">
           <div className="mb-row gap-(--space-7)">
@@ -121,6 +170,133 @@ export default function DesignPage() {
                 <p>Teddy wins and the result is recorded. You can still ask for a rematch.</p>
               </Dialog>
             </div>
+          </div>
+        </Section>
+
+        <h1 id="game" className="mt-(--space-7) scroll-mt-(--space-5) text-title">
+          Game components
+        </h1>
+
+        <Section title="Board">
+          <p className="text-small text-ink-muted">
+            The target board is live: click a cell to fire, or Tab to the board, move with the arrow keys and press
+            Enter. Cells already fired at can&apos;t be fired at again.
+          </p>
+          <div className="flex flex-wrap items-start gap-(--space-6)">
+            <TargetBoardDemo />
+            <div className="grid gap-(--space-3)">
+              <Board variant="own" title="Your waters" meta="4 of 5 afloat" marks={OWN_MARKS} ships={OWN_SHIPS} />
+              <Legend />
+            </div>
+          </div>
+        </Section>
+
+        <Section title="Ship">
+          <div className="grid gap-(--space-4)" style={{ "--mb-cell": "34px" } as CSSProperties}>
+            <div className="mb-row gap-(--space-4)">
+              {SHIP_TYPES.map((type) => (
+                <Ship key={type} type={type} />
+              ))}
+            </div>
+            <div className="flex flex-wrap items-start gap-(--space-4)">
+              <Ship type="cruiser" status="sunk" />
+              <Ship type="battleship" ghost="valid" />
+              <Ship type="battleship" ghost="invalid" />
+              <Ship type="battleship" orientation="vertical" />
+              <Ship type="submarine" orientation="vertical" status="sunk" />
+            </div>
+          </div>
+        </Section>
+
+        <Section title="FleetStatus">
+          <div className="flex flex-wrap items-start gap-(--space-4)">
+            <div className="w-[280px]">
+              <FleetStatus
+                fleet={[
+                  { type: "carrier" },
+                  { type: "battleship", hits: 2 },
+                  { type: "cruiser" },
+                  { type: "submarine", sunk: true },
+                  { type: "destroyer", hits: 1 },
+                ]}
+              />
+            </div>
+            <div className="w-[280px]">
+              <FleetPlacementDemo />
+            </div>
+          </div>
+        </Section>
+
+        <Section title="TurnIndicator">
+          <div className="grid w-[300px] gap-(--space-1)">
+            <TurnIndicator turn="you" turnNumber={7} />
+            <TurnIndicator turn="opponent" turnNumber={8} opponentName="Teddy" />
+            <TurnIndicator turn="ai" turnNumber={8} />
+          </div>
+        </Section>
+
+        <Section title="TurnTimer">
+          <p className="text-small text-ink-muted">The first one counts down from 15 and loops.</p>
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] items-start gap-(--space-4)">
+            <TurnTimerDemo />
+            <TurnTimer seconds={4} total={15} />
+            <TurnTimer seconds={21} total={30} paused />
+            <TurnTimer seconds={3} total={5} size="sm" />
+          </div>
+        </Section>
+
+        <Section title="AbilityCard">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(250px,1fr))] items-start gap-(--space-4)">
+            <AbilityCardDemo />
+            <AbilityCard ability="line-scan" state="armed" />
+            <AbilityCard ability="double-shot" state="unavailable" />
+            <AbilityCard ability={null} />
+          </div>
+        </Section>
+
+        <Section title="AbilityDraw">
+          <div className="grid max-w-[520px] gap-(--space-4)">
+            <AbilityDraw current="reroute" drawn="radar-sweep" />
+            <AbilityDrawDemo />
+          </div>
+        </Section>
+
+        <Section title="ShotLog">
+          <ShotLogDemo />
+        </Section>
+
+        <Section title="LobbyCode">
+          <LobbyCodeDemo />
+        </Section>
+
+        <Section title="PlayerChip">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-(--space-2)">
+            <PlayerChip name="Tim" you host ready />
+            <PlayerChip name="Teddy" ready={false} />
+            <PlayerChip name="Player417" presence="away" />
+            <PlayerChip name="Nathan" presence="offline" />
+            <PlayerChip name="AI · Normal" ai />
+          </div>
+        </Section>
+
+        <Section title="ResultSummary">
+          <div className="flex flex-wrap items-start gap-(--space-4)">
+            <div className="w-[380px] max-w-full">
+              <ResultSummary didWin reason="FLEET_DESTROYED" shotsFired={41} accuracy={0.41} shipsSunk={5} />
+            </div>
+            <div className="w-[380px] max-w-full">
+              <ResultSummary didWin={false} reason="OPPONENT_FORFEIT" shotsFired={23} accuracy={0.3} shipsSunk={2} />
+            </div>
+          </div>
+        </Section>
+
+        <Section title="RematchPanel">
+          <div className="grid max-w-[460px] gap-(--space-3)">
+            {REMATCH_STATES.map((status) => (
+              <div key={status} className="border-t border-line pt-(--space-3)">
+                <RematchPanel status={status} opponentName="Teddy" />
+              </div>
+            ))}
           </div>
         </Section>
       </main>
