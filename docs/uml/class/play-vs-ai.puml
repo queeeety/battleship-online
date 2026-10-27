@@ -46,7 +46,7 @@ class AIOpponent <<entity>> {
 
 class Board <<entity>> {
   + placeFleetRandomly() : void
-  + receiveShot(target : Coordinate) : Shot
+  + receiveShot(target : Coordinate, shooter : Player) : Shot
   + hasBeenTargeted(c : Coordinate) : boolean
 }
 
