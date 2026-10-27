@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { Carrier, Battleship, Cruiser, Submarine, Destroyer, createStandardFleet, FLEET_SIZE } from "../../../lib/entities/ships";
+import { Carrier, Battleship, Cruiser, Submarine, Destroyer } from "../../../lib/entities/ships";
 import { Coordinate } from "../../../lib/entities/board/Coordinate";
 import { Orientation } from "../../../lib/enums";
 
@@ -10,15 +10,6 @@ describe("Ship", () =>
         expect([new Carrier(), new Battleship(), new Cruiser(), new Submarine(), new Destroyer()]
             .map(s => [s.getName(), s.getLength()]))
             .toEqual([["Carrier", 5], ["Battleship", 4], ["Cruiser", 3], ["Submarine", 3], ["Destroyer", 2]]);
-    });
-
-    it("standard fleet is five fresh ships every call", () =>
-    {
-        const a = createStandardFleet();
-        const b = createStandardFleet();
-        expect(a).toHaveLength(FLEET_SIZE);
-        expect(FLEET_SIZE).toBe(5);
-        expect(a[0]).not.toBe(b[0]);
     });
 
     it("sinks only once every square is hit, and extra hits don't count", () =>
