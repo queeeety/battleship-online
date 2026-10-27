@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { Button } from "@/components/ui/Button";
 import { THEME_STORAGE_KEY, type Theme } from "./theme";
 
 function subscribe(onChange: () => void) {
@@ -35,12 +36,8 @@ export function ThemeToggle() {
   }
 
   return (
-    <button
-      type="button"
-      onClick={switchTheme}
-      className={`inline-flex h-(--control-sm) items-center rounded-md border border-line-control px-(--space-3) text-small font-medium text-ink transition-colors duration-(--mb-dur-1) ease-(--mb-ease) hover:bg-surface-200 ${theme === null ? "invisible" : ""}`}
-    >
+    <Button size="sm" onClick={switchTheme} className={theme === null ? "invisible" : undefined}>
       Switch to {next} theme
-    </button>
+    </Button>
   );
 }

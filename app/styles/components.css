@@ -1,0 +1,85 @@
+/* MyBattleship component styles.
+   In the components layer, so Tailwind utilities can still override them. */
+
+@layer components {
+  .mb-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .mb-label { font-family: var(--font-mono); font-size: 11px; line-height: 16px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-muted); }
+  .mb-row { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
+  .mb-row-end { justify-content: flex-end; }
+  .mb-icon { flex: none; display: block; }
+  .mb-icon .f { fill: currentColor; stroke: none; }
+
+  /* Logo */
+  .mb-logo { display: inline-flex; align-items: center; gap: calc(var(--mb-logo-size) * .32); color: var(--ink); }
+  .mb-logo-mark { color: var(--sonar); }
+  .mb-logo-mark .f { fill: currentColor; stroke: none; }
+  .mb-logo-word { font-weight: 600; font-size: calc(var(--mb-logo-size) * .68); letter-spacing: -.01em; line-height: 1; }
+
+  /* Button */
+  .mb-btn { font: inherit; font-weight: 500; display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); height: var(--control-md); padding: 0 var(--space-4); border-radius: var(--radius-md); border: 1px solid transparent; cursor: pointer; white-space: nowrap; transition: background-color var(--mb-dur-1) var(--mb-ease), border-color var(--mb-dur-1) var(--mb-ease), color var(--mb-dur-1) var(--mb-ease); }
+  .mb-btn-sm { height: var(--control-sm); padding: 0 var(--space-3); font-size: 13px; gap: var(--space-1); }
+  .mb-btn-block { display: flex; width: 100%; }
+  .mb-btn-icononly { width: var(--control-md); padding: 0; }
+  .mb-btn-sm.mb-btn-icononly { width: var(--control-sm); }
+  .mb-btn-primary { background: var(--sonar); color: var(--on-sonar); }
+  .mb-btn-primary:hover { background: var(--sonar-strong); }
+  .mb-btn-secondary { background: transparent; border-color: var(--line-control); color: var(--ink); }
+  .mb-btn-secondary:hover { background: var(--surface-200); }
+  .mb-btn-ghost { background: transparent; color: var(--ink-muted); }
+  .mb-btn-ghost:hover { color: var(--ink); background: var(--surface-200); }
+  .mb-btn-danger { background: transparent; border-color: var(--danger); color: var(--danger); }
+  .mb-btn-danger:hover { background: var(--danger-soft); }
+  .mb-btn:disabled { cursor: not-allowed; background: transparent; border-color: var(--line); color: var(--ink-faint); }
+
+  /* TextField */
+  .mb-field { display: grid; gap: var(--space-1); min-width: 0; align-content: start; }
+  .mb-field-label { font-family: var(--font-mono); font-size: 11px; line-height: 16px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-muted); padding: 0; }
+  .mb-input { font: inherit; height: var(--control-md); padding: 0 var(--space-3); border: 1px solid var(--line-control); border-radius: var(--radius-md); background: var(--surface-000); color: var(--ink); min-width: 0; }
+  .mb-input::placeholder { color: var(--ink-faint); }
+  .mb-field.is-code .mb-input { font-family: var(--font-mono); font-size: 20px; letter-spacing: .24em; text-transform: uppercase; }
+  .mb-field.is-invalid .mb-input { border-color: var(--danger); }
+  .mb-field-msg { margin: 0; display: flex; gap: var(--space-1); align-items: center; font-size: 13px; line-height: 18px; color: var(--ink-muted); }
+  .mb-field.is-invalid .mb-field-msg { color: var(--danger); }
+
+  /* SegmentedControl */
+  .mb-seg { border: 0; margin: 0; padding: 0; display: grid; gap: var(--space-1); min-width: 0; align-content: start; }
+  .mb-seg-track { display: flex; border: 1px solid var(--line-control); border-radius: var(--radius-md); padding: 2px; gap: 2px; }
+  .mb-seg-item { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: calc(var(--control-md) - 6px); padding: var(--space-1) var(--space-3); border-radius: var(--radius-sm); cursor: pointer; color: var(--ink-muted); }
+  .mb-seg-item input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+  .mb-seg-item:hover { color: var(--ink); background: var(--surface-200); }
+  .mb-seg-item.is-on { background: var(--sonar-soft); color: var(--ink); box-shadow: inset 0 0 0 1px var(--sonar); }
+  .mb-seg-item:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .mb-seg-label { font-weight: 500; font-size: 14px; line-height: 20px; }
+  .mb-seg-meta { font-family: var(--font-mono); font-size: 12px; line-height: 16px; color: var(--ink-muted); }
+
+  /* Banner */
+  .mb-banner { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--line-control); border-radius: var(--radius-md); background: var(--surface-100); color: var(--ink); }
+  .mb-banner > .mb-icon { color: var(--ink-muted); }
+  .mb-banner-body { flex: 1; min-width: 0; }
+  .mb-banner.is-warning { border-color: var(--hit); background: var(--hit-soft); }
+  .mb-banner.is-warning > .mb-icon { color: var(--hit); }
+  .mb-banner.is-danger { border-color: var(--danger); background: var(--danger-soft); }
+  .mb-banner.is-danger > .mb-icon { color: var(--danger); }
+
+  /* Toast */
+  .mb-toast { display: inline-flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-radius: var(--radius-lg); background: var(--surface-100); border: 1px solid var(--line-control); box-shadow: var(--shadow-overlay); font-size: 14px; line-height: 20px; max-width: 420px; }
+  .mb-toast.is-hit > .mb-icon { color: var(--hit); }
+  .mb-toast.is-sonar > .mb-icon { color: var(--sonar); }
+  .mb-toast-x { display: grid; place-items: center; width: 28px; height: 28px; margin: -4px -8px -4px 0; border: 0; border-radius: var(--radius-sm); background: none; color: var(--ink-muted); cursor: pointer; }
+  .mb-toast-x:hover { background: var(--surface-200); color: var(--ink); }
+
+  /* Dialog: a native modal <dialog>; .mb-scrim only wraps the inline docs version */
+  .mb-dialog { width: min(440px, 100%); margin: auto; padding: 0; color: var(--ink); background: var(--surface-100); border: 1px solid var(--line-control); border-radius: var(--radius-lg); box-shadow: var(--shadow-overlay); }
+  .mb-dialog::backdrop { background: var(--scrim); }
+  .mb-dialog:focus { outline: none; }
+  .mb-dialog-panel { padding: var(--space-5); display: grid; gap: var(--space-3); }
+  .mb-scrim { display: grid; place-items: center; padding: var(--space-4); background: var(--scrim); }
+  .mb-dialog-title { margin: 0; font-size: 24px; line-height: 30px; font-weight: 600; }
+  .mb-dialog-body { color: var(--ink-muted); }
+  .mb-dialog-body p { margin: 0; }
+  .mb-dialog .mb-row { margin-top: var(--space-2); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .mb-btn { transition: none; }
+  }
+}
