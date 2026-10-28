@@ -34,7 +34,8 @@ state "Player.heldAbility within Game::InProgress" as Lifecycle {
 
   Drawn --> Drawn : drawCompleted(a)\n[a is Reroute and Reroute.validPositions(b, s).isEmpty() for every undamaged Ship]\n/ draw again from the other three
   Drawn --> Held : receiveAbility(drawn)\n[heldAbility == null]
-  Drawn --> ChoicePending : receiveAbility(drawn)\n[heldAbility != null]
+  Drawn --> ChoicePending : receiveAbility(drawn)\n[heldAbility != null and holder is human]
+  Drawn --> Held : receiveAbility(drawn)\n[heldAbility != null and holder is AIOpponent]\n/ keep current, discard drawn
 
   ChoicePending --> Held : chooseAbility(keep)\n[not keep]\n/ discard current, hold drawn
   ChoicePending --> Held : chooseAbility(keep)\n[keep]\n/ discard drawn, keep current

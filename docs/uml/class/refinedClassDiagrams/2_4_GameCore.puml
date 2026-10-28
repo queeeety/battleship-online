@@ -53,6 +53,8 @@ class Game <<controller>> {
   + resultFor(p : Player) : GameResult
   + setDoubleShotActive(on : boolean) : void
   + opponentOf(p : Player) : Player
+  + toJSON() : GameSnapshot
+  + {static} fromJSON(s : GameSnapshot) : Game
 }
 abstract class Player <<entity>> {
   - id : string
@@ -69,6 +71,7 @@ abstract class Player <<entity>> {
   + consumeAbility() : void
   + clearAbilities() : void
   + recordShot(s : Shot) : void
+  + restoreState(id : string, isReady : boolean, held : Ability | null, offered : Ability | null) : void
   + hasLost() : boolean
   + requestRematch() : RematchRequest
 }
@@ -88,13 +91,16 @@ class AIOpponent <<entity>> {
   - targeted : Set<string>
   - activeHits : Coordinate[]
   + chooseTarget() : Coordinate
+  + takeTurn(g : Game) : Shot | null
   + recordShot(s : Shot) : void
+  + receiveAbility(drawn : Ability) : void
   + shouldUseAbility() : boolean
-  + chooseAbilityTarget() : Coordinate
+  + chooseAbilityTarget() : Coordinate | null
   + toJSON() : AIMemory
   + {static} fromJSON(m : AIMemory) : AIOpponent
   - hunt() : Coordinate
   - target() : Coordinate
+  - chooseReroute(r : Reroute) : Coordinate | null
 }
 class AIMemory <<value>> {
   + difficulty : Difficulty
@@ -117,6 +123,30 @@ class RematchRequest <<entity>> {
   + accept() : void
   + decline() : void
   + isMutual() : boolean
+}
+class GameSnapshot <<value>> {
+  + id : string
+  + state : GameState
+  + gameType : GameType
+  + players : PlayerSnapshot[]
+  + shots : {row, col, result, shooter, firedAt, sunkShipName}[]
+  + currentTurn : number | null
+  + winner : number | null
+  + turnStartedAt : string | null
+  + endReason : EndReason | null
+  + finishedAt : string | null
+  + doubleShotActive : boolean
+}
+class PlayerSnapshot <<value>> {
+  + kind : "human" | "ai"
+  + id : string
+  + name : string
+  + isReady : boolean
+  + board : BoardSnapshot
+  + heldAbility : string | null
+  + offeredAbility : string | null
+  + sessionId : string [0..1]
+  + ai : AIMemory [0..1]
 }
 class GameResult <<entity>> {
   - didWin : boolean
@@ -157,12 +187,27 @@ Player <|-- HumanPlayer
 Player <|-- AIOpponent
 AIOpponent ..> AIMemory : saved as >
 Game ..> Player : recordShot(shot) >
+Game ..> GameSnapshot : saved as >
+GameSnapshot "1" *-- "0..2" PlayerSnapshot : players >
+PlayerSnapshot ..> AIMemory : ai >
+AIOpponent ..> Game : takeTurn(game) >
 note bottom of AIOpponent
   Single-player only. Runs in the browser
   with the same Game / Board classes;
   Server and NetworkHandler are not used.
   Learns only from its own Shots through
   recordShot(), never from the opponent's ships.
+  Places and confirms its own fleet when created.
+  takeTurn() plays one action: a held ability when
+  shouldUseAbility() and canUse() allow, otherwise
+  (or if the target is rejected) a shot.
+  Keeps its held ability when offered another.
+end note
+note bottom of GameSnapshot
+  AI mode saves the whole Game to localStorage
+  after every action and restores it on reload.
+  Players are referred to by index.
+  The rematch request isn't saved.
 end note
 legend bottom right
   Grey dashed boxes are classes detailed in another figure.

@@ -100,7 +100,8 @@ group Use (on the holder's own turn, before firing)
 end
 
 opt holder is the AIOpponent
-  Game -> Game : AIOpponent.shouldUseAbility()
-  note right of Game : UC4 3a: the computer decides\nby the same rules
+  Player -> Player : takeTurn(game)\n[shouldUseAbility() and ability.canUse(game)]
+  Player -> Game : applyAbility(owner, chooseAbilityTarget())
+  note right of Game : UC4 3a: the computer decides\nby the same rules. With no target,\nor a rejected one, it fires instead
 end
 @enduml

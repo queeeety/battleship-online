@@ -1,12 +1,52 @@
 import { GameState, EndReason, ShotResult } from "../enums";
 import type { GameType } from "../enums";
-import type { Coordinate } from "../entities/board";
-import type { Player } from "../entities/players";
+import { Board, Coordinate } from "../entities/board";
+import type { BoardSnapshot } from "../entities/board";
+import { AIOpponent, HumanPlayer } from "../entities/players";
+import type { Player, AIMemory } from "../entities/players";
 import { GameResult } from "../entities/game/GameResult";
-import type { Shot, RematchRequest } from "../entities/game";
-import { drawRandomAbility } from "../abilities/registry";
+import { Shot } from "../entities/game/Shot";
+import type { RematchRequest } from "../entities/game";
+import type { Ability } from "../abilities";
+import { ABILITY_FACTORIES, drawRandomAbility } from "../abilities/registry";
 import { Reroute } from "../abilities/Reroute";
 import { MAX_PLAYERS, TURN_TIME_LIMIT_SECONDS } from "../config";
+
+/**
+ * One player as saved inside a GameSnapshot.
+ * Abilities are saved by name, a human keeps their session id and the AI keeps its memory.
+ */
+export interface PlayerSnapshot
+{
+    kind: "human" | "ai";
+    id: string;
+    name: string;
+    isReady: boolean;
+    board: BoardSnapshot;
+    heldAbility: string | null;
+    offeredAbility: string | null;
+    sessionId?: string;
+    ai?: AIMemory;
+}
+
+/**
+ * A whole game as plain JSON, for localStorage in AI mode.
+ * Players are referred to by their index in `players`. The rematch request isn't saved.
+ */
+export interface GameSnapshot
+{
+    id: string;
+    state: GameState;
+    gameType: GameType;
+    players: PlayerSnapshot[];
+    shots: { row: number; col: number; result: ShotResult; shooter: number; firedAt: string; sunkShipName: string | null }[];
+    currentTurn: number | null;
+    winner: number | null;
+    turnStartedAt: string | null;
+    endReason: EndReason | null;
+    finishedAt: string | null;
+    doubleShotActive: boolean;
+}
 
 /**
  * Runs one match from placement to game over.
@@ -213,4 +253,95 @@ export class Game
     public isDoubleShotActive(): boolean { return this.doubleShotActive; }
 
     public getRematchRequest(): RematchRequest | null { return this.rematchRequest; }
+
+    public toJSON(): GameSnapshot
+    {
+        const indexOf = (p: Player | null) => (p ? this.players.indexOf(p) : null);
+        const dateOf = (d: Date | null) => (d ? d.toISOString() : null);
+        return {
+            id: this.id,
+            state: this.state,
+            gameType: this.gameType,
+            players: this.players.map(p => Game.snapshotPlayer(p)),
+            shots: this.shots.map(s => ({
+                ...s.getCoordinate().toRowCol(),
+                result: s.getResult(),
+                shooter: this.players.indexOf(s.getShooter()),
+                firedAt: s.getFiredAt().toISOString(),
+                sunkShipName: s.getSunkShipName()
+            })),
+            currentTurn: indexOf(this.currentTurn),
+            winner: indexOf(this.winner),
+            turnStartedAt: dateOf(this.turnStartedAt),
+            endReason: this.endReason,
+            finishedAt: dateOf(this.finishedAt),
+            doubleShotActive: this.doubleShotActive
+        };
+    }
+
+    // rebuilds a saved game so play carries on exactly where it stopped
+    public static fromJSON(s: GameSnapshot): Game
+    {
+        const game = new Game(s.gameType);
+        game.id = s.id;
+        game.state = s.state;
+        game.players = s.players.map(p => Game.restorePlayer(p));
+        game.shots = s.shots.map(shot => new Shot(
+            Coordinate.fromRowCol(shot.row, shot.col),
+            shot.result,
+            game.players[shot.shooter],
+            shot.sunkShipName,
+            new Date(shot.firedAt)));
+        game.currentTurn = s.currentTurn === null ? null : game.players[s.currentTurn];
+        game.winner = s.winner === null ? null : game.players[s.winner];
+        game.turnStartedAt = s.turnStartedAt ? new Date(s.turnStartedAt) : null;
+        game.endReason = s.endReason;
+        game.finishedAt = s.finishedAt ? new Date(s.finishedAt) : null;
+        game.doubleShotActive = s.doubleShotActive;
+        return game;
+    }
+
+    private static snapshotPlayer(p: Player): PlayerSnapshot
+    {
+        const saved: PlayerSnapshot = {
+            kind: p instanceof AIOpponent ? "ai" : "human",
+            id: p.getId(),
+            name: p.getName(),
+            isReady: p.getIsReady(),
+            board: p.getBoard().toSnapshot(),
+            heldAbility: p.getHeldAbility()?.getName() ?? null,
+            offeredAbility: p.getOfferedAbility()?.getName() ?? null
+        };
+        if (p instanceof AIOpponent) saved.ai = p.toJSON();
+        if (p instanceof HumanPlayer) saved.sessionId = p.getSessionId();
+        return saved;
+    }
+
+    private static restorePlayer(s: PlayerSnapshot): Player
+    {
+        let p: Player;
+        if (s.kind === "ai")
+        {
+            if (!s.ai) throw new Error(`Saved AI player ${s.name} has no memory`);
+            p = AIOpponent.fromJSON(s.ai);
+        }
+        else
+        {
+            p = new HumanPlayer(s.name, s.sessionId ?? "");
+        }
+        p.placeFleet(Board.fromSnapshot(s.board));
+        p.restoreState(s.id, s.isReady, Game.abilityNamed(s.heldAbility), Game.abilityNamed(s.offeredAbility));
+        return p;
+    }
+
+    private static abilityNamed(name: string | null): Ability | null
+    {
+        if (name === null) return null;
+        for (const make of ABILITY_FACTORIES)
+        {
+            const ability = make();
+            if (ability.getName() === name) return ability;
+        }
+        throw new Error(`Unknown saved ability "${name}"`);
+    }
 }

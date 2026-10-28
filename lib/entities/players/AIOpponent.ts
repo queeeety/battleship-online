@@ -1,6 +1,8 @@
 import { Player } from "./Player";
 import { Coordinate } from "../board/Coordinate";
 import type { Shot } from "../game";
+import type { Ability } from "../../abilities";
+import type { Game } from "../../controllers";
 import { createStandardFleet } from "../ships";
 import { Difficulty, ShotResult } from "../../enums";
 import { BOARD_SIZE } from "../../config";
@@ -25,6 +27,7 @@ export interface AIMemory
  * Easy fires at random, Normal hunts on a checkerboard then
  * targets the squares next to a hit until the ship sinks.
  * It only learns from its own shots, it never looks at where the ships are.
+ * It places its own fleet as soon as it's created, so it's always ready.
  */
 export class AIOpponent extends Player
 {
@@ -42,6 +45,40 @@ export class AIOpponent extends Player
         this.huntQueue = [];
         this.targeted = new Set();
         this.activeHits = [];
+        this.board.placeFleetRandomly();
+        this.confirmPlacement();
+    }
+
+    // one AI action: a held ability if it should use one and the ability allows it, otherwise a shot.
+    // Returns the shot, or null when the ability used up the turn's shot.
+    // The caller keeps calling this while it's still the AI's turn.
+    public takeTurn(g: Game): Shot | null
+    {
+        const ability = this.getHeldAbility();
+        if (ability && this.shouldUseAbility() && ability.canUse(g))
+        {
+            const target = this.chooseAbilityTarget();
+            if (target)
+            {
+                try
+                {
+                    g.applyAbility(this, target);
+                    if (ability.getUsesTurnShot()) return null;
+                }
+                catch
+                {
+                    // a rejected target isn't fatal, the AI just fires instead
+                }
+            }
+        }
+        return g.fireShot(this, this.chooseTarget());
+    }
+
+    // the AI never leaves an offer waiting: it keeps the ability it already holds
+    public receiveAbility(drawn: Ability): void
+    {
+        super.receiveAbility(drawn);
+        this.resolveOffer(true);
     }
 
     public chooseTarget(): Coordinate
@@ -80,8 +117,9 @@ export class AIOpponent extends Player
         return ability instanceof Reroute;
     }
 
-    // where to aim the held ability: the area or row with the most squares still unknown
-    public chooseAbilityTarget(): Coordinate
+    // where to aim the held ability: the area or row with the most squares still unknown,
+    // or for Reroute a new spot for one of its own undamaged ships. Null when there's no usable target.
+    public chooseAbilityTarget(): Coordinate | null
     {
         const ability = this.getHeldAbility();
         if (ability instanceof RadarSweep) return this.bestRadarCorner();
@@ -90,8 +128,23 @@ export class AIOpponent extends Player
             ability.setDirection(true);
             return new Coordinate(0, this.bestRow());
         }
-        // Double Shot needs no target, Reroute picks its ship through selectShip / validPositions
-        return new Coordinate(0, 0);
+        if (ability instanceof Reroute) return this.chooseReroute(ability);
+        // Double Shot needs no target
+        return ability ? new Coordinate(0, 0) : null;
+    }
+
+    // picks the first undamaged ship that has somewhere to go, keeping its orientation
+    private chooseReroute(reroute: Reroute): Coordinate | null
+    {
+        for (const ship of this.board.getShips())
+        {
+            if (ship.isDamaged()) continue;
+            reroute.selectShip(ship);
+            reroute.setOrientation(ship.getOrientation());
+            const options = reroute.validPositions(this.board, ship);
+            if (options.length > 0) return this.randomFrom(options);
+        }
+        return null;
     }
 
     // checkerboard: every ship covers at least two squares, so it can't slip between them

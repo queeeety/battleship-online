@@ -4,7 +4,7 @@ import { Coordinate } from "../../../lib/entities/board/Coordinate";
 import { Carrier, Destroyer, Submarine } from "../../../lib/entities/ships";
 import { HumanPlayer } from "../../../lib/entities/players";
 import { CellState, Orientation, ShotResult } from "../../../lib/enums";
-import { placeKnownFleet, knownFleetSquares, OPEN_WATER } from "../../fixtures";
+import { placeKnownFleet, knownFleetSquares, OPEN_WATER } from "../../helpers";
 
 const shooter = new HumanPlayer("Cian", "s1");
 
