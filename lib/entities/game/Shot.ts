@@ -14,12 +14,13 @@ export class Shot
     private firedAt: Date;
     private sunkShipName: string | null;
 
-    constructor(coordinate: Coordinate, result: ShotResult, shooter: Player, sunkShipName: string | null = null)
+    // firedAt is only passed when a saved game is loaded
+    constructor(coordinate: Coordinate, result: ShotResult, shooter: Player, sunkShipName: string | null = null, firedAt: Date = new Date())
     {
         this.coordinate = coordinate;
         this.result = result;
         this.shooter = shooter;
-        this.firedAt = new Date();
+        this.firedAt = firedAt;
         this.sunkShipName = sunkShipName;
     }
 

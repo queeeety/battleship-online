@@ -5,7 +5,7 @@ import { Carrier } from "../../../lib/entities/ships";
 import { RematchRequest } from "../../../lib/entities/game";
 import { DoubleShot, LineScan, RadarSweep } from "../../../lib/abilities";
 import { Orientation, RematchStatus } from "../../../lib/enums";
-import { placeKnownFleet, knownFleetSquares } from "../../fixtures";
+import { placeKnownFleet, knownFleetSquares } from "../../helpers";
 
 // Player is abstract, so the base class is tested through the smallest possible subclass
 class TestPlayer extends Player
@@ -158,6 +158,18 @@ describe("Player", () =>
         expect(request).toBeInstanceOf(RematchRequest);
         expect(request.getRequestedBy()).toBe(p);
         expect(request.getStatus()).toBe(RematchStatus.REQUESTED);
+    });
+
+    it("restoreState brings back a saved id, ready flag and abilities", () =>
+    {
+        const p = new TestPlayer("Aoife");
+        const radar = new RadarSweep();
+        const double = new DoubleShot();
+        p.restoreState("saved-id", true, radar, double);
+        expect(p.getId()).toBe("saved-id");
+        expect(p.getIsReady()).toBe(true);
+        expect(p.getHeldAbility()).toBe(radar);
+        expect(p.getOfferedAbility()).toBe(double);
     });
 
     it("recordShot does nothing by default", () =>

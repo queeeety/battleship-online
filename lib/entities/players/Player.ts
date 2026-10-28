@@ -67,6 +67,15 @@ export abstract class Player
         this.offeredAbility = null;
     }
 
+    // only for loading a saved game, everything else changes state through the methods above
+    public restoreState(id: string, isReady: boolean, held: Ability | null, offered: Ability | null): void
+    {
+        this.id = id;
+        this.isReady = isReady;
+        this.heldAbility = held;
+        this.offeredAbility = offered;
+    }
+
     public hasLost(): boolean { return this.board.allShipsSunk(); }
 
     public requestRematch(): RematchRequest { return new RematchRequest(this); }

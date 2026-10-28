@@ -2,12 +2,15 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { AIOpponent } from "../../../lib/entities/players/AIOpponent";
 import { Board, Coordinate } from "../../../lib/entities/board";
 import { Game } from "../../../lib/controllers/Game";
-import { DoubleShot, LineScan, RadarSweep, Reroute } from "../../../lib/abilities";
+import { Ability, DoubleShot, LineScan, RadarSweep, Reroute } from "../../../lib/abilities";
 import { Difficulty, GameState, GameType, Orientation } from "../../../lib/enums";
-import { placeKnownFleet } from "../../fixtures";
+import { placeKnownFleet, gameWithAiToMove, allowAbility } from "../../helpers";
 
 // Teddy's registry isn't filled in yet, so sinks draw a fixed ability
-vi.mock("../../../lib/abilities/registry", () => ({ drawRandomAbility: vi.fn(() => new RadarSweep()) }));
+vi.mock("../../../lib/abilities/registry", async importOriginal => ({
+    ...await importOriginal<typeof import("../../../lib/abilities/registry")>(),
+    drawRandomAbility: vi.fn(() => new RadarSweep())
+}));
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -162,7 +165,7 @@ describe("AIOpponent", () =>
         const board = new Board();
         for (let y = 0; y < 3; y++) for (let x = 0; x < 10; x++) ai.recordShot(board.receiveShot(new Coordinate(x, y), ai));
         ai.receiveAbility(new RadarSweep());
-        const corner = ai.chooseAbilityTarget();
+        const corner = ai.chooseAbilityTarget()!;
         expect(corner.getY()).toBeGreaterThanOrEqual(3);
         expect(corner.isWithinBounds(8, 8)).toBe(true);
     });
@@ -173,7 +176,7 @@ describe("AIOpponent", () =>
         const board = new Board();
         for (let y = 0; y < 10; y++) if (y !== 6) ai.recordShot(board.receiveShot(new Coordinate(0, y), ai));
         ai.receiveAbility(new LineScan());
-        expect(ai.chooseAbilityTarget().getY()).toBe(6);
+        expect(ai.chooseAbilityTarget()!.getY()).toBe(6);
     });
 
     it("memory survives a round trip through JSON", () =>
@@ -214,5 +217,129 @@ describe("AIOpponent", () =>
         expect(game.resultFor(winner).getShipsSunk()).toBe(5);
         expect(game.resultFor(a).getShotsFired()).toBeLessThanOrEqual(100);
         expect(game.resultFor(b).getShotsFired()).toBeLessThanOrEqual(100);
+    });
+});
+
+describe("AIOpponent setup and turns", () =>
+{
+    it("places a complete fleet of its own as soon as it is created", () =>
+    {
+        const ai = new AIOpponent(Difficulty.EASY);
+        expect(ai.getBoard().isFleetComplete()).toBe(true);
+        expect(ai.getIsReady()).toBe(true);
+    });
+
+    it("can start a game against a human with no setup beyond adding it", () =>
+    {
+        const { game, ai } = gameWithAiToMove();
+        expect(game.getState()).toBe(GameState.IN_PROGRESS);
+        expect(game.getCurrentTurn()).toBe(ai);
+    });
+
+    it("takeTurn fires a shot when it holds no ability", () =>
+    {
+        const { game, ai } = gameWithAiToMove();
+        const shot = ai.takeTurn(game);
+        expect(shot).not.toBeNull();
+        expect(game.getShots()).toEqual([shot]);
+    });
+
+    it("takeTurn uses a scan it should use, which ends its turn without firing", () =>
+    {
+        const { game, ai, human } = gameWithAiToMove();
+        ai.receiveAbility(new RadarSweep());
+        const apply = allowAbility(RadarSweep).mockImplementation(() => {});
+
+        expect(ai.takeTurn(game)).toBeNull();
+        expect(apply).toHaveBeenCalledWith(game, human.getBoard(), expect.any(Coordinate));
+        expect(ai.getHeldAbility()).toBeNull();
+        expect(game.getShots()).toHaveLength(0);
+        expect(game.getCurrentTurn()).toBe(human);
+    });
+
+    it("takeTurn still fires after Double Shot, which doesn't use the turn's shot", () =>
+    {
+        const { game, ai, human } = gameWithAiToMove();
+        ai.recordShot(human.getBoard().receiveShot(new Coordinate(0, 0), ai));   // chasing a ship
+        ai.receiveAbility(new DoubleShot());
+        allowAbility(DoubleShot).mockImplementation((g: Game) => g.setDoubleShotActive(true));
+
+        expect(ai.takeTurn(game)).not.toBeNull();
+        expect(ai.getHeldAbility()).toBeNull();
+    });
+
+    it("takeTurn fires instead when the ability can't be used yet", () =>
+    {
+        const { game, ai } = gameWithAiToMove();
+        const radar = new RadarSweep();
+        ai.receiveAbility(radar);
+        vi.spyOn(Ability.prototype, "canUse").mockReturnValue(false);
+
+        expect(ai.takeTurn(game)).not.toBeNull();
+        expect(ai.getHeldAbility()).toBe(radar);
+    });
+
+    it("takeTurn fires instead when the ability rejects its target, and keeps the ability", () =>
+    {
+        const { game, ai } = gameWithAiToMove();
+        const radar = new RadarSweep();
+        ai.receiveAbility(radar);
+        vi.spyOn(Ability.prototype, "canUse").mockReturnValue(true);
+        vi.spyOn(RadarSweep.prototype, "isValidTarget").mockReturnValue(false);
+
+        expect(ai.takeTurn(game)).not.toBeNull();
+        expect(ai.getHeldAbility()).toBe(radar);
+    });
+
+    it("keeps the ability it holds when offered another, so no offer is left waiting", () =>
+    {
+        const ai = new AIOpponent(Difficulty.NORMAL);
+        const radar = new RadarSweep();
+        ai.receiveAbility(radar);
+        ai.receiveAbility(new DoubleShot());
+        expect(ai.getHeldAbility()).toBe(radar);
+        expect(ai.getOfferedAbility()).toBeNull();
+    });
+
+    it("aims Reroute at a valid spot for one of its own undamaged ships", () =>
+    {
+        const ai = new AIOpponent(Difficulty.NORMAL);
+        const reroute = new Reroute();
+        ai.receiveAbility(reroute);
+        const select = vi.spyOn(reroute, "selectShip");
+        vi.spyOn(Reroute.prototype, "validPositions").mockReturnValue([new Coordinate(9, 0)]);
+
+        expect(ai.chooseAbilityTarget()!.key()).toBe("9,0");
+        const ship = select.mock.calls[0][0];
+        expect(ai.getBoard().getShips()).toContain(ship);
+        expect(ship.isDamaged()).toBe(false);
+    });
+
+    it("has no Reroute target when none of its ships can move, and fires instead", () =>
+    {
+        const { game, ai } = gameWithAiToMove();
+        ai.receiveAbility(new Reroute());
+        vi.spyOn(Ability.prototype, "canUse").mockReturnValue(true);
+        vi.spyOn(Reroute.prototype, "validPositions").mockReturnValue([]);
+
+        expect(ai.chooseAbilityTarget()).toBeNull();
+        expect(ai.takeTurn(game)).not.toBeNull();
+    });
+
+    it("has no ability target when it holds no ability", () =>
+    {
+        expect(new AIOpponent(Difficulty.NORMAL).chooseAbilityTarget()).toBeNull();
+    });
+
+    it("plays a whole game against a human through takeTurn", () =>
+    {
+        const { game, ai, human } = gameWithAiToMove();
+        let guard = 0;
+        while (game.getState() === GameState.IN_PROGRESS && guard++ < 300)
+        {
+            if (game.getCurrentTurn() === ai) ai.takeTurn(game);
+            else game.fireRandomShot(human);
+        }
+        expect(game.getState()).toBe(GameState.FINISHED);
     });
 });

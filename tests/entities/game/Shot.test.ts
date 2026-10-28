@@ -35,6 +35,12 @@ describe("Shot", () =>
         expect(shot.getFiredAt().toISOString()).toBe("2026-01-01T12:00:00.000Z");
     });
 
+    it("keeps a fire time passed in when a saved game is loaded", () =>
+    {
+        const firedAt = new Date("2026-01-01T09:30:00Z");
+        expect(new Shot(new Coordinate(0, 0), ShotResult.MISS, shooter, null, firedAt).getFiredAt()).toBe(firedAt);
+    });
+
     it("only names a ship when one was sunk", () =>
     {
         expect(new Shot(new Coordinate(0, 0), ShotResult.SUNK, shooter, "Carrier").getSunkShipName()).toBe("Carrier");
