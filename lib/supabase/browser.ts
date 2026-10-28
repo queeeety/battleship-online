@@ -1,5 +1,4 @@
 import { createBrowserClient } from "@supabase/ssr";
-// Brings in Supabase's helper for making a client that runs in the browser.
 
 export function createBrowserSupabase() {
   return createBrowserClient(
