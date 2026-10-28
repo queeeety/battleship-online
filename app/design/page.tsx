@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import {
@@ -68,10 +68,8 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-// dev-only reference page for the ported components
+// reference page for the ported components
 export default function DesignPage() {
-  if (process.env.NODE_ENV === "production") notFound();
-
   return (
     <div className="flex flex-1 flex-col">
       <header className="flex items-center gap-(--space-4) border-b border-line px-(--space-6) py-(--space-3)">
@@ -82,10 +80,19 @@ export default function DesignPage() {
 
       <main className="mx-auto grid w-full max-w-5xl gap-(--space-5) px-(--space-6) py-(--space-7)">
         <h1 className="text-title">Basic UI</h1>
-        <nav className="mb-row text-small" aria-label="Sections">
+        <nav className="mb-row gap-(--space-4) text-small" aria-label="Sections">
           <a className="text-sonar underline" href="#game">
-            Jump to game components
+            Game components
           </a>
+          <Link className="text-sonar underline" href="/design/home">
+            Home screen
+          </Link>
+          <Link className="text-sonar underline" href="/design/placement">
+            Placement screen
+          </Link>
+          <Link className="text-sonar underline" href="/design/battle">
+            Battle screen
+          </Link>
         </nav>
 
         <Section title="Logo">
