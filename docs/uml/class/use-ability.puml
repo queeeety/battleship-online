@@ -42,7 +42,10 @@ abstract class Player <<entity>> {
 class HumanPlayer <<entity>>
 
 class AIOpponent <<entity>> {
+  + takeTurn(g : Game) : Shot | null
+  + receiveAbility(drawn : Ability) : void
   + shouldUseAbility() : boolean
+  + chooseAbilityTarget() : Coordinate | null
 }
 
 abstract class Ability <<entity>> {
