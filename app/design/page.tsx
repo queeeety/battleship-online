@@ -87,11 +87,17 @@ export default function DesignPage() {
           <Link className="text-sonar underline" href="/design/home">
             Home screen
           </Link>
+          <Link className="text-sonar underline" href="/design/lobby">
+            Lobby screen
+          </Link>
           <Link className="text-sonar underline" href="/design/placement">
             Placement screen
           </Link>
           <Link className="text-sonar underline" href="/design/battle">
             Battle screen
+          </Link>
+          <Link className="text-sonar underline" href="/design/result">
+            Result screen
           </Link>
         </nav>
 

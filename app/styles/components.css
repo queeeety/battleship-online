@@ -83,8 +83,11 @@
   .mb-board { --mb-cell: var(--cell-md); display: inline-grid; gap: var(--space-2); }
   .mb-board.is-cell-sm { --mb-cell: var(--cell-sm); }
   .mb-board.is-cell-lg { --mb-cell: var(--cell-lg); }
-  /* phones: every board drops to cell-sm, whatever cellSize asks for */
-  @media (max-width: 480px) { .mb-board.mb-board { --mb-cell: var(--cell-sm); } }
+  /* phones: boards drop to cell-sm; the board a screen leads with (cellSize lg) fills the width instead, up to cell-md */
+  @media (max-width: 480px) {
+    .mb-board.mb-board { --mb-cell: var(--cell-sm); }
+    .mb-board.mb-board.is-cell-lg { --mb-cell: clamp(var(--cell-sm), calc((100vw - 2 * var(--space-4)) / 10.7), var(--cell-md)); }
+  }
   .mb-board-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3); padding-left: calc(var(--mb-cell) * .7); }
   .mb-board-title { margin: 0; font-size: 17px; line-height: 24px; font-weight: 600; }
   .mb-board-meta { font-family: var(--font-mono); font-size: 11px; line-height: 16px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-muted); }
@@ -102,7 +105,7 @@
 
   /* Cell (inside Board and Legend) */
   .mb-cell { position: relative; display: grid; place-items: center; width: var(--mb-cell, var(--cell-md)); height: var(--mb-cell, var(--cell-md)); padding: 0; border: 0; background: transparent; color: inherit; font: inherit; }
-  .mb-board.is-active .mb-cell { cursor: crosshair; }
+  .mb-board.is-active .mb-cell { cursor: crosshair; touch-action: manipulation; }
   .mb-board.is-active .mb-cell[aria-disabled="true"] { cursor: not-allowed; }
   /* targeting reticle: on hover, and on the keyboard cursor while the board has focus */
   .mb-board.is-active .mb-cell:not([aria-disabled="true"]):hover::before,
@@ -174,6 +177,18 @@
   .mb-fleet-row.is-sunk .mb-fleet-state { color: var(--sunk); }
   .mb-fleet.is-placement .mb-fleet-state .mb-icon { color: var(--sonar); }
 
+  /* below 900px the placement list becomes a tray of ship chips above the board: name, a check once placed, pips */
+  @media (max-width: 899px) {
+    .mb-fleet.is-placement { background: none; border: 0; padding: 0; }
+    .mb-fleet.is-placement ul { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+    .mb-fleet.is-placement .mb-fleet-row { display: grid; grid-template-columns: auto auto; grid-template-areas: "name state" "pips pips"; justify-content: start; align-items: center; gap: var(--space-1); width: auto; margin: 0; padding: 6px var(--space-3); box-sizing: border-box; border: 1px solid var(--line-control); border-radius: var(--radius-sm); }
+    .mb-fleet.is-placement .mb-fleet-row.is-selected { border-color: var(--sonar); }
+    .mb-fleet.is-placement .mb-fleet-name { grid-area: name; }
+    .mb-fleet.is-placement .mb-fleet-state { grid-area: state; }
+    .mb-fleet.is-placement .mb-fleet-row:not(.is-placed) .mb-fleet-state { display: none; }
+    .mb-fleet.is-placement .mb-pips { grid-area: pips; }
+  }
+
   /* TurnIndicator */
   .mb-turn { display: flex; align-items: center; gap: var(--space-2); min-height: var(--control-md); }
   .mb-turn-dot { width: 10px; height: 10px; border-radius: var(--radius-full); background: var(--ink-faint); }
@@ -208,6 +223,8 @@
   .mb-ability.is-unavailable .mb-ability-icon { background: var(--surface-200); color: var(--ink-faint); }
   .mb-ability.is-empty { border-style: dashed; border-color: var(--line-control); }
   .mb-ability.is-compact { padding: var(--space-3); }
+  .mb-ability-head > div { min-width: 0; }
+  .mb-ability-inline { margin-left: auto; }
 
   /* AbilityDraw */
   .mb-draw { display: grid; gap: var(--space-4); }
@@ -264,6 +281,26 @@
   .mb-rematch-msg { margin: 0; display: flex; gap: var(--space-2); align-items: center; color: var(--ink-muted); }
   .mb-rematch.is-requested-by-opponent .mb-rematch-msg { color: var(--ink); font-weight: 500; }
   .mb-rematch.is-accepted .mb-rematch-msg { color: var(--sonar); }
+
+  /* HUD strip: the battle HUD on phones, one panel under the target board. The pieces inside lose their own panel skin. */
+  .mb-strip { display: grid; gap: var(--space-2); background: var(--surface-100); border: 1px solid var(--line); border-radius: var(--radius-md); padding: var(--space-3); }
+  .mb-strip .mb-turn { min-height: 0; }
+  .mb-strip .mb-timer, .mb-strip .mb-log, .mb-strip .mb-ability { background: none; border: 0; border-radius: 0; padding: 0; box-shadow: none; }
+  .mb-strip .mb-ability.is-armed { background: var(--sonar-soft); box-shadow: inset 0 0 0 1px var(--sonar); border-radius: var(--radius-sm); padding: var(--space-2); }
+  .mb-strip .mb-timer.is-sm .mb-timer-top { justify-content: flex-end; }
+  .mb-strip .mb-timer:not(.is-low, .is-paused) .mb-label, .mb-strip .mb-log > .mb-label { display: none; }
+  .mb-strip .mb-log ol { margin: 0; }
+  .mb-strip > :not(:first-child) { border-top: 1px solid var(--line); padding-top: var(--space-2); }
+
+  /* phones */
+  @media (max-width: 480px) {
+    .mb-stats { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+    .mb-stats > div { padding: var(--space-2); }
+    .mb-rematch .mb-row-end > .mb-btn-primary { flex: 1; }
+    .mb-lobbycode { justify-items: stretch; }
+    .mb-lobbycode .mb-btn-primary { flex: 1; }
+    .mb-lobbycode-link { display: none; }
+  }
 
   @media (prefers-reduced-motion: reduce) {
     .mb-sweep { display: none; }

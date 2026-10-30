@@ -22,7 +22,8 @@ function getServerTheme(): Theme | null {
   return null;
 }
 
-export function ThemeToggle() {
+/** compact: a quiet button that just says "Light" or "Dark", for tight bars. */
+export function ThemeToggle({ compact }: { compact?: boolean }) {
   const theme = useSyncExternalStore<Theme | null>(subscribe, getTheme, getServerTheme);
   const next: Theme = theme === "light" ? "dark" : "light";
 
@@ -36,8 +37,14 @@ export function ThemeToggle() {
   }
 
   return (
-    <Button size="sm" onClick={switchTheme} className={theme === null ? "invisible" : undefined}>
-      Switch to {next} theme
+    <Button
+      size="sm"
+      variant={compact ? "ghost" : "secondary"}
+      onClick={switchTheme}
+      aria-label={compact ? `Switch to ${next} theme` : undefined}
+      className={theme === null ? "invisible" : undefined}
+    >
+      {compact ? (next === "light" ? "Light" : "Dark") : `Switch to ${next} theme`}
     </Button>
   );
 }

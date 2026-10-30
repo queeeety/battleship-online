@@ -13,6 +13,7 @@ export interface AbilityCardProps {
   state?: "ready" | "armed" | "unavailable" | "new";
   onUse?: () => void;
   onCancel?: () => void;
+  /** No description. The Use/Cancel button moves into the head row, and only shows when onUse or onCancel is given. */
   compact?: boolean;
 }
 
@@ -27,6 +28,16 @@ export function AbilityCard({ ability, state = "ready", onUse, onCancel, compact
   }
 
   const { name, description, usesTurnShot } = ABILITIES[ability];
+  const action =
+    state === "armed" ? (
+      <Button size="sm" variant="ghost" icon="close" onClick={onCancel}>
+        Cancel
+      </Button>
+    ) : (
+      <Button size="sm" disabled={state === "unavailable"} onClick={onUse}>
+        Use {name}
+      </Button>
+    );
 
   return (
     <div className={cx("mb-ability", `is-${state}`, compact && "is-compact")}>
@@ -40,21 +51,10 @@ export function AbilityCard({ ability, state = "ready", onUse, onCancel, compact
           </span>
           <h4 className="mb-ability-name">{name}</h4>
         </div>
+        {compact && (onUse || onCancel) && <div className="mb-ability-inline">{action}</div>}
       </div>
       {!compact && <p className="mb-ability-desc">{description}</p>}
-      {!compact && (
-        <div className="mb-ability-actions">
-          {state === "armed" ? (
-            <Button size="sm" variant="ghost" icon="close" onClick={onCancel}>
-              Cancel
-            </Button>
-          ) : (
-            <Button size="sm" disabled={state === "unavailable"} onClick={onUse}>
-              Use {name}
-            </Button>
-          )}
-        </div>
-      )}
+      {!compact && <div className="mb-ability-actions">{action}</div>}
     </div>
   );
 }

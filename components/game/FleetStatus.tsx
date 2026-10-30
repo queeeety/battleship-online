@@ -64,7 +64,12 @@ export function FleetStatus({ mode = "battle", title, fleet, selected, onSelect 
               </span>
             </>
           );
-          const className = cx("mb-fleet-row", f.sunk && "is-sunk", selected === f.type && "is-selected");
+          const className = cx(
+            "mb-fleet-row",
+            f.sunk && "is-sunk",
+            f.placed && "is-placed",
+            selected === f.type && "is-selected",
+          );
 
           return (
             <li key={f.type}>

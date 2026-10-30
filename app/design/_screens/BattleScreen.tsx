@@ -75,9 +75,9 @@ export function BattleScreen() {
         </Button>
       </ScreenBar>
 
-      {/* below 1200px: target board, then the HUD as a strip, then your own board */}
-      <main className="flex flex-col gap-(--space-6) px-(--space-4) pt-(--space-5) pb-(--space-6) min-[1200px]:grid min-[1200px]:grid-cols-[auto_auto_var(--hud-width)] min-[1200px]:items-start min-[1200px]:px-(--space-6)">
-        <div className="order-1 min-[1200px]:order-none">
+      {/* below 1200px: target board, then the HUD, then your own board; below 900px the HUD is one strip */}
+      <main className="flex flex-col gap-(--space-5) px-(--space-4) pt-(--space-4) pb-(--space-6) min-[900px]:gap-(--space-6) min-[900px]:pt-(--space-5) min-[1200px]:grid min-[1200px]:grid-cols-[auto_auto_var(--hud-width)] min-[1200px]:items-start min-[1200px]:px-(--space-6)">
+        <div className="order-1 max-[480px]:self-center min-[1200px]:order-none">
           <Board
             variant="target"
             title="Enemy waters"
@@ -91,11 +91,33 @@ export function BattleScreen() {
             onCellClick={(cell) => fire(cell.key)}
           />
         </div>
-        <div className="order-3 grid content-start gap-(--space-3) min-[1200px]:order-none">
+        <div className="order-3 grid content-start gap-(--space-3) max-[480px]:justify-items-center min-[1200px]:order-none">
           <Board variant="own" title="Your waters" meta="4 of 5 afloat" marks={OWN_MARKS} ships={OWN_SHIPS} cellSize="sm" />
-          <Legend />
+          <div className="max-[899px]:hidden">
+            <Legend />
+          </div>
         </div>
-        <div className="order-2 grid content-start gap-(--space-3) min-[600px]:max-[1199px]:grid-cols-2 min-[1200px]:order-none">
+
+        {/* phones: everything needed on your turn in one strip, right under the board you fire at */}
+        <section className="mb-strip order-2 min-[900px]:hidden" aria-label="Your turn">
+          <div className="flex items-center gap-(--space-3)">
+            <TurnIndicator turn="you" />
+            <div className="min-w-0 flex-1">
+              <TurnTimer seconds={seconds} total={TURN_SECONDS} size="sm" />
+            </div>
+          </div>
+          <AbilityCard
+            ability="line-scan"
+            state={armed ? "armed" : "ready"}
+            onUse={() => setArmed(true)}
+            onCancel={() => setArmed(false)}
+            compact
+          />
+          <ShotLog opponentLabel="Teddy" entries={log.slice(-1)} />
+        </section>
+
+        {/* tablets and desktop: the full HUD column */}
+        <div className="order-2 grid content-start gap-(--space-3) max-[899px]:hidden min-[900px]:max-[1199px]:grid-cols-2 min-[1200px]:order-none">
           <TurnIndicator turn="you" turnNumber={turn} />
           <TurnTimer seconds={seconds} total={TURN_SECONDS} />
           <AbilityCard
@@ -106,6 +128,15 @@ export function BattleScreen() {
           />
           <ShotLog opponentLabel="Teddy" maxHeight={120} entries={log} />
         </div>
+
+        {/* phones: the full log and the key to the marks, folded away under your board */}
+        <details className="order-4 min-[900px]:hidden">
+          <summary className="mb-label cursor-pointer py-(--space-2)">Shot log and key</summary>
+          <div className="grid gap-(--space-3) pt-(--space-2)">
+            <ShotLog opponentLabel="Teddy" maxHeight={160} entries={log} />
+            <Legend />
+          </div>
+        </details>
       </main>
 
       <Dialog
