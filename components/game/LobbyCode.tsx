@@ -29,13 +29,20 @@ export function LobbyCode({ code, link, waiting = true, onCopyCode, onCopyLink }
           <span>{link}</span>
         </div>
       )}
+      {/* sending the link is the one main action; the code is the fallback for reading out */}
       <div className="mb-row">
-        <Button size="sm" icon="copy" onClick={onCopyCode}>
-          Copy code
-        </Button>
-        {link && (
-          <Button size="sm" variant="ghost" icon="link" onClick={onCopyLink}>
-            Copy link
+        {link ? (
+          <>
+            <Button variant="primary" icon="link" onClick={onCopyLink}>
+              Copy link
+            </Button>
+            <Button size="sm" variant="ghost" icon="copy" onClick={onCopyCode}>
+              Copy code
+            </Button>
+          </>
+        ) : (
+          <Button variant="primary" icon="copy" onClick={onCopyCode}>
+            Copy code
           </Button>
         )}
       </div>
