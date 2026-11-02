@@ -23,7 +23,8 @@ state "Game :: InProgress" as InProgress {
 
   state AwaitingAction : entry / start turn timer (30/15/5 s)
 
-  state ResolvingShot : do / Board.receiveShot()
+  state ResolvingShot : do / Board.receiveShot(target, shooter)
+  state ResolvingShot : exit / turnStartedAt = now
   state ApplyingAbility : do / Ability.apply()
   state GrantingAbility : do / Game.grantAbility(owner)
   state SwitchingTurn : do / switchTurn()
@@ -60,5 +61,7 @@ legend bottom
   Guards trace to UC3 (a hit fires again, a miss passes the turn, already-targeted
   squares rejected, timer auto-fire, 60 s disconnect) and UC4 (abilities are used
   before firing; DoubleShot does not consume the turn's shot).
+  The turn clock restarts after every resolved shot, so a fire-again shot after a hit
+  gets the full 30/15/5 s.
 endlegend
 @enduml

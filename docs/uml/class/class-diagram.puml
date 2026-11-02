@@ -79,7 +79,7 @@ package "Controllers" {
     + beginBattle() : void
     + fireShot(shooter : Player, target : Coordinate) : Shot
     + fireRandomShot(p : Player) : Shot
-    + isTurnExpired() : boolean
+    + isTurnExpired(now : DateTime = now) : boolean
     + switchTurn() : void
     + grantAbility(p : Player) : void
     + applyAbility(p : Player, target : Coordinate) : void
@@ -135,7 +135,7 @@ package "Entities" {
     + removeShip(s : Ship) : void
     + placeFleetRandomly() : void
     + isFleetComplete() : boolean
-    + receiveShot(target : Coordinate) : Shot
+    + receiveShot(target : Coordinate, shooter : Player) : Shot
     + hasBeenTargeted(c : Coordinate) : boolean
     + allShipsSunk() : boolean
     + scanArea(topLeft : Coordinate, size : int) : List<Coordinate>

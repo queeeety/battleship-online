@@ -15,11 +15,13 @@ class Lobby <<controller>> {
   - status : LobbyStatus
   - gameType : GameType
   - createdAt : Date
-  - players : Player[]
+  - players : HumanPlayer[]
   - game : Game
   + {static} generateCode() : string
   + {static} findByCode(code : string) : Lobby | null
-  + join(name : string) : Player
+  + {static} restore(code : string, gameType : GameType, status : LobbyStatus, createdAt : Date, players : HumanPlayer[]) : Lobby
+  + join(name : string, sessionId : string) : HumanPlayer
+  + seatOf(sessionId : string) : 1 | 2 | null
   + isFull() : boolean
   + isJoinable() : boolean
   + shareLink() : string
@@ -43,7 +45,7 @@ class Game <<controller>> {
   + beginBattle() : void
   + fireShot(shooter : Player, target : Coordinate) : Shot
   + fireRandomShot(p : Player) : Shot
-  + isTurnExpired() : boolean
+  + isTurnExpired(now : Date = new Date()) : boolean
   + switchTurn() : void
   + grantAbility(p : Player) : void
   + applyAbility(p : Player, target : Coordinate) : void
@@ -52,6 +54,9 @@ class Game <<controller>> {
   + forfeit(p : Player) : void
   + resultFor(p : Player) : GameResult
   + setDoubleShotActive(on : boolean) : void
+  + opponentOf(p : Player) : Player
+  + toJSON() : GameSnapshot
+  + {static} fromJSON(s : GameSnapshot) : Game
 }
 abstract class Player <<entity>> {
   - id : string
@@ -65,6 +70,10 @@ abstract class Player <<entity>> {
   + {abstract} chooseTarget() : Coordinate
   + receiveAbility(drawn : Ability) : void
   + resolveOffer(keep : boolean) : void
+  + consumeAbility() : void
+  + clearAbilities() : void
+  + recordShot(s : Shot) : void
+  + restoreState(id : string, isReady : boolean, held : Ability | null, offered : Ability | null) : void
   + hasLost() : boolean
   + requestRematch() : RematchRequest
 }
@@ -74,17 +83,32 @@ class HumanPlayer <<entity>> {
   - connected : boolean
   - disconnectedAt : Date | null
   + chooseTarget() : Coordinate
-  + disconnect() : void
+  + disconnect(at : Date = now) : void
   + reconnect() : void
-  + hasExceededGracePeriod() : boolean
+  + hasExceededGracePeriod(now : Date = now) : boolean
 }
 class AIOpponent <<entity>> {
   - difficulty : Difficulty
   - huntQueue : Coordinate[]
+  - targeted : Set<string>
+  - activeHits : Coordinate[]
   + chooseTarget() : Coordinate
+  + takeTurn(g : Game) : Shot | null
+  + recordShot(s : Shot) : void
+  + receiveAbility(drawn : Ability) : void
   + shouldUseAbility() : boolean
+  + chooseAbilityTarget() : Coordinate | null
+  + toJSON() : AIMemory
+  + {static} fromJSON(m : AIMemory) : AIOpponent
   - hunt() : Coordinate
   - target() : Coordinate
+  - chooseReroute(r : Reroute) : Coordinate | null
+}
+class AIMemory <<value>> {
+  + difficulty : Difficulty
+  + targeted : string[]
+  + activeHits : {x, y}[]
+  + huntQueue : {x, y}[]
 }
 class Shot <<entity>> {
   - coordinate : Coordinate
@@ -101,6 +125,30 @@ class RematchRequest <<entity>> {
   + accept() : void
   + decline() : void
   + isMutual() : boolean
+}
+class GameSnapshot <<value>> {
+  + id : string
+  + state : GameState
+  + gameType : GameType
+  + players : PlayerSnapshot[]
+  + shots : {row, col, result, shooter, firedAt, sunkShipName}[]
+  + currentTurn : number | null
+  + winner : number | null
+  + turnStartedAt : string | null
+  + endReason : EndReason | null
+  + finishedAt : string | null
+  + doubleShotActive : boolean
+}
+class PlayerSnapshot <<value>> {
+  + kind : "human" | "ai"
+  + id : string
+  + name : string
+  + isReady : boolean
+  + board : BoardSnapshot
+  + heldAbility : string | null
+  + offeredAbility : string | null
+  + sessionId : string [0..1]
+  + ai : AIMemory [0..1]
 }
 class GameResult <<entity>> {
   - didWin : boolean
@@ -124,7 +172,7 @@ Server "1" --> "0..*" Lobby : manages >
 Server ..> Game : validates & resolves >
 GameRepository ..> Lobby : persists >
 GameRepository ..> Game : persists >
-Lobby "1" o-- "0..2" Player : seats >
+Lobby "1" o-- "0..2" HumanPlayer : seats >
 Lobby "1" *-- "1" Game : runs >
 Game "1" o-- "2" Player : players >
 Game "1" *-- "0..*" Shot : history >
@@ -139,10 +187,34 @@ RematchRequest "0..*" --> "1" Player : requested by >
 GameResult ..> Shot : derived from >
 Player <|-- HumanPlayer
 Player <|-- AIOpponent
+AIOpponent ..> AIMemory : saved as >
+Game ..> Player : recordShot(shot) >
+Game ..> GameSnapshot : saved as >
+GameSnapshot "1" *-- "0..2" PlayerSnapshot : players >
+PlayerSnapshot ..> AIMemory : ai >
+AIOpponent ..> Game : takeTurn(game) >
+note right of Lobby
+  findByCode() is unused: the server is
+  stateless, so lobbies are loaded with
+  GameRepository.loadLobby() (Figure 2.3).
+end note
 note bottom of AIOpponent
   Single-player only. Runs in the browser
   with the same Game / Board classes;
   Server and NetworkHandler are not used.
+  Learns only from its own Shots through
+  recordShot(), never from the opponent's ships.
+  Places and confirms its own fleet when created.
+  takeTurn() plays one action: a held ability when
+  shouldUseAbility() and canUse() allow, otherwise
+  (or if the target is rejected) a shot.
+  Keeps its held ability when offered another.
+end note
+note bottom of GameSnapshot
+  AI mode saves the whole Game to localStorage
+  after every action and restores it on reload.
+  Players are referred to by index.
+  The rematch request isn't saved.
 end note
 legend bottom right
   Grey dashed boxes are classes detailed in another figure.

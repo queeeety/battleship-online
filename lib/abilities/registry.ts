@@ -15,4 +15,11 @@ export const ABILITY_FACTORIES: ReadonlyArray<() => Ability> = [
     () => new Reroute()
 ];
 
-export function drawRandomAbility(exclude: string[] = []): Ability { throw new Error("not implemented"); }
+// a fresh ability picked at random, skipping any whose name is in exclude
+// (Game excludes "Reroute" when none of the player's ships could move)
+export function drawRandomAbility(exclude: string[] = []): Ability
+{
+    const pool = ABILITY_FACTORIES.map(make => make()).filter(a => !exclude.includes(a.getName()));
+    if (pool.length === 0) throw new Error("Every ability was excluded, there's nothing left to draw");
+    return pool[Math.floor(Math.random() * pool.length)];
+}

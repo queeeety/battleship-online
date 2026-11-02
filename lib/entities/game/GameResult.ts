@@ -1,6 +1,7 @@
 /**
  * The end of game stats for one player.
  * Not saved anywhere, Game works it out from the shot history.
+ * Accuracy is a fraction from 0 to 1.
  */
 export class GameResult
 {
@@ -17,7 +18,13 @@ export class GameResult
         this.shipsSunk = shipsSunk;
     }
 
-    public summary(): string { return ""; }
+    public summary(): string
+    {
+        const outcome = this.didWin ? "Victory" : "Defeat";
+        const percent = Math.round(this.accuracy * 100);
+        const ships = this.shipsSunk === 1 ? "ship" : "ships";
+        return `${outcome} - ${this.shotsFired} shots, ${percent}% accuracy, ${this.shipsSunk} ${ships} sunk`;
+    }
 
     public getDidWin(): boolean { return this.didWin; }
 

@@ -19,14 +19,17 @@ class Board <<entity>> {
   + removeShip(s : Ship) : void
   + placeFleetRandomly() : void
   + isFleetComplete() : boolean
-  + receiveShot(target : Coordinate) : Shot
+  + receiveShot(target : Coordinate, shooter : Player) : Shot
   + hasBeenTargeted(c : Coordinate) : boolean
   + allShipsSunk() : boolean
   + scanArea(topLeft : Coordinate, size : number) : Coordinate[]
   + scanLine(index : number, isRow : boolean) : Coordinate[]
   + moveShip(s : Ship, start : Coordinate, o : Orientation) : boolean
   + getCell(c : Coordinate) : Cell
+  + getUntargetedCoordinates() : Coordinate[]
   + reset() : void
+  + toSnapshot() : BoardSnapshot
+  + {static} fromSnapshot(s : BoardSnapshot) : Board
 }
 class Cell <<entity>> {
   - coordinate : Coordinate
@@ -49,6 +52,11 @@ abstract class Ship <<entity>> {
   + occupies(c : Coordinate) : boolean
   + registerHit() : void
   + isSunk() : boolean
+  + isDamaged() : boolean
+  + place(start : Coordinate, o : Orientation) : void
+  + unplace() : void
+  + getCoordinates() : Coordinate[]
+  + {static} squaresFrom(start : Coordinate, o : Orientation, length : number) : Coordinate[]
 }
 class Carrier {
   # length : number = 5
@@ -70,6 +78,13 @@ class Coordinate <<value>> {
   - y : number
   + isWithinBounds(w : number, h : number) : boolean
   + equals(other : Coordinate) : boolean
+  + {static} fromRowCol(row : number, col : number) : Coordinate
+  + toRowCol() : {row, col}
+  + key() : string
+}
+class BoardSnapshot <<value>> {
+  + ships : {name, row, col, orientation}[]
+  + shots : {row, col}[]
 }
 abstract class Ability <<entity>> #F4F4F4;line.dashed;line:999999
 class BoardView <<boundary>> #F4F4F4;line.dashed;line:999999
@@ -85,11 +100,17 @@ Board "1" o-- "5" Ship : fleet >
 Cell "0..5" --> "0..1" Ship : occupied by >
 Reroute "0..1" --> "0..1" Ship : moves >
 Ability ..> Board : applies to >
+Board ..> BoardSnapshot : saved as >
+Board ..> Player : records shooter of >
 Ship <|-- Carrier
 Ship <|-- Battleship
 Ship <|-- Cruiser
 Ship <|-- Submarine
 Ship <|-- Destroyer
+note bottom of BoardSnapshot
+  JSON stored in game_secrets.board_p1 / board_p2.
+  Hits aren't stored: fromSnapshot replays the shots.
+end note
 legend bottom right
   Grey dashed boxes are classes detailed in another figure.
 endlegend

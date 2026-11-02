@@ -1,0 +1,135 @@
+/* MyBattleship design tokens (atomic design elements).
+   Dark is the primary theme: it applies by default and under data-theme="dark".
+   data-theme="light" on <html> switches to the daylight variant.*/
+
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* color */
+  /* Page background. */
+  --surface-000: #0b1113;
+  /* Panels: HUD, lobby card, dialogs, fleet tray. */
+  --surface-100: #111a1d;
+  /* Raised or hovered rows; secondary button hover. */
+  --surface-200: #16221f;
+  /* Board background (the sea). */
+  --water: #0f1a1b;
+  /* Board cell lines. */
+  --grid: #1d2c2a;
+  /* Hairline dividers and panel outlines. */
+  --line: #22322f;
+  /* Borders of inputs, secondary buttons, segmented controls. */
+  --line-control: #587470;
+  /* Primary text and icons. */
+  --ink: #d8e4df;
+  /* Secondary text, HUD labels, board coordinates. */
+  --ink-muted: #93a8a2;
+  /* Disabled text and non-text marks only. */
+  --ink-faint: #6b817b;
+  /* The accent: primary buttons, your-turn state, targeting reticle, scan results, focus ring. */
+  --sonar: #7fbfa8;
+  /* Hover/pressed for sonar fills and links. */
+  --sonar-strong: #a6dcc7;
+  /* Tint behind armed abilities, scan areas, valid placement ghosts, selected segments. */
+  --sonar-soft: #7fbfa81f;
+  /* Text and icons on a sonar fill. */
+  --on-sonar: #0b1113;
+  /* Sonar sweep on the target board during your turn. */
+  --sweep: #7fbfa82e;
+  /* Hit markers, low-timer state, damage. */
+  --hit: #f2a541;
+  /* Fill under a hit cell; low-timer background. */
+  --hit-soft: #f2a54126;
+  /* Text and icons on a hit fill. */
+  --on-hit: #1a1206;
+  /* Sunk ship silhouette and its marks. */
+  --sunk: #c4622d;
+  /* Fill under the cells of a sunk ship. */
+  --sunk-soft: #c4622d33;
+  /* Miss dot. */
+  --miss: #6b817b;
+  /* Own-fleet silhouette fill. */
+  --ship: #2e4541;
+  /* Own-fleet silhouette outline and deck details. */
+  --ship-edge: var(--sonar);
+  /* Destructive actions (Forfeit), errors, disconnects. */
+  --danger: #ef7a64;
+  /* Background of error banners and invalid placement ghosts. */
+  --danger-soft: #ef7a6426;
+  /* Text on a danger fill. */
+  --on-danger: #1a0a06;
+  /* Overlay behind dialogs. */
+  --scrim: #000000a6;
+  /* Keyboard focus ring. */
+  --focus: var(--sonar);
+
+  /* shadow */
+  /* Dialogs and toasts only. */
+  --shadow-overlay: 0 16px 40px rgba(0,0,0,0.55);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --surface-000: #eef2ef;
+  --surface-100: #f8faf8;
+  --surface-200: #e4ebe7;
+  --water: #e9efec;
+  --grid: #d3ddd9;
+  --line: #cdd8d3;
+  --line-control: #6c817b;
+  --ink: #0f1a1c;
+  --ink-muted: #4a5e59;
+  --ink-faint: #5f726d;
+  --sonar: #1d6b58;
+  --sonar-strong: #145244;
+  --sonar-soft: #1d6b581a;
+  --on-sonar: #ffffff;
+  --sweep: #1d6b5824;
+  --hit: #a65604;
+  --hit-soft: #a656041f;
+  --on-hit: #ffffff;
+  --sunk: #6f2d0e;
+  --sunk-soft: #6f2d0e1f;
+  --miss: #5f726d;
+  --ship: #a9bdb7;
+  --danger: #b3261e;
+  --danger-soft: #b3261e14;
+  --on-danger: #ffffff;
+  --scrim: #0f1a1c66;
+  --shadow-overlay: 0 16px 40px rgba(15,26,28,0.16);
+}
+
+:root {
+  /* spacing */
+  --space-1: 4px; /* Icon-to-label gap, pip gaps. */
+  --space-2: 8px; /* Gaps inside controls and chips. */
+  --space-3: 12px; /* Control padding (sm), list row padding. */
+  --space-4: 16px; /* Panel padding, control padding (md). */
+  --space-5: 24px; /* Between panels; board-to-HUD gap. */
+  --space-6: 32px; /* Screen gutters; between the two boards. */
+  --space-7: 48px; /* Top of screen to title; section breaks. */
+  --space-8: 64px; /* Large vertical rhythm on wide screens. */
+
+  /* radius */
+  --radius-0: 0; /* Board, cells, readouts. */
+  --radius-sm: 2px; /* Chips, pips, segmented items, tooltips. */
+  --radius-md: 4px; /* Buttons, inputs, ability cards, panels. */
+  --radius-lg: 8px; /* Dialogs and toasts. */
+  --radius-full: 999px; /* Presence dots and the ping ring. */
+
+  /* size */
+  --cell-lg: 40px; /* Board cell on wide screens. */
+  --cell-md: 34px; /* Default board cell. */
+  --cell-sm: 28px; /* Board cell on phones. */
+  --control-md: 40px; /* Height of buttons, inputs, segmented controls. */
+  --control-sm: 32px; /* Compact buttons in the HUD and dialogs. */
+  --hud-width: 280px; /* Battle side panel on desktop. */
+
+  /* z-index */
+  --z-board-ships: 1; /* Ship silhouettes. */
+  --z-board-marks: 2; /* Hit/miss marks and the click layer. */
+  --z-banner: 20; /* Connection banner. */
+  --z-overlay: 40; /* Dialog scrim and dialogs. */
+  --z-toast: 50; /* Toasts. */
+}

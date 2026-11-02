@@ -45,9 +45,24 @@ class NetworkHandler <<boundary>> {
 }
 
 class Server <<controller>> {
-  + createLobby(name : String, type : GameType) : Lobby
-  + joinLobby(code : String, name : String) : HumanPlayer
-  + restoreSeat(sessionId : UUID) : HumanPlayer
+  + createLobby(name : unknown, type : unknown) : Promise<Lobby>
+  + joinLobby(code : unknown, name : unknown) : Promise<{lobby, player}>
+  + restoreSeat(sessionId? : UUID) : Promise<{lobby, player} | null>
+}
+
+class SessionManager <<utility>> {
+  + signInAnonymously() : Promise<UUID>
+  + currentSessionId() : Promise<UUID | null>
+}
+
+class GameRepository <<persistence>> {
+  + loadLobby(code : String) : Promise<Lobby | null>
+  + saveLobby(l : Lobby) : Promise<void>
+  + findActiveLobbyCode(sessionId : UUID) : Promise<String | null>
+}
+
+class JoinRefusedError <<exception>> {
+  + reason : JoinError
 }
 
 class Lobby <<controller>> {
@@ -57,7 +72,8 @@ class Lobby <<controller>> {
   - createdAt : DateTime
   + {static} generateCode() : String
   + {static} findByCode(code : String) : Lobby
-  + join(name : String) : Player
+  + join(name : String, sessionId : UUID) : HumanPlayer
+  + seatOf(sessionId : UUID) : 1 | 2 | null
   + isFull() : boolean
   + isJoinable() : boolean
   + shareLink() : URL
@@ -80,6 +96,7 @@ abstract class Player <<entity>> {
 class HumanPlayer <<entity>> {
   - sessionId : UUID
   - connected : boolean
+  + disconnect(at : DateTime = now) : void
   + reconnect() : void
 }
 
@@ -88,12 +105,16 @@ UIManager ..> Server : createLobby / joinLobby >
 UIManager ..> JoinError : displays >
 NetworkHandler ..> UIManager : pushes updates >
 Server "1" --> "0..*" Lobby : manages >
-Server ..> HumanPlayer : issues sessionId >
+Server *-- SessionManager : identifies caller with >
+Server *-- GameRepository : loads / saves via >
+Server ..> JoinRefusedError : throws >
+JoinRefusedError ..> JoinError
+GameRepository ..> Lobby : persists >
+SessionManager ..> HumanPlayer : issues sessionId >
 NetworkHandler ..> HumanPlayer : tracks presence >
 
-Lobby "1" o-- "0..2" Player : seats >
+Lobby "1" o-- "0..2" HumanPlayer : seats >
 Lobby "1" *-- "1" Game : runs >
-Lobby ..> JoinError : rejects with >
 Lobby --> LobbyStatus
 Lobby --> GameType
 

@@ -19,18 +19,28 @@ export class Cell
         this.ship = null;
     }
 
-    public occupy(s: Ship): void {}
+    public occupy(s: Ship): void
+    {
+        this.ship = s;
+        this.state = CellState.OCCUPIED;
+    }
 
-    public clear(): void {}
+    public clear(): void
+    {
+        this.ship = null;
+        this.state = CellState.EMPTY;
+    }
 
-    public markHit(): void {}
+    // the ship stays linked after a hit so the board still knows whose square it was
+    public markHit(): void { this.state = CellState.HIT; }
 
-    public markMiss(): void {}
+    public markMiss(): void { this.state = CellState.MISS; }
 
-    public isAlreadyShot(): boolean { return false; }
+    public isAlreadyShot(): boolean { return this.state === CellState.HIT || this.state === CellState.MISS; }
 
     public getState(): CellState { return this.state; }
 
     public getShip(): Ship | null { return this.ship; }
-}
 
+    public getCoordinate(): Coordinate { return this.coordinate; }
+}

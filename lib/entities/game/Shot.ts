@@ -1,5 +1,5 @@
 import type { Coordinate } from "../board";
-import type { ShotResult } from "../../enums";
+import { ShotResult } from "../../enums";
 import type { Player } from "../players";
 
 /**
@@ -14,21 +14,26 @@ export class Shot
     private firedAt: Date;
     private sunkShipName: string | null;
 
-    constructor(coordinate: Coordinate, result: ShotResult, shooter: Player, sunkShipName: string | null = null)
+    // firedAt is only passed when a saved game is loaded
+    constructor(coordinate: Coordinate, result: ShotResult, shooter: Player, sunkShipName: string | null = null, firedAt: Date = new Date())
     {
         this.coordinate = coordinate;
         this.result = result;
         this.shooter = shooter;
-        this.firedAt = new Date();
+        this.firedAt = firedAt;
         this.sunkShipName = sunkShipName;
     }
 
-    public isHit(): boolean { return false; }
+    public isHit(): boolean { return this.result === ShotResult.HIT || this.result === ShotResult.SUNK; }
 
     public getCoordinate(): Coordinate { return this.coordinate; }
 
     public getResult(): ShotResult { return this.result; }
 
     public getShooter(): Player { return this.shooter; }
+
+    public getFiredAt(): Date { return this.firedAt; }
+
+    public getSunkShipName(): string | null { return this.sunkShipName; }
 }
 

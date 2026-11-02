@@ -11,6 +11,7 @@ boundary "hostUI : UIManager" as HostUI
 control "server : Server" as Server
 control "lobby : Lobby" as Lobby
 control "game : Game" as Game
+database "repo : GameRepository" as Repo
 boundary "net : NetworkHandler" as Net
 boundary "guestUI : UIManager" as GuestUI
 actor "Aoife\n(guest)" as Guest
@@ -22,6 +23,7 @@ Host -> HostUI : enters name "Cian91", selects Create Lobby
 activate HostUI
 HostUI -> Server : createLobby(name, ORIGINAL)
 activate Server
+Server -> Server : callerSessionId()\n(anonymous sign-in if new)
 
 alt name length > 16
   Server --> HostUI : JoinError.INVALID_NAME
@@ -30,15 +32,19 @@ else name blank
   Server -> Server : assignRandomName()
 end
 
-Server -> Lobby : <<create>> Lobby(gameType)
-activate Lobby
 loop while code already in use
+  Server -> Lobby : <<create>> Lobby(gameType)
+  activate Lobby
   Lobby -> Lobby : generateCode()
+  Lobby -> Game : <<create>> Game(gameType)
+  activate Game
+  Server -> Repo : loadLobby(code)
+  Repo --> Server : null (code free)
 end
-Lobby --> Server : lobby (code = "4F7K2M")
-Server -> Lobby : join("Cian91")
-Lobby -> Lobby : seat host as Player 1
+Server -> Lobby : join("Cian91", sessionId)
+Lobby -> Game : addPlayer(hostPlayer)
 Lobby --> Server : hostPlayer : HumanPlayer
+Server -> Repo : saveLobby(lobby)
 Server --> HostUI : lobby, sessionId
 deactivate Server
 HostUI -> Net : subscribe("4F7K2M")
@@ -50,27 +56,28 @@ Guest -> GuestUI : enters code "4F7K2M", leaves name blank
 activate GuestUI
 GuestUI -> Server : joinLobby("4F7K2M", "")
 activate Server
-Server -> Lobby : findByCode("4F7K2M")
-Lobby --> Server : lobby
+Server -> Server : callerSessionId()
+Server -> Repo : loadLobby("4F7K2M")
+Repo --> Server : lobby
 
-alt lobby not found
+alt lobby not found or abandoned
   Server --> GuestUI : JoinError.CODE_NOT_FOUND
   GuestUI --> Guest : showError("Lobby not found")
-else lobby.isFull()
-  Server --> GuestUI : JoinError.LOBBY_FULL
-  GuestUI --> Guest : showError("Lobby is full")
+else caller already holds a seat
+  Server --> GuestUI : lobby, existing seat
 else lobby.status == FINISHED
   Server --> GuestUI : JoinError.GAME_ALREADY_FINISHED
   GuestUI --> Guest : showError("Game has ended")
+else not lobby.isJoinable()
+  Server --> GuestUI : JoinError.LOBBY_FULL
+  GuestUI --> Guest : showError("Lobby is full")
 else lobby.isJoinable()
   Server -> Server : assignRandomName() : "Player482"
-  Server -> Lobby : join("Player482")
+  Server -> Lobby : join("Player482", sessionId)
+  Lobby -> Game : addPlayer(guestPlayer)
+  Game --> Lobby : state = PLACEMENT
   Lobby --> Server : guestPlayer : HumanPlayer
-  Server -> Game : <<create>> Game(gameType)
-  activate Game
-  Server -> Game : addPlayer(hostPlayer)
-  Server -> Game : addPlayer(guestPlayer)
-  Game --> Server : state = PLACEMENT
+  Server -> Repo : saveLobby(lobby)
   Server -> Net : broadcast(game)
   Net --> HostUI : both players seated
   Net --> GuestUI : both players seated
@@ -81,12 +88,17 @@ end
 deactivate GuestUI
 
 opt player reloads the page
-  GuestUI -> Server : restoreSeat(sessionId)
+  GuestUI -> Server : restoreSeat()
   activate Server
-  Server -> Lobby : findByCode("4F7K2M")
-  Server --> GuestUI : getMyState(code) : game
+  Server -> Repo : findActiveLobbyCode(sessionId)
+  Repo --> Server : "4F7K2M"
+  Server -> Repo : loadLobby("4F7K2M")
+  Repo --> Server : lobby
+  Server --> GuestUI : lobby, player
   deactivate Server
-  note right of GuestUI : Seat matched by sessionId,\nnever by display name (UC1 *a)
+  GuestUI -> Server : getMyState(code)
+  Server --> GuestUI : game
+  note right of GuestUI : Seat matched by the session cookie,\nnever by display name or a value\nthe browser sends (UC1 *a)
 end
 
 ref over HostUI, GuestUI, Game : UC2 Place Fleet
