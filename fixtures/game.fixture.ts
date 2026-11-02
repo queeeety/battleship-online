@@ -26,27 +26,29 @@ export interface FixtureShip {
     readonly sunk: boolean;
 }
 
-export interface GameFixture {
-    readonly ownCells: ReadonlyArray<FixtureCell>;
-    readonly enemyCells: ReadonlyArray<FixtureCell>;
-    readonly shots: ReadonlyArray<FixtureShot>;
-    readonly ships: ReadonlyArray<FixtureShip>;
-}
-
-interface FixturePlacement {
+export interface FixturePlacement {
+    readonly name: string;
     readonly x: number;
     readonly y: number;
     readonly length: number;
     readonly horizontal: boolean;
 }
 
+export interface GameFixture {
+    readonly ownCells: ReadonlyArray<FixtureCell>;
+    readonly ownShips: ReadonlyArray<FixturePlacement>;
+    readonly enemyCells: ReadonlyArray<FixtureCell>;
+    readonly shots: ReadonlyArray<FixtureShot>;
+    readonly ships: ReadonlyArray<FixtureShip>;
+}
+
 // my fleet, same names and lengths as lib/entities/ships
 const OWN_PLACEMENTS: ReadonlyArray<FixturePlacement> = [
-    { x: 0, y: 0, length: 5, horizontal: true },
-    { x: 9, y: 2, length: 4, horizontal: false },
-    { x: 2, y: 4, length: 3, horizontal: true },
-    { x: 5, y: 7, length: 3, horizontal: true },
-    { x: 0, y: 8, length: 2, horizontal: false }
+    { name: "Carrier", x: 0, y: 0, length: 5, horizontal: true },
+    { name: "Battleship", x: 9, y: 2, length: 4, horizontal: false },
+    { name: "Cruiser", x: 2, y: 4, length: 3, horizontal: true },
+    { name: "Submarine", x: 5, y: 7, length: 3, horizontal: true },
+    { name: "Destroyer", x: 0, y: 8, length: 2, horizontal: false }
 ];
 
 // what the enemy fired at me: one hit on my Carrier, two misses
@@ -126,6 +128,7 @@ export function createGameFixture(): GameFixture {
 
     return {
         ownCells: buildCells(ownStates),
+        ownShips: OWN_PLACEMENTS,
         enemyCells: buildCells(enemyStates, scanned),
         shots: MY_SHOTS,
         ships: ENEMY_SHIPS

@@ -1,7 +1,11 @@
 "use client";
 
 import { useId, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
+import { HitEffect } from "@/components/effects/HitEffect";
+import { MissEffect } from "@/components/effects/MissEffect";
+import { SinkEffect } from "@/components/effects/SinkEffect";
 import { cx } from "@/components/ui/cx";
+import { nextPosition } from "@/hooks/useGridKeyboardNav";
 import { BOARD_SIZE } from "@/lib/config";
 import { coordKey, type CellMark, type ShipType } from "./data";
 import { Ship } from "./Ship";
@@ -52,8 +56,35 @@ function vars(values: Record<string, number>): CSSProperties {
   return Object.fromEntries(Object.entries(values).map(([k, v]) => [`--mb-${k}`, v])) as CSSProperties;
 }
 
-function isShot(mark: CellMark | undefined): boolean {
+type ShotMark = "hit" | "miss" | "sunk";
+
+function isShot(mark: CellMark | undefined): mark is ShotMark {
   return mark === "hit" || mark === "miss" || mark === "sunk";
+}
+
+// the newest shot's mark plays its effect once; older marks are static
+const SHOT_EFFECT = { hit: HitEffect, miss: MissEffect, sunk: SinkEffect } as const;
+
+function MarkIcon({ mark }: { mark: CellMark | undefined }) {
+  if (mark === "miss") return <span className="mb-mk-miss" />;
+  if (mark === "hit" || mark === "sunk") {
+    return (
+      <svg className="mb-mk-x" viewBox="0 0 20 20">
+        <path d="M5 5l10 10M15 5L5 15" />
+      </svg>
+    );
+  }
+  if (mark === "contact") return <span className="mb-mk-contact" />;
+  return null;
+}
+
+function ShotEffect({ mark }: { mark: ShotMark }) {
+  const Effect = SHOT_EFFECT[mark];
+  return (
+    <Effect active className="mb-mk-fx">
+      <MarkIcon mark={mark} />
+    </Effect>
+  );
 }
 
 // the board only draws what it's given; the game state lives with the caller
@@ -82,20 +113,13 @@ export function Board({
     if (!isShot(marks[key])) onCellClick?.({ x, y, key });
   }
 
-  // the grid is one Tab stop (Safari's default Tab skips buttons); arrows move the cursor, Enter or Space fires
+  // the grid is one Tab stop (Safari's default Tab skips buttons); arrows, Home/End and PageUp/PageDown
+  // move the cursor (shared with useGridKeyboardNav), Enter or Space fires
   function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
-    const last = size - 1;
-    const moves: Record<string, { x: number; y: number }> = {
-      ArrowLeft: { x: Math.max(0, cursor.x - 1), y: cursor.y },
-      ArrowRight: { x: Math.min(last, cursor.x + 1), y: cursor.y },
-      ArrowUp: { x: cursor.x, y: Math.max(0, cursor.y - 1) },
-      ArrowDown: { x: cursor.x, y: Math.min(last, cursor.y + 1) },
-      Home: { x: 0, y: cursor.y },
-      End: { x: last, y: cursor.y },
-    };
-    if (moves[e.key]) {
+    const next = nextPosition(e.key, e.ctrlKey || e.metaKey, cursor, size);
+    if (next) {
       e.preventDefault();
-      setCursor(moves[e.key]);
+      setCursor(next);
     } else if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       fire(cursor.x, cursor.y);
@@ -169,13 +193,11 @@ export function Board({
                           : undefined
                       }
                     >
-                      {mark === "miss" && <span className="mb-mk-miss" />}
-                      {(mark === "hit" || mark === "sunk") && (
-                        <svg className="mb-mk-x" viewBox="0 0 20 20">
-                          <path d="M5 5l10 10M15 5L5 15" />
-                        </svg>
+                      {key === lastShot && isShot(mark) ? (
+                        <ShotEffect mark={mark} />
+                      ) : (
+                        <MarkIcon mark={mark} />
                       )}
-                      {mark === "contact" && <span className="mb-mk-contact" />}
                       {key === lastShot && <span className="mb-mk-ping" />}
                     </div>
                   );

@@ -34,12 +34,12 @@ export function Countdown({ from = DEFAULT_FROM_SECONDS, onComplete }: Countdown
     const gone = reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 1.5 };
 
     return (
-        <div className="flex min-h-40 w-full items-center justify-center">
+        <div className="mb-countdown">
             <AnimatePresence mode="wait">
                 <motion.span
                     key={label}
                     aria-hidden="true"
-                    className="text-7xl font-bold tabular-nums sm:text-8xl"
+                    className="mb-countdown-read"
                     initial={hidden}
                     animate={shown}
                     exit={gone}
@@ -48,7 +48,7 @@ export function Countdown({ from = DEFAULT_FROM_SECONDS, onComplete }: Countdown
                     {label}
                 </motion.span>
             </AnimatePresence>
-            <p role="status" className="sr-only">
+            <p role="status" className="mb-sr">
                 {hasExpired ? "Go!" : `Starting in ${secondsLeft}`}
             </p>
         </div>

@@ -124,6 +124,9 @@
   .mb-mk-ping { position: absolute; inset: 15%; border: 2px solid var(--ink); border-radius: var(--radius-full); opacity: 0; animation: mb-ping var(--mb-dur-3) var(--mb-ease) 2; pointer-events: none; }
   .mb-cell.is-hit .mb-mk-ping { border-color: var(--hit); }
   @keyframes mb-ping { 0% { transform: scale(.4); opacity: 1; } 100% { transform: scale(1.6); opacity: 0; } }
+  /* Shot effects (components/effects): laid over the newest mark, never blocking clicks */
+  .mb-mk-fx { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
+  .mb-fx-ripple { position: absolute; inset: 0; border: 2px solid var(--miss); border-radius: var(--radius-full); pointer-events: none; }
 
   .mb-scan { position: absolute; z-index: var(--z-board-marks); left: calc(var(--mb-x) * var(--mb-cell)); top: calc(var(--mb-y) * var(--mb-cell)); width: calc(var(--mb-w) * var(--mb-cell)); height: calc(var(--mb-h) * var(--mb-cell)); border: 2px dashed var(--sonar); box-sizing: border-box; pointer-events: none; }
 
@@ -302,9 +305,22 @@
     .mb-lobbycode-link { display: none; }
   }
 
+  /* 3-2-1 before the first turn: a scrim over the battle screen */
+  .mb-countdown-overlay { position: fixed; inset: 0; z-index: var(--z-overlay); display: grid; place-items: center; background: var(--scrim); }
+  .mb-countdown { display: grid; place-items: center; gap: var(--space-2); }
+  .mb-countdown-read { font-family: var(--font-mono); font-weight: 500; font-variant-numeric: tabular-nums; font-size: 96px; line-height: 1; color: var(--ink); }
+
+  /* sunk notice and other battle toasts: bottom centre, above everything */
+  .mb-toast-dock { position: fixed; left: 50%; bottom: var(--space-5); translate: -50% 0; z-index: var(--z-toast); width: max-content; max-width: calc(100% - 2 * var(--space-4)); }
+
+  /* turn change: the new "Your turn" / "Teddy's turn" text slides in, the dot pulses once */
+  .mb-turn-text { animation: mb-turn-in var(--mb-dur-3) var(--mb-ease); }
+  .mb-turn.is-you .mb-turn-dot { animation: mb-pulse var(--mb-dur-3) var(--mb-ease) 2; }
+  @keyframes mb-turn-in { from { opacity: 0; transform: translateX(-6px); } }
+
   @media (prefers-reduced-motion: reduce) {
     .mb-sweep { display: none; }
-    .mb-mk-ping, .mb-pulse { animation: none; }
+    .mb-mk-ping, .mb-pulse, .mb-turn-text, .mb-turn-dot { animation: none; }
     .mb-timer-fill, .mb-btn { transition: none; }
   }
 }

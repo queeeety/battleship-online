@@ -8,6 +8,7 @@ import { useReducedMotion } from "@/hooks/useReducedMotion";
 export interface EffectProps {
     active: boolean;
     children: ReactNode;
+    // defaults to "relative"; Board passes its own class to lay the effect over a cell
     className?: string;
     onComplete?: () => void;
 }
@@ -18,13 +19,13 @@ const HIT = { x: [0, -3, 3, -2, 0], scale: [1, 1.15, 1] };
 // no movement for reduced motion, just a quick blink
 const HIT_REDUCED = { opacity: [1, 0.4, 1] };
 
-export function HitEffect({ active, children, className = "", onComplete }: EffectProps): ReactElement {
+export function HitEffect({ active, children, className = "relative", onComplete }: EffectProps): ReactElement {
     const reduceMotion = useReducedMotion();
     const target = !active ? REST : reduceMotion ? HIT_REDUCED : HIT;
 
     return (
         <motion.div
-            className={`relative ${className}`}
+            className={className}
             animate={target}
             transition={{ duration: reduceMotion ? 0.2 : 0.35 }}
             // also fires when returning to REST, so only report the real effect
