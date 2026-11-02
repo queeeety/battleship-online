@@ -14,8 +14,10 @@ class Server <<controller>> {
   - validator : RequestValidator
   - sessions : SessionManager
   - limiter : RateLimiter
-  + createLobby(name : string, type : GameType) : Lobby
-  + joinLobby(code : string, name : string) : HumanPlayer
+  - {static} MAX_CODE_TRIES : number = 10
+  + {static} create() : Promise<Server>
+  + createLobby(name : unknown, type : unknown) : Promise<Lobby>
+  + joinLobby(code : unknown, name : unknown) : Promise<{lobby : Lobby, player : HumanPlayer}>
   + placeShips(code : string, layout : Board) : boolean
   + fireShot(code : string, target : Coordinate) : Shot
   + useAbility(code : string, a : Ability, target : Coordinate) : void
@@ -24,40 +26,55 @@ class Server <<controller>> {
   + forfeit(code : string) : void
   + requestRematch(code : string, accept : boolean) : RematchRequest
   + getMyState(code : string) : Game
-  + restoreSeat(sessionId : string) : HumanPlayer
+  + restoreSeat(sessionId? : string) : Promise<{lobby : Lobby, player : HumanPlayer} | null>
   - assignRandomName() : string
+  - callerSessionId() : Promise<string>
+  - checkRateLimit(sessionId : string, action : string) : Promise<void>
+  - validName(raw : unknown) : string
 }
 class RequestValidator <<utility>> {
   - codeSchema : ZodSchema
   - nameSchema : ZodSchema
   - coordinateSchema : ZodSchema
   - layoutSchema : ZodSchema
+  - gameTypeSchema : ZodSchema
   + parseCode(raw : unknown) : string
   + parseName(raw : unknown) : string | null
   + parseCoordinate(raw : unknown) : Coordinate
   + parseLayout(raw : unknown) : Board
+  + parseGameType(raw : unknown) : GameType
 }
 class SessionManager <<utility>> {
   - client : SupabaseClient
-  + signInAnonymously() : string
-  + currentSessionId() : string
-  + verifySeat(code : string, sessionId : string) : boolean
+  + {static} create() : Promise<SessionManager>
+  + signInAnonymously() : Promise<string>
+  + currentSessionId() : Promise<string | null>
+  + verifySeat(code : string, sessionId : string) : Promise<boolean>
 }
 class RateLimiter <<utility>> {
   - maxRequests : number
   - windowMs : number
-  + allow(sessionId : string, action : string) : boolean
+  - ratelimit : Ratelimit | null
+  + allow(sessionId : string, action : string) : Promise<boolean>
 }
 class GameRepository <<persistence>> {
   - client : SupabaseClient
-  + loadLobby(code : string) : Lobby | null
-  + saveLobby(l : Lobby) : void
+  + loadLobby(code : string) : Promise<Lobby | null>
+  + saveLobby(l : Lobby) : Promise<void>
+  + findActiveLobbyCode(sessionId : string) : Promise<string | null>
   + loadGame(code : string) : Game
   + saveGame(g : Game) : void
   + loadFleet(code : string, p : Player) : Board
   + saveFleet(code : string, p : Player, b : Board) : void
   + runShotTransaction(code : string, shooter : Player, target : Coordinate) : Shot
 }
+class InvalidRequestError <<exception>> {
+  + field : string
+}
+class JoinRefusedError <<exception>> {
+  + reason : JoinError
+}
+class RateLimitedError <<exception>>
 class Game <<controller>> #F4F4F4;line.dashed;line:999999
 class Lobby <<controller>> #F4F4F4;line.dashed;line:999999
 class NetworkHandler <<boundary>> #F4F4F4;line.dashed;line:999999
@@ -73,6 +90,9 @@ Server "1" *-- "1" RateLimiter : throttles with >
 Server "1" *-- "1" GameRepository : loads / saves via >
 Server "1" --> "0..*" Lobby : manages >
 Server ..> Game : validates & resolves >
+RequestValidator ..> InvalidRequestError : throws >
+Server ..> JoinRefusedError : throws >
+Server ..> RateLimitedError : throws >
 GameRepository ..> Lobby : persists >
 GameRepository ..> Game : persists >
 note bottom of Server
