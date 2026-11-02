@@ -13,9 +13,15 @@ export class DoubleShot extends Ability
         super("Double Shot", false);
     }
 
-    public isValidTarget(b: Board, t: Coordinate): boolean { return false; }
+    // no point stacking a second one on a Double Shot that's still waiting for its miss
+    public canUse(g: Game): boolean { return super.canUse(g) && !g.isDoubleShotActive(); }
 
-    public apply(g: Game, b: Board, t: Coordinate): void {}
+    // it has no target, so any square is fine
+    public isValidTarget(b: Board, t: Coordinate): boolean { return true; }
+
+    public apply(g: Game, b: Board, t: Coordinate): void
+    {
+        g.setDoubleShotActive(true);
+        this.markUsed();
+    }
 }
-
-
