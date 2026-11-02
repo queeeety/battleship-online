@@ -123,6 +123,25 @@ export class GameRepository
         if (error) throw new Error(`Could not save lobby ${l.getCode()}: ${error.message}`);
     }
 
+    /**
+     * The code of the lobby this session is seated in and still playing (waiting or in progress),
+     * or null if there isn't one. Used by restoreSeat after a refresh.
+     */
+    public async findActiveLobbyCode(sessionId: string): Promise<string | null>
+    {
+        const { data, error } = await this.client
+            .from("games")
+            .select("code")
+            .or(`player1_id.eq.${sessionId},player2_id.eq.${sessionId}`)
+            .in("lobby_status", ["waiting", "in_progress"])
+            .order("updated_at", { ascending: false })
+            .limit(1)
+            .maybeSingle<{ code: string }>();
+
+        if (error) throw new Error(`Could not look up the lobby for this session: ${error.message}`);
+        return data?.code ?? null;
+    }
+
     public loadGame(code: string): Game { throw new Error("not implemented"); }
 
     public saveGame(g: Game): void {}

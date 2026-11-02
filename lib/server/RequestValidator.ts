@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { Board, Coordinate } from "../entities/board";
 import { BOARD_SIZE, LOBBY_CODE_CHARS, LOBBY_CODE_LENGTH, PLAYER_NAME_MAX_LENGTH } from "../config";
+import { GameType } from "../enums";
 
 /**
  * Thrown when a request fails validation. `field` says which input was wrong,
@@ -8,9 +9,9 @@ import { BOARD_SIZE, LOBBY_CODE_CHARS, LOBBY_CODE_LENGTH, PLAYER_NAME_MAX_LENGTH
  */
 export class InvalidRequestError extends Error
 {
-    public readonly field: "code" | "name" | "coordinate" | "layout";
+    public readonly field: "code" | "name" | "coordinate" | "layout" | "gameType";
 
-    constructor(field: "code" | "name" | "coordinate" | "layout", message: string)
+    constructor(field: "code" | "name" | "coordinate" | "layout" | "gameType", message: string)
     {
         super(message);
         this.name = "InvalidRequestError";
@@ -29,6 +30,7 @@ export class RequestValidator
     private nameSchema: z.ZodType<string | null>;
     private coordinateSchema: z.ZodType<{ row: number; col: number }>;
     private layoutSchema: z.ZodType<{ ships: { name: string; row: number; col: number; orientation: "horizontal" | "vertical" }[] }>;
+    private gameTypeSchema: z.ZodType<GameType>;
 
     constructor()
     {
@@ -54,6 +56,9 @@ export class RequestValidator
                 orientation: z.enum(["horizontal", "vertical"])
             })).max(10)
         });
+
+        // one of the GameType enum values: beginner, original or quick fire
+        this.gameTypeSchema = z.enum(GameType);
     }
 
     /** A 6-character lobby code, upper-cased, using only the unambiguous characters. */
@@ -69,6 +74,14 @@ export class RequestValidator
     {
         const result = this.nameSchema.safeParse(raw);
         if (!result.success) throw new InvalidRequestError("name", `Names can be at most ${PLAYER_NAME_MAX_LENGTH} characters`);
+        return result.data;
+    }
+
+    /** One of the three game types. */
+    public parseGameType(raw: unknown): GameType
+    {
+        const result = this.gameTypeSchema.safeParse(raw);
+        if (!result.success) throw new InvalidRequestError("gameType", "Unknown game type");
         return result.data;
     }
 

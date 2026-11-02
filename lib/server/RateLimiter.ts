@@ -12,6 +12,12 @@ export class RateLimiter
         this.windowMs = 0;
     }
 
-    public allow(sessionId: string, action: string): boolean { return false; }
+    /** Lets every request through for now; the Upstash limit replaces this in the next step. */
+    public async allow(sessionId: string, action: string): Promise<boolean>
+    {
+        void sessionId;
+        void action;
+        return true;
+    }
 }
 

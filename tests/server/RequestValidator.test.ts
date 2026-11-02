@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { RequestValidator, InvalidRequestError } from "../../lib/server/RequestValidator";
 import { Board } from "../../lib/entities/board";
+import { GameType } from "../../lib/enums";
 
 const validator = new RequestValidator();
 
@@ -154,5 +155,21 @@ describe("RequestValidator.parseLayout", () =>
     {
         expect(() => validator.parseLayout({ ships: "lots" })).toThrow(InvalidRequestError);
         expect(() => validator.parseLayout(null)).toThrow(InvalidRequestError);
+    });
+});
+
+describe("RequestValidator.parseGameType", () =>
+{
+    it("accepts each game type", () =>
+    {
+        expect(validator.parseGameType(GameType.BEGINNER)).toBe(GameType.BEGINNER);
+        expect(validator.parseGameType(GameType.ORIGINAL)).toBe(GameType.ORIGINAL);
+        expect(validator.parseGameType(GameType.QUICK_FIRE)).toBe(GameType.QUICK_FIRE);
+    });
+
+    it("rejects anything else", () =>
+    {
+        expect(errorFrom(() => validator.parseGameType(3)).field).toBe("gameType");
+        expect(() => validator.parseGameType("ORIGINAL")).toThrow(InvalidRequestError);
     });
 });
