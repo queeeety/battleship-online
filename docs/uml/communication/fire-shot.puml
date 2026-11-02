@@ -5,6 +5,7 @@ frame "sd FireShot" {
   rectangle "oppUI : UIManager" as OppUI
   actor "timer : Timer" as Timer
   rectangle "server : Server" as Server
+  rectangle "repo : GameRepository" as Repo
   rectangle "net : NetworkHandler" as Net
   rectangle "game : Game" as Game
   rectangle "oppBoard : Board" as Board
@@ -12,17 +13,20 @@ frame "sd FireShot" {
   rectangle "ship : Ship" as Ship
   rectangle "shot : Shot" as Shot
   Player -down- UI : ↓ 1 : onCellClick(H8)\n⇡ 1.1 [cell.isAlreadyShot()] : no highlight, click ignored (UC3 2a)\n⇡ 1.3 : hit / miss / &#34;You sunk their Destroyer&#34;
-  UI -down- Net : ⇡ 1.2.2.1 : renderBoard(result)
-  OppUI -down- Net : ⇡ 1.2.2.2 : renderBoard(result)
-  UI -down- Server : ↓ 1.2 : fireShot(code, H8)\n⇡ 1.2.3 : shot
-  Net -down- Server : ↑ 1.2.2 : broadcast(game)
+  UI -down- Net : ⇡ 1.2.2.4.1 [saved] : onBroadcast(update), then onState(getMyState)
+  OppUI -down- Net : ⇡ 1.2.2.4.2 [saved] : onBroadcast(update), then onState(getMyState)
+  UI -down- Server : ↓ 1.2 : fireShot(code, H8)\n⇡ 1.2.3 [stale] : STALE\n⇡ 1.2.4 [saved] : shot
+  Server -- Server : 1.2.1 : seatedCaller(code)
+  Server -down- Repo : ↓ 1.2.2 : runShotTransaction(code, shooter, H8)\n⇡ 1.2.2.5 [another save landed first] : StaleGameError\n⇡ 1.2.2.6 [saved] : shot
+  Repo -- Repo : 1.2.2.1 : loadGame(code) : game, version\n1.2.2.3 : saveGame(game, version) via save_game()
+  Net -down- Repo : ↑ 1.2.2.4 [saved] : game_updated (database trigger on games)
   Net -down- Game : ↓ 2 [current player loses presence] : onDisconnect(p)
-  Server -down- Game : ↓ 1.2.1 : fireShot(shooter, H8)\n⇡ 1.2.1.7 : shot
-  Timer -down- Game : ↓ 1.2.1.1 [turn timer expired before this click] : turnTimerExpired
-  Game -- Game : 1.2.1.1.1 : isTurnExpired()\n1.2.1.1.2 : fireRandomShot(currentTurn)\n1.2.1.3 : turnStartedAt = now\n1.2.1.4 [shot.isHit() and not oppBoard.allShipsSunk()] : currentTurn unchanged\n1.2.1.5 [shot.result == MISS and doubleShotActive] : doubleShotActive = false\n1.2.1.6 [shot.result == MISS and not doubleShotActive] : switchTurn()
-  Game -down- Board : ↓ 1.2.1.2 : receiveShot(H8, shooter)\n⇡ 1.2.1.2.9 : shot
-  Board -down- Cell : ↓ 1.2.1.2.1 : isAlreadyShot()\n⇡ 1.2.1.2.1.1 : false\n↓ 1.2.1.2.2 [a Ship occupies H8] : markHit()\n↓ 1.2.1.2.7 [no Ship at H8] : markMiss()
-  Board -down- Ship : ↓ 1.2.1.2.3 [a Ship occupies H8] : registerHit()\n↓ 1.2.1.2.4 [a Ship occupies H8] : isSunk()\n⇡ 1.2.1.2.4.1 : sunk
-  Board -down- Shot : ↓ 1.2.1.2.5 [a Ship occupies H8 and sunk] : <<create>> Shot(H8, SUNK, shooter, sunkShipName)\n↓ 1.2.1.2.6 [a Ship occupies H8 and ship still afloat] : <<create>> Shot(H8, HIT, shooter)\n↓ 1.2.1.2.8 [no Ship at H8] : <<create>> Shot(H8, MISS, shooter)
+  Repo -down- Game : ↓ 1.2.2.2 : fireShot(shooter, H8)\n⇡ 1.2.2.2.7 : shot
+  Timer -down- Game : ↓ 1.2.2.2.1 [turn timer expired before this click] : turnTimerExpired
+  Game -- Game : 1.2.2.2.1.1 : isTurnExpired()\n1.2.2.2.1.2 : fireRandomShot(currentTurn)\n1.2.2.2.3 : turnStartedAt = now\n1.2.2.2.4 [shot.isHit() and not oppBoard.allShipsSunk()] : currentTurn unchanged\n1.2.2.2.5 [shot.result == MISS and doubleShotActive] : doubleShotActive = false\n1.2.2.2.6 [shot.result == MISS and not doubleShotActive] : switchTurn()
+  Game -down- Board : ↓ 1.2.2.2.2 : receiveShot(H8, shooter)\n⇡ 1.2.2.2.2.9 : shot
+  Board -down- Cell : ↓ 1.2.2.2.2.1 : isAlreadyShot()\n⇡ 1.2.2.2.2.1.1 : false\n↓ 1.2.2.2.2.2 [a Ship occupies H8] : markHit()\n↓ 1.2.2.2.2.7 [no Ship at H8] : markMiss()
+  Board -down- Ship : ↓ 1.2.2.2.2.3 [a Ship occupies H8] : registerHit()\n↓ 1.2.2.2.2.4 [a Ship occupies H8] : isSunk()\n⇡ 1.2.2.2.2.4.1 : sunk
+  Board -down- Shot : ↓ 1.2.2.2.2.5 [a Ship occupies H8 and sunk] : <<create>> Shot(H8, SUNK, shooter, sunkShipName)\n↓ 1.2.2.2.2.6 [a Ship occupies H8 and ship still afloat] : <<create>> Shot(H8, HIT, shooter)\n↓ 1.2.2.2.2.8 [no Ship at H8] : <<create>> Shot(H8, MISS, shooter)
 }
 @enduml

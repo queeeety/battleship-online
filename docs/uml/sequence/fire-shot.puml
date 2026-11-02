@@ -10,6 +10,7 @@ actor "Cian\n(current turn)" as Player
 actor "timer : Timer" as Timer
 boundary "ui : UIManager" as UI
 control "server : Server" as Server
+database "repo : GameRepository" as Repo
 control "game : Game" as Game
 entity "oppBoard : Board" as Board
 entity "cell : Cell" as Cell
@@ -27,7 +28,12 @@ end
 
 UI -> Server : fireShot(code, H8)
 activate Server
-Server -> Game : fireShot(shooter, H8)
+Server -> Server : seatedCaller(code)
+note right of Server : Seat from the session cookie;\nZod checks code and square
+Server -> Repo : runShotTransaction(code, shooter, H8)
+activate Repo
+Repo -> Repo : loadGame(code) : game, version
+Repo -> Game : fireShot(shooter, H8)
 activate Game
 
 opt turn timer expired before this click
@@ -77,14 +83,24 @@ else shot.result == MISS
   Game -> Game : switchTurn()
 end
 
-Game --> Server : shot
+Game --> Repo : shot
 deactivate Game
-Server -> Net : broadcast(game)
-activate Net
-Net --> UI : renderBoard(result)
-Net --> OppUI : renderBoard(result)
-deactivate Net
-Server --> UI : shot
+Repo -> Repo : saveGame(game, version)\n(save_game(): one transaction)
+
+alt another save landed first (double-click, second tab)
+  Repo --> Server : StaleGameError, nothing written
+  Server --> UI : STALE
+else saved
+  Repo -> Net : game_updated (database trigger on games)
+  activate Net
+  note right of Repo : The trigger sends public state only:\nno fleets, no ability columns
+  Net --> UI : onBroadcast(update), then onState(getMyState)
+  Net --> OppUI : onBroadcast(update), then onState(getMyState)
+  deactivate Net
+  Repo --> Server : shot
+  Server --> UI : shot
+end
+deactivate Repo
 deactivate Server
 UI --> Player : hit / miss / "You sunk their Destroyer"
 deactivate UI

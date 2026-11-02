@@ -40,8 +40,8 @@ class UIManager <<boundary>> {
 
 class NetworkHandler <<boundary>> {
   - channel : Channel
-  + subscribe(code : String) : void
-  + trackPresence(p : HumanPlayer) : void
+  + subscribe(code : String) : Promise<void>
+  + trackPresence(p : HumanPlayer) : Promise<void>
 }
 
 class Server <<controller>> {
