@@ -29,12 +29,13 @@ each change in the table so the docs can be brought back in line.
 - [ ] Changed the database schema
 - [ ] Changed a shared contract another person codes against
 - [ ] None, this matches the docs as they are
+- [ ] Relevant UML diagrams updated in this MR, if affected
 
 | Change | Where it was documented | Why | Docs updated? |
 | --- | --- | --- | --- |
-|  | <!-- e.g. docs/uml/class/refinedClassDiagrams/2_5_BoardFleet.puml --> |  | <!-- yes, in this MR / no, @owner to update --> |
+|  | <!-- e.g. docs/uml/class/refinedClassDiagrams/2_5_BoardFleet.puml --> |  | <!-- yes, in this MR / not affected --> |
 
-**Who needs to know:** <!-- Tim for UML, whoever owns the doc or the class you changed -->
+**Who needs to know:** <!-- Whoever owns the doc or the class you changed -->
 
 ## Testing
 
