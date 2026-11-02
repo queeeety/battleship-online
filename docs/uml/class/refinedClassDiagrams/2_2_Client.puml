@@ -83,6 +83,16 @@ class NetworkHandler <<boundary>> {
   + sendPrivate(p : HumanPlayer, payload : PrivatePayload) : void
   + resync(code : string) : void
 }
+
+class AudioManager <<boundary>> {
+  - sounds : Map<SoundName, HTMLAudioElement>
+  - muted : boolean
+  + setMuted(muted : boolean) : void
+  + isMuted() : boolean
+  + play(sound : SoundName) : void
+  + playForShot(result : ShotResult) : void
+}
+
 class Timer <<boundary>> {
   - limitMs : number
   - startedAt : Date | null
@@ -112,6 +122,7 @@ AbilityCard ..> Ability : displays >
 ResultScreen ..> GameResult : displays >
 NetworkHandler ..> UIManager : pushes updates >
 UIManager ..> Server : calls actions >
+UIManager "1" --> "0..1" AudioManager : plays sounds with >
 Timer ..> Server : claimTimeout() >
 NetworkHandler ..> HumanPlayer : tracks presence >
 Server "1" --> "1" NetworkHandler : broadcasts via >
@@ -127,6 +138,10 @@ note bottom of NetworkHandler
   (cells) or the keep-or-replace ability
   offer (current, drawn). Only the owner
   receives it.
+end note
+note bottom of AudioManager
+  Optional. Does nothing while
+  AUDIO_ENABLED is false.
 end note
 legend bottom right
   Grey dashed boxes are classes detailed in another figure.
