@@ -46,6 +46,8 @@ export type BattleAction =
     | { readonly type: "start" }
     | { readonly type: "fire"; readonly key: string }
     | { readonly type: "opponentFire" }
+    // your turn clock ran out: the screen picks a random open square, like Game.fireRandomShot
+    | { readonly type: "timeout"; readonly key: string }
     | { readonly type: "dismissNotice" };
 
 // demo only: in a real game the server keeps these hidden. Agrees with the fixture's shots
@@ -105,6 +107,12 @@ export function toPlacement(ship: FleetShip, shots: ReadonlyArray<string>): Ship
 /** The enemy board only shows ships once they are sunk. */
 export function revealedEnemyShips(shots: ReadonlyArray<string>): ShipPlacement[] {
     return ENEMY_FLEET.filter((ship) => isSunk(ship, shots)).map((ship) => toPlacement(ship, shots));
+}
+
+/** Every square on the board not yet fired at, row by row. */
+export function openSquares(shots: ReadonlyArray<string>): string[] {
+    const all = Array.from({ length: BOARD_SIZE * BOARD_SIZE }, (_, i) => coordKey(i % BOARD_SIZE, Math.floor(i / BOARD_SIZE)));
+    return all.filter((key) => !shots.includes(key));
 }
 
 export function afloatCount(fleet: ReadonlyArray<FleetShip>, shots: ReadonlyArray<string>): number {
@@ -204,8 +212,7 @@ function nextOpponentTarget(state: BattleState): { key: string; scriptIndex: num
         const index = state.scriptIndex + fromScript;
         return { key: OPPONENT_SCRIPT[index], scriptIndex: index + 1 };
     }
-    const all = Array.from({ length: BOARD_SIZE * BOARD_SIZE }, (_, i) => coordKey(i % BOARD_SIZE, Math.floor(i / BOARD_SIZE)));
-    const key = all.find((k) => !state.enemyShots.includes(k));
+    const key = openSquares(state.enemyShots)[0];
     return key ? { key, scriptIndex: OPPONENT_SCRIPT.length } : null;
 }
 
@@ -223,6 +230,7 @@ export function battleReducer(state: BattleState, action: BattleAction): BattleS
         case "start":
             return state.phase === "countdown" ? { ...state, phase: "you" } : state;
         case "fire":
+        case "timeout":
             return fire(state, action.key);
         case "opponentFire":
             return opponentFire(state);

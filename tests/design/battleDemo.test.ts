@@ -6,6 +6,7 @@ import {
     battleReducer,
     createBattleState,
     marksFor,
+    openSquares,
     revealedEnemyShips,
     shipCells,
     shipTypeOf,
@@ -141,5 +142,33 @@ describe("battleDemo", () =>
         const sunk = ["A3", "A4", "A5"].reduce((s, key) => battleReducer(s, { type: "fire", key }), playing());
         expect(sunk.sunkNotice).not.toBeNull();
         expect(battleReducer(sunk, { type: "dismissNotice" }).sunkNotice).toBeNull();
+    });
+
+    it("openSquares lists every square not yet fired at, row by row", () =>
+    {
+        expect(openSquares([])).toHaveLength(100);
+        const open = openSquares(["A1", "B1"]);
+        expect(open).toHaveLength(98);
+        expect(open[0]).toBe("C1");
+        expect(open).not.toContain("A1");
+    });
+
+    it("timeout fires the given square for you, with the normal turn rules", () =>
+    {
+        const hit = battleReducer(playing(), { type: "timeout", key: "H4" });
+        expect(hit.log.at(-1)).toMatchObject({ by: "you", coord: "H4", result: "hit" });
+        expect(hit.phase).toBe("you");
+
+        const miss = battleReducer(hit, { type: "timeout", key: "B7" });
+        expect(miss.phase).toBe("opponent");
+    });
+
+    it("ignores a timeout during the countdown and on Teddy's turn", () =>
+    {
+        const countdown = createBattleState(createGameFixture());
+        expect(battleReducer(countdown, { type: "timeout", key: "B7" })).toBe(countdown);
+
+        const teddys = battleReducer(playing(), { type: "fire", key: "B7" });
+        expect(battleReducer(teddys, { type: "timeout", key: "C7" })).toBe(teddys);
     });
 });

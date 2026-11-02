@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useReducer, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import {
   AbilityCard,
   Board,
@@ -24,6 +24,7 @@ import {
   battleReducer,
   createBattleState,
   marksFor,
+  openSquares,
   revealedEnemyShips,
   toPlacement,
 } from "./battleDemo";
@@ -36,9 +37,24 @@ const GO_HOLD_MS = 500;
 const OPPONENT_DELAY_MS = 900;
 const NOTICE_MS = 4000;
 
-// a fresh countdown per turn: the caller remounts it with a new key when the turn changes
-function TurnClock({ size }: { size?: "lg" | "sm" }) {
-  const { secondsLeft } = useCountdown(TURN_SECONDS * 1000);
+interface TurnClockProps {
+  size?: "lg" | "sm";
+  /** Called once when the clock reaches 0. */
+  onExpire?: () => void;
+}
+
+// a fresh countdown per shot: the caller remounts it with a new key, which also resets `expired`
+function TurnClock({ size, onExpire }: TurnClockProps) {
+  const { secondsLeft, hasExpired } = useCountdown(TURN_SECONDS * 1000);
+  const expired = useRef(false);
+
+  // hasExpired stays true across renders, so guard to call onExpire once (same as Countdown)
+  useEffect(() => {
+    if (!hasExpired || expired.current) return;
+    expired.current = true;
+    onExpire?.();
+  }, [hasExpired, onExpire]);
+
   return <TurnTimer seconds={secondsLeft} total={TURN_SECONDS} size={size} />;
 }
 
@@ -52,6 +68,13 @@ export function BattleScreen() {
   const start = useCallback(() => {
     setTimeout(() => dispatch({ type: "start" }), GO_HOLD_MS);
   }, []);
+
+  // at 0 a random open square is fired for you, like Game.fireRandomShot; the reducer ignores it off your turn
+  const autoFire = useCallback(() => {
+    const open = openSquares(myShots);
+    if (open.length === 0) return;
+    dispatch({ type: "timeout", key: open[Math.floor(Math.random() * open.length)] });
+  }, [myShots]);
 
   // Teddy fires one shot per tick; a hit keeps his turn, so this runs again on the new shot count
   useEffect(() => {
@@ -68,7 +91,8 @@ export function BattleScreen() {
 
   const started = phase !== "countdown";
   const yourTurn = phase === "you";
-  const turnKey = `${phase}-${state.turn}`;
+  // the clock restarts after every resolved shot (tech design), so a hit that keeps the turn resets it too
+  const turnKey = `${phase}-${state.turn}-${myShots.length + enemyShots.length}`;
   const turnFor = phase === "opponent" ? "opponent" : "you";
   const abilityState = yourTurn ? (armed ? "armed" : "ready") : "unavailable";
   const enemyAfloat = afloatCount(ENEMY_FLEET, myShots);
@@ -83,9 +107,12 @@ export function BattleScreen() {
         </Button>
       </ScreenBar>
 
-      {/* below 1200px: target board, then the HUD, then your own board; below 900px the HUD is one strip */}
-      <main className="flex flex-col gap-(--space-5) px-(--space-4) pt-(--space-4) pb-(--space-6) min-[900px]:gap-(--space-6) min-[900px]:pt-(--space-5) min-[1200px]:grid min-[1200px]:grid-cols-[auto_auto_var(--hud-width)] min-[1200px]:items-start min-[1200px]:px-(--space-6)">
-        <div className="order-1 max-[480px]:self-center min-[1200px]:order-none">
+      {/* phones: target board, the HUD strip, then your board.
+          900-1199px: both boards on one row, the HUD as a row of three panels underneath.
+          1200px+: boards and the HUD column side by side. justify-center keeps columns at their natural
+          width instead of stretching apart; mb-battle scales the boards with the window (components.css) */}
+      <main className="mb-battle flex flex-col gap-(--space-5) px-(--space-4) pt-(--space-4) pb-(--space-6) min-[900px]:grid min-[900px]:grid-cols-[auto_auto] min-[900px]:items-start min-[900px]:justify-center min-[900px]:gap-(--space-6) min-[900px]:pt-(--space-5) min-[1200px]:grid-cols-[auto_auto_var(--hud-width)] min-[1200px]:px-(--space-6)">
+        <div className="order-1 max-[480px]:self-center min-[900px]:order-none">
           <Board
             variant="target"
             title="Enemy waters"
@@ -99,7 +126,7 @@ export function BattleScreen() {
             onCellClick={(cell) => dispatch({ type: "fire", key: cell.key })}
           />
         </div>
-        <div className="order-3 grid content-start gap-(--space-3) max-[480px]:justify-items-center min-[1200px]:order-none">
+        <div className="order-3 grid content-start gap-(--space-3) max-[480px]:justify-items-center min-[900px]:order-none">
           <Board
             variant="own"
             title="Your waters"
@@ -132,10 +159,13 @@ export function BattleScreen() {
           <ShotLog opponentLabel={OPPONENT_NAME} entries={state.log.slice(-1)} />
         </section>
 
-        {/* tablets and desktop: the full HUD column */}
-        <div className="order-2 grid content-start gap-(--space-3) max-[899px]:hidden min-[900px]:max-[1199px]:grid-cols-2 min-[1200px]:order-none">
-          <TurnIndicator turn={turnFor} turnNumber={state.turn} opponentName={OPPONENT_NAME} />
-          <TurnClock key={turnKey} />
+        {/* tablets: a row of three panels under the boards; desktop: the HUD column on the right */}
+        <div className="order-2 grid content-start gap-(--space-3) max-[899px]:hidden min-[900px]:order-none min-[900px]:max-[1199px]:col-span-2 min-[900px]:max-[1199px]:grid-cols-3">
+          <div className="grid content-start gap-(--space-3)">
+            <TurnIndicator turn={turnFor} turnNumber={state.turn} opponentName={OPPONENT_NAME} />
+            {/* both clocks stay mounted (CSS hides one), so only this one auto-fires, or you'd lose two shots */}
+            <TurnClock key={turnKey} onExpire={autoFire} />
+          </div>
           <AbilityCard
             ability="line-scan"
             state={abilityState}
