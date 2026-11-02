@@ -78,9 +78,9 @@ else lobby.isJoinable()
   Game --> Lobby : state = PLACEMENT
   Lobby --> Server : guestPlayer : HumanPlayer
   Server -> Repo : saveLobby(lobby)
-  Server -> Net : broadcast(game)
-  Net --> HostUI : both players seated
-  Net --> GuestUI : both players seated
+  Repo -> Net : game_updated (database trigger on games)
+  Net --> HostUI : onBroadcast, onState(getMyState) : both players seated
+  Net --> GuestUI : onBroadcast, onState(getMyState) : both players seated
   Server --> GuestUI : lobby, sessionId
   deactivate Server
   GuestUI --> Guest : showScreen(Placement)

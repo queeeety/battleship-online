@@ -38,11 +38,20 @@ class UIManager <<boundary>> {
 
 class NetworkHandler <<boundary>> {
   - channel : Channel
-  + broadcast(g : Game) : void
+  + subscribe(code : String) : Promise<void>
+  + resync(code : String) : Promise<void>
 }
 
+class GameRepository <<persistence>> {
+  + loadGame(code : String) : Promise<LoadedGame | null>
+  + saveGame(g : Game, version : String) : Promise<String | null>
+  + runShotTransaction(code : String, shooter : Player, target : Coordinate) : Promise<Shot>
+}
+
+class StaleGameError <<exception>>
+
 class Server <<controller>> {
-  + fireShot(code : String, target : Coordinate) : Shot
+  + fireShot(code : unknown, target : unknown) : Promise<Shot>
 }
 
 class Game <<controller>> {
@@ -108,8 +117,10 @@ class Shot <<entity>> {
 
 ' ---------- Relationships exercised by this use case ----------
 UIManager ..> Server : fireShot >
-Server ..> Game : resolves in one transaction >
-Server --> NetworkHandler : broadcasts result >
+Server *-- GameRepository : runShotTransaction >
+GameRepository ..> Game : applies the rules, saves in one transaction >
+GameRepository ..> StaleGameError : throws on a clash >
+GameRepository ..> NetworkHandler : save triggers broadcast >
 NetworkHandler ..> UIManager : pushes to both clients >
 
 Game "1" o-- "2" Player : players >

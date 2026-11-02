@@ -36,7 +36,7 @@ class UIManager <<boundary>> {
 }
 
 class Server <<controller>> {
-  + placeShips(code : String, layout : Board) : boolean
+  + placeShips(code : unknown, layout : unknown) : Promise<boolean>
 }
 
 class Game <<controller>> {

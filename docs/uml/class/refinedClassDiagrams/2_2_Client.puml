@@ -76,12 +76,34 @@ class ResultScreen <<boundary>> {
 }
 class NetworkHandler <<boundary>> {
   - channel : Channel | null
-  + subscribe(code : string) : void
+  - privateChannel : Channel | null
+  - client : SupabaseClient
+  - listener : NetworkListener
+  - code : string | null
+  + subscribe(code : string) : Promise<void>
+  + unsubscribe() : Promise<void>
   + broadcast(g : Game) : void
-  + trackPresence(p : HumanPlayer) : void
+  + trackPresence(p : HumanPlayer) : Promise<void>
   + onDisconnect(p : HumanPlayer) : void
-  + sendPrivate(p : HumanPlayer, payload : PrivatePayload) : void
-  + resync(code : string) : void
+  + sendPrivate(p : HumanPlayer, payload : PrivatePayload, code? : string) : Promise<void>
+  + resync(code : string) : Promise<void>
+}
+interface NetworkListener {
+  + onBroadcast?(update : GameBroadcast) : void
+  + onState?(view : PlayerView) : void
+  + onError?(error : string) : void
+  + onPresence?(onlineSessionIds : string[]) : void
+  + onDisconnect?(p : HumanPlayer) : void
+  + onPrivate?(payload : WirePrivatePayload) : void
+}
+class GameBroadcast <<value>> {
+  + code : string
+  + game_state : string | null
+  + turn : 1 | 2 | null
+  + shots_p1 : {row, col, result}[]
+  + shots_p2 : {row, col, result}[]
+  + winner : 1 | 2 | null
+  + updated_at : string
 }
 
 class AudioManager <<boundary>> {
@@ -121,11 +143,13 @@ TurnBanner ..> Game : reads turn from >
 AbilityCard ..> Ability : displays >
 ResultScreen ..> GameResult : displays >
 NetworkHandler ..> UIManager : pushes updates >
+NetworkHandler "1" --> "1" NetworkListener : notifies >
+NetworkListener ..> GameBroadcast : receives >
 UIManager ..> Server : calls actions >
 UIManager "1" --> "0..1" AudioManager : plays sounds with >
 Timer ..> Server : claimTimeout() >
 NetworkHandler ..> HumanPlayer : tracks presence >
-Server "1" --> "1" NetworkHandler : broadcasts via >
+Server "1" --> "1" NetworkHandler : private messages via >
 note bottom of Timer
   Client-side countdown. On expiry the
   waiting client calls Server.claimTimeout();
@@ -134,10 +158,13 @@ note bottom of Timer
   gracePeriodElapsed in 6.2 and 6.3).
 end note
 note bottom of NetworkHandler
-  PrivatePayload is either a scan result
-  (cells) or the keep-or-replace ability
-  offer (current, drawn). Only the owner
-  receives it.
+  Broadcasts come from a database trigger on
+  games, so broadcast() is not used. Each one
+  goes to onBroadcast (fast path), then
+  resync() refetches getMyState for onState
+  (the truth), also after every reconnect.
+  PrivatePayload (scan result or ability
+  offer) goes to the owner's own channel.
 end note
 note bottom of AudioManager
   Optional. Does nothing while
