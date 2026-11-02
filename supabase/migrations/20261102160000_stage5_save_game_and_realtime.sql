@@ -1,13 +1,9 @@
 -- Stage 5: atomic game saves, the broadcast trigger and Realtime permissions.
---
--- The shot rules stay in the TypeScript classes (Game, Board). The server loads the game,
--- applies the rules, then saves the result here in one transaction, only if nobody changed
--- the game since it was loaded. A double-click or a second tab therefore can't land two shots.
+-- The rules run in the TS classes; save_game commits the result only if the game is unchanged.
 
 -- ---------------------------------------------------------------- save_game
 
--- Writes a whole game state at once. Returns the new updated_at (the next version),
--- or null if the row changed since p_expected_updated_at, in which case nothing is written.
+-- Returns the new version, or null (and writes nothing) if the row changed since loading.
 create function public.save_game(
     p_code text,
     p_expected_updated_at timestamptz,
@@ -42,7 +38,6 @@ begin
       and updated_at = p_expected_updated_at
     returning updated_at into v_version;
 
-    -- stale: someone else saved first (or the game is gone)
     if v_version is null then
         return null;
     end if;
@@ -63,9 +58,7 @@ grant execute on function public.save_game(text, timestamptz, jsonb, jsonb, json
 
 -- ---------------------------------------------------------------- broadcast trigger
 
--- After every change to a game, pushes its public state to the private channel game:{code}.
--- Fleets live in game_secrets and the ability columns are left out, so neither can leak.
--- The broadcast is a hint: clients refetch with getMyState for anything private.
+-- Pushes public state to game:{code}. Fleets and ability columns are never included.
 create function public.broadcast_game()
 returns trigger
 language plpgsql
@@ -113,10 +106,8 @@ create trigger games_broadcast
 
 -- ---------------------------------------------------------------- Realtime permissions
 --
--- Channels: game:{code} for both seated players, game:{code}:{userId} for one player only.
--- Players can listen and track presence, but never broadcast: only the server does that.
+-- game:{code} for both seated players, game:{code}:{userId} for one. Players can't broadcast.
 
--- true if the current user is seated in the game the channel topic belongs to
 create function public.is_seated_in_topic(p_topic text)
 returns boolean
 language sql
@@ -130,7 +121,6 @@ as $$
         where split_part(p_topic, ':', 1) = 'game'
           and split_part(p_topic, ':', 2) = g.code
           and (select auth.uid()) in (g.player1_id, g.player2_id)
-          -- a third part, if present, must be the caller's own user ID
           and (split_part(p_topic, ':', 3) = '' or split_part(p_topic, ':', 3) = (select auth.uid())::text)
     );
 $$;

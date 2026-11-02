@@ -13,15 +13,11 @@ export type PrivatePayload =
     | { kind: "scanResult"; cells: Coordinate[] }
     | { kind: "abilityOffer"; current: Ability; drawn: Ability };
 
-/** PrivatePayload as plain JSON, the form it travels in. */
 export type WirePrivatePayload =
     | { kind: "scanResult"; cells: { row: number; col: number }[] }
     | { kind: "abilityOffer"; current: string; drawn: string };
 
-/**
- * The public state the database trigger broadcasts after every write (see the stage 5 migration).
- * Enums are their database text, e.g. game_state "in_progress", shot result "hit".
- */
+/** What the database trigger broadcasts. Enums are database text, e.g. "in_progress". */
 export interface GameBroadcast
 {
     code: string;
@@ -47,12 +43,11 @@ export interface GameBroadcast
     updated_at: string;
 }
 
-/** What the screens get told. Every callback is optional. */
 export interface NetworkListener
 {
-    // fast path: the broadcast as it arrives, e.g. to animate the last shot straight away
+    // fast path, e.g. to animate a shot straight away
     onBroadcast?(update: GameBroadcast): void;
-    // the truth: refetched with getMyState after every broadcast and reconnect
+    // the truth, refetched after every broadcast and reconnect
     onState?(view: PlayerView): void;
     onError?(error: string): void;
     onPresence?(onlineSessionIds: string[]): void;
@@ -76,7 +71,6 @@ export class NetworkHandler
     private fetchState: FetchState;
     private code: string | null;
 
-    // the browser passes its client; tests pass fakes
     constructor(client: SupabaseClient, listener: NetworkListener = {}, fetchState: FetchState = getMyState)
     {
         this.channel = null;
@@ -87,11 +81,7 @@ export class NetworkHandler
         this.code = null;
     }
 
-    /**
-     * Joins game:{code} and this player's private channel. Each broadcast goes to onBroadcast
-     * straight away, then every broadcast and (re)connect triggers a resync for onState,
-     * so a dropped message never leaves the screen stale.
-     */
+    /** Every broadcast and (re)connect triggers a resync, so a dropped message never leaves the screen stale. */
     public async subscribe(code: string): Promise<void>
     {
         await this.unsubscribe();
@@ -121,7 +111,6 @@ export class NetworkHandler
         }
     }
 
-    /** Leaves both channels, e.g. when the screen closes. */
     public async unsubscribe(): Promise<void>
     {
         for (const ch of [this.channel, this.privateChannel])
@@ -132,26 +121,24 @@ export class NetworkHandler
         this.privateChannel = null;
     }
 
-    /** Not needed: the database trigger broadcasts after every save, so nothing can forget to. */
+    /** The database trigger broadcasts after every save instead. */
     public broadcast(g: Game): void
     {
         throw new Error(`Game ${g.getId()} is broadcast by the database trigger, not by NetworkHandler`);
     }
 
-    /** Announces this player on the game channel so the other one can see they're connected. */
     public async trackPresence(p: HumanPlayer): Promise<void>
     {
         if (!this.channel) throw new Error("Subscribe before tracking presence");
         await this.channel.track({ sessionId: p.getSessionId(), name: p.getName() });
     }
 
-    /** Called when a player's presence drops; passes it on to the screen. */
     public onDisconnect(p: HumanPlayer): void
     {
         this.listener.onDisconnect?.(p);
     }
 
-    /** Server side: sends a payload that only player p receives, on game:{code}:{sessionId}. */
+    /** Server side, on game:{code}:{sessionId}. */
     public async sendPrivate(p: HumanPlayer, payload: PrivatePayload, code: string | null = this.code): Promise<void>
     {
         if (!code) throw new Error("No game code to send on");
@@ -163,7 +150,6 @@ export class NetworkHandler
         if (!result.success) throw new Error(`Private message failed: ${result.error}`);
     }
 
-    /** Refetches this player's view with getMyState and hands it to the screen. */
     public async resync(code: string): Promise<void>
     {
         const result = await this.fetchState(code);

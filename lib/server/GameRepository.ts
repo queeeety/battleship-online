@@ -27,7 +27,6 @@ interface LobbyRow
     created_at: string;
 }
 
-/** The games columns a running game uses. */
 interface GameRow
 {
     code: string;
@@ -56,7 +55,6 @@ interface GameRow
     updated_at: string;
 }
 
-/** One entry in shots_p1 / shots_p2. */
 interface SavedShot
 {
     row: number;
@@ -66,14 +64,14 @@ interface SavedShot
     sunkShipName?: string | null;
 }
 
-/** A loaded game plus its version, which saveGame needs to detect a clash. */
+/** A game plus its version, for saveGame's clash check. */
 export interface LoadedGame
 {
     game: Game;
     version: string;
 }
 
-/** Someone else saved the game first, e.g. a double-click. The client should resync. */
+/** Someone saved first (e.g. a double-click); the client should resync. */
 export class StaleGameError extends Error
 {
     constructor(code: string)
@@ -83,7 +81,7 @@ export class StaleGameError extends Error
     }
 }
 
-/** The rules refused the move, e.g. not your turn or a square already fired at. */
+/** The rules refused the move. */
 export class MoveRefusedError extends Error
 {
     constructor(message: string)
@@ -132,7 +130,6 @@ export class GameRepository
         [EndReason.OPPONENT_DISCONNECTED, "opponent_disconnected"]
     ]);
 
-    // ability display names in the classes, keys in the database
     private static readonly ABILITY = new Map<string, string>([
         ["Double Shot", "double_shot"],
         ["Radar Sweep", "radar_sweep"],
@@ -212,10 +209,7 @@ export class GameRepository
         return data?.code ?? null;
     }
 
-    /**
-     * The game with this code and its version (for saveGame), or null if it hasn't started yet.
-     * Rebuilt through Game.fromJSON, so the server runs exactly the same rules as AI mode.
-     */
+    /** Null until the game starts. Rebuilt with Game.fromJSON, so the rules match AI mode. */
     public async loadGame(code: string): Promise<LoadedGame | null>
     {
         const { data: row, error } = await this.client
@@ -264,7 +258,6 @@ export class GameRepository
             doubleShotActive: row.double_shot_active
         });
 
-        // fromJSON doesn't know about disconnects, so put the forfeit clocks back
         [row.disconnected_at_p1, row.disconnected_at_p2].forEach((at, i) =>
         {
             if (at) (game.getPlayers()[i] as HumanPlayer).disconnect(new Date(at));
@@ -273,10 +266,7 @@ export class GameRepository
         return { game, version: row.updated_at };
     }
 
-    /**
-     * Saves the whole game in one transaction via save_game().
-     * Returns the new version, or null if someone saved first; then nothing is written.
-     */
+    /** One transaction via save_game(). Null if someone saved first; nothing is then written. */
     public async saveGame(g: Game, version: string): Promise<string | null>
     {
         const saved = g.toJSON();
@@ -313,7 +303,6 @@ export class GameRepository
         return (data as string | null) ?? null;
     }
 
-    /** The fleet of player p in this game. */
     public async loadFleet(code: string, p: Player): Promise<Board>
     {
         const loaded = await this.loadGame(code);
@@ -322,7 +311,6 @@ export class GameRepository
         return own.getBoard();
     }
 
-    /** Places p's fleet and saves it. False if the game changed in the meantime. */
     public async saveFleet(code: string, p: Player, b: Board): Promise<boolean>
     {
         const loaded = await this.loadGame(code);
@@ -332,10 +320,7 @@ export class GameRepository
         return (await this.saveGame(loaded.game, loaded.version)) !== null;
     }
 
-    /**
-     * One shot as one transaction: load, apply the rules, save if nothing changed.
-     * A second request against the same version (double-click, second tab) throws StaleGameError.
-     */
+    /** Load, apply the rules, save. A double-click or second tab gets StaleGameError. */
     public async runShotTransaction(code: string, shooter: Player, target: Coordinate): Promise<Shot>
     {
         const loaded = await this.loadGame(code);

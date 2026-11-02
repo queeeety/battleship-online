@@ -12,7 +12,7 @@ import { InvalidRequestError, RequestValidator } from "../server/RequestValidato
 import { SessionManager } from "../server/SessionManager";
 import { RateLimiter } from "../server/RateLimiter";
 
-/** The caller has no seat in this game (or no session, or a malformed code). */
+/** The caller has no seat in this game. */
 export class NotSeatedError extends Error
 {
     constructor()
@@ -22,7 +22,6 @@ export class NotSeatedError extends Error
     }
 }
 
-/** A shot as the screens see it. */
 export interface ShotView
 {
     row: number;
@@ -31,7 +30,7 @@ export interface ShotView
     sunkShipName: string | null;
 }
 
-/** What getMyState returns: only what this player is allowed to see. */
+/** getMyState's result: only what this player may see. */
 export interface PlayerView
 {
     code: string;
@@ -161,10 +160,7 @@ export class Server
         return { lobby, player: guest };
     }
 
-    /**
-     * Sets the caller's fleet and marks them ready. When both are ready, the battle starts
-     * with a random first player. Retried if the other player saved at the same moment.
-     */
+    /** Places the fleet; the battle starts when both are ready. Retried on a clash. */
     public async placeShips(code: unknown, layout: unknown): Promise<boolean>
     {
         const { lobbyCode, seat } = await this.seatedCaller(code);
@@ -183,10 +179,7 @@ export class Server
         });
     }
 
-    /**
-     * Fires at the opponent. The rules decide the result; the save only goes through if
-     * nothing changed since loading, so a double-click can't fire twice (StaleGameError).
-     */
+    /** Not retried, so a double-click can't fire twice. */
     public async fireShot(code: unknown, target: unknown): Promise<Shot>
     {
         const { lobbyCode, player } = await this.seatedCaller(code);
@@ -196,7 +189,6 @@ export class Server
 
     public useAbility(code: string, a: Ability, target: Coordinate): void {}
 
-    /** Ends the game with the caller as the loser. Does nothing if it's already over. */
     public async forfeit(code: unknown): Promise<void>
     {
         const { lobbyCode, seat } = await this.seatedCaller(code);
@@ -211,10 +203,7 @@ export class Server
 
     public requestRematch(code: string, accept: boolean): RematchRequest { throw new Error("not implemented"); }
 
-    /**
-     * Everything the caller may see: public state, their own board in full, and the opponent's
-     * board as shots only. The opponent's fleet is revealed only once the game is finished.
-     */
+    /** Own board in full, opponent's as shots only; their fleet is revealed once finished. */
     public async getMyState(code: unknown): Promise<PlayerView>
     {
         const { lobby, seat } = await this.seatedCaller(code);
@@ -271,7 +260,6 @@ export class Server
         }
     }
 
-    /** The caller's lobby, seat and player, or NotSeatedError if they aren't in this game. */
     private async seatedCaller(code: unknown): Promise<{ lobbyCode: string; lobby: Lobby; seat: 1 | 2; player: HumanPlayer }>
     {
         const sessionId = await this.sessions.currentSessionId();
@@ -297,7 +285,7 @@ export class Server
         return loaded;
     }
 
-    /** Re-runs a load-change-save step if another save got in first (fn returns false). */
+    // fn returns false when another save got in first
     private async retryIfStale(code: string, fn: () => Promise<boolean>): Promise<true>
     {
         for (let i = 0; i < Server.MAX_SAVE_TRIES; i++)
@@ -352,7 +340,6 @@ export class Server
             offeredAbility: me.getOfferedAbility()?.getName() ?? null,
             winner: winner === null ? null : (players.indexOf(winner) + 1) as 1 | 2,
             endReason: game.getEndReason(),
-            // only once it's over, so the result screen can reveal the layout
             opponentBoard: finished ? opponent.getBoard().toSnapshot() : null,
             result: result && {
                 won: result.getDidWin(), shotsFired: result.getShotsFired(),
