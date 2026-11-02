@@ -46,7 +46,7 @@ const view = { code: "ABC234", seat: 1 } as PlayerView;
 function setup(me: string | null = "me")
 {
     const rt = fakeRealtime(me);
-    const listener = { onState: vi.fn(), onError: vi.fn(), onPresence: vi.fn(), onDisconnect: vi.fn(), onPrivate: vi.fn() };
+    const listener = { onBroadcast: vi.fn(), onState: vi.fn(), onError: vi.fn(), onPresence: vi.fn(), onDisconnect: vi.fn(), onPrivate: vi.fn() };
     const fetchState = vi.fn().mockResolvedValue({ ok: true, data: view });
     return { ...rt, listener, fetchState, net: new NetworkHandler(rt.client, listener, fetchState) };
 }
@@ -80,6 +80,17 @@ describe("NetworkHandler.subscribe", () =>
         emit("game:ABC234", "broadcast:game_updated", { payload: { turn: 2 } });
         await vi.waitFor(() => expect(fetchState).toHaveBeenCalledWith("ABC234"));
         expect(listener.onState).toHaveBeenCalledWith(view);
+    });
+
+    it("hands the broadcast to the screen straight away, before the refetch finishes", async () =>
+    {
+        const { net, emit, fetchState, listener } = setup();
+        fetchState.mockReturnValueOnce(new Promise(() => {}));   // a refetch that never finishes
+        await net.subscribe("ABC234");
+        const update = { code: "ABC234", turn: 2, shots_p1: [{ row: 4, col: 4, result: "miss" }] };
+        emit("game:ABC234", "broadcast:game_updated", { payload: update });
+        expect(listener.onBroadcast).toHaveBeenCalledWith(update);
+        expect(listener.onState).not.toHaveBeenCalled();
     });
 
     it("skips the private channel when there's no session", async () =>

@@ -18,9 +18,41 @@ export type WirePrivatePayload =
     | { kind: "scanResult"; cells: { row: number; col: number }[] }
     | { kind: "abilityOffer"; current: string; drawn: string };
 
+/**
+ * The public state the database trigger broadcasts after every write (see the stage 5 migration).
+ * Enums are their database text, e.g. game_state "in_progress", shot result "hit".
+ */
+export interface GameBroadcast
+{
+    code: string;
+    lobby_status: string;
+    game_type: string;
+    game_state: string | null;
+    player1_name: string;
+    player2_name: string | null;
+    ready_p1: boolean;
+    ready_p2: boolean;
+    disconnected_at_p1: string | null;
+    disconnected_at_p2: string | null;
+    turn: 1 | 2 | null;
+    turn_started_at: string | null;
+    double_shot_active: boolean;
+    winner: 1 | 2 | null;
+    end_reason: string | null;
+    finished_at: string | null;
+    shots_p1: { row: number; col: number; result: string; firedAt?: string; sunkShipName?: string | null }[];
+    shots_p2: { row: number; col: number; result: string; firedAt?: string; sunkShipName?: string | null }[];
+    rematch_by: 1 | 2 | null;
+    rematch_status: string;
+    updated_at: string;
+}
+
 /** What the screens get told. Every callback is optional. */
 export interface NetworkListener
 {
+    // fast path: the broadcast as it arrives, e.g. to animate the last shot straight away
+    onBroadcast?(update: GameBroadcast): void;
+    // the truth: refetched with getMyState after every broadcast and reconnect
     onState?(view: PlayerView): void;
     onError?(error: string): void;
     onPresence?(onlineSessionIds: string[]): void;
@@ -56,8 +88,9 @@ export class NetworkHandler
     }
 
     /**
-     * Joins game:{code} and this player's private channel. Every broadcast, and every
-     * (re)connect, triggers a resync, so a dropped message never leaves the screen stale.
+     * Joins game:{code} and this player's private channel. Each broadcast goes to onBroadcast
+     * straight away, then every broadcast and (re)connect triggers a resync for onState,
+     * so a dropped message never leaves the screen stale.
      */
     public async subscribe(code: string): Promise<void>
     {
@@ -66,7 +99,11 @@ export class NetworkHandler
         await this.client.realtime.setAuth();
 
         this.channel = this.client.channel(`game:${code}`, { config: { private: true } })
-            .on("broadcast", { event: "game_updated" }, () => { void this.resync(code); })
+            .on("broadcast", { event: "game_updated" }, ({ payload }) =>
+            {
+                this.listener.onBroadcast?.(payload as GameBroadcast);
+                void this.resync(code);
+            })
             .on("presence", { event: "sync" }, () => this.reportPresence())
             .on<{ sessionId: string; name: string }>("presence", { event: "leave" }, ({ leftPresences }) =>
             {
