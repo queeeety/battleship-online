@@ -1,10 +1,9 @@
-
-
 import { LobbyStatus } from "../enums";
 import type { GameType } from "../enums";
 import { Game } from "./Game";
-import type { Player } from "../entities/players";
-import { LOBBY_CODE_CHARS, LOBBY_CODE_LENGTH } from "../config";
+import { Board } from "../entities/board";
+import { HumanPlayer } from "../entities/players";
+import { LOBBY_CODE_CHARS, LOBBY_CODE_LENGTH, MAX_PLAYERS } from "../config";
 
 /**
  * A private room that two players join with a 6 character code.
@@ -19,7 +18,7 @@ export class Lobby
     private status: LobbyStatus;
     private createdAt: Date;
     private gameType: GameType;
-    private players: Player[];
+    private players: HumanPlayer[];
     private game: Game;
 
     constructor(gameType: GameType, code: string = Lobby.generateCode())
@@ -32,21 +31,72 @@ export class Lobby
         this.game = new Game(gameType);
     }
 
-    public static generateCode(): string { return ""; }
+    /** Rebuilds a lobby from the database. Players must be in seat order. */
+    public static restore(code: string, gameType: GameType, status: LobbyStatus, createdAt: Date, players: HumanPlayer[]): Lobby
+    {
+        const lobby = new Lobby(gameType, code);
+        lobby.status = status;
+        lobby.createdAt = createdAt;
+        for (const p of players)
+        {
+            lobby.players.push(p);
+            lobby.game.addPlayer(p);
+        }
+        return lobby;
+    }
 
-    public static findByCode(code: string): Lobby | null { return null; }
+    public static generateCode(): string
+    {
+        const picks = crypto.getRandomValues(new Uint32Array(Lobby.CODE_LENGTH));
+        return Array.from(picks, n => Lobby.CODE_CHARS[n % Lobby.CODE_CHARS.length]).join("");
+    }
 
-    public join(name: string): Player { throw new Error("not implemented"); }
+    /** Unused: the server is stateless, so use GameRepository.loadLobby. */
+    public static findByCode(code: string): Lobby | null
+    {
+        throw new Error(`Lobbies live in the database: use GameRepository.loadLobby("${code}")`);
+    }
 
-    public isFull(): boolean { return false; }
+    /** First join is the host (seat 1); the second fills the lobby and starts placement. */
+    public join(name: string, sessionId: string): HumanPlayer
+    {
+        if (!this.isJoinable()) throw new Error("This lobby can't be joined");
+        if (this.seatOf(sessionId) !== null) throw new Error("This session already has a seat in the lobby");
 
-    public isJoinable(): boolean { return false; }
+        const player = new HumanPlayer(name, sessionId);
+        this.players.push(player);
+        this.game.addPlayer(player);
 
-    public shareLink(): string { return ""; }
+        if (this.isFull()) this.status = LobbyStatus.IN_PROGRESS;
+        return player;
+    }
 
-    public reset(): void {}
+    public isFull(): boolean { return this.players.length >= MAX_PLAYERS; }
 
-    public abandon(): void {}
+    public isJoinable(): boolean { return this.status === LobbyStatus.WAITING && !this.isFull(); }
+
+    public shareLink(): string { return `/game/${this.code}`; }
+
+    /** Rematch: same code and players, fresh game and boards. */
+    public reset(): void
+    {
+        this.game = new Game(this.gameType);
+        for (const p of this.players)
+        {
+            p.placeFleet(new Board());
+            p.clearAbilities();
+            this.game.addPlayer(p);
+        }
+        this.status = LobbyStatus.IN_PROGRESS;
+    }
+
+    public abandon(): void { this.status = LobbyStatus.ABANDONED; }
+
+    public seatOf(sessionId: string): 1 | 2 | null
+    {
+        const index = this.players.findIndex(p => p.getSessionId() === sessionId);
+        return index === 0 ? 1 : index === 1 ? 2 : null;
+    }
 
     public getCode(): string { return this.code; }
 
@@ -54,7 +104,9 @@ export class Lobby
 
     public getGameType(): GameType { return this.gameType; }
 
+    public getCreatedAt(): Date { return this.createdAt; }
+
+    public getPlayers(): HumanPlayer[] { return this.players; }
+
     public getGame(): Game { return this.game; }
 }
-
-

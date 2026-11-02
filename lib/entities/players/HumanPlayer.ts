@@ -22,13 +22,32 @@ export class HumanPlayer extends Player
         this.disconnectedAt = null;
     }
 
-    public chooseTarget(): Coordinate { throw new Error("not implemented"); }
+    // a human's target comes from their click
+    public chooseTarget(): Coordinate
+    {
+        throw new Error("A human player's target comes from their click, not from chooseTarget()");
+    }
 
-    public disconnect(): void {}
+    /** Starts the forfeit clock. GameRepository passes the saved time when rebuilding. */
+    public disconnect(at: Date = new Date()): void
+    {
+        this.connected = false;
+        this.disconnectedAt = at;
+    }
 
-    public reconnect(): void {}
+    public reconnect(): void
+    {
+        this.connected = true;
+        this.disconnectedAt = null;
+    }
 
-    public hasExceededGracePeriod(): boolean { return false; }
+    public hasExceededGracePeriod(now: Date = new Date()): boolean
+    {
+        if (this.connected || this.disconnectedAt === null) return false;
+        return now.getTime() - this.disconnectedAt.getTime() > HumanPlayer.GRACE_PERIOD_MS;
+    }
+
+    public getDisconnectedAt(): Date | null { return this.disconnectedAt; }
 
     public getSessionId(): string { return this.sessionId; }
 
