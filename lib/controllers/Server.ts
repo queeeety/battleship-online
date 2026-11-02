@@ -19,12 +19,18 @@ export class Server
     private sessions: SessionManager;
     private limiter: RateLimiter;
 
-    constructor()
+    constructor(sessions: SessionManager)
     {
         this.repo = new GameRepository();
         this.validator = new RequestValidator();
-        this.sessions = new SessionManager();
+        this.sessions = sessions;
         this.limiter = new RateLimiter();
+    }
+
+    /** Builds a Server for the current request. Each request gets its own, because the session belongs to one player. */
+    public static async create(): Promise<Server>
+    {
+        return new Server(await SessionManager.create());
     }
 
     public createLobby(name: string, type: GameType): Lobby { throw new Error("not implemented"); }
