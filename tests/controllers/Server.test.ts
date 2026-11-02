@@ -1,10 +1,14 @@
 import { describe, it, expect, vi } from "vitest";
-import { Server, JoinRefusedError, RateLimitedError } from "../../lib/controllers/Server";
+import { Server, JoinRefusedError, RateLimitedError, NotSeatedError } from "../../lib/controllers/Server";
 import { Lobby } from "../../lib/controllers/Lobby";
 import type { SessionManager } from "../../lib/server/SessionManager";
-import type { GameRepository } from "../../lib/server/GameRepository";
+import { GameRepository, MoveRefusedError } from "../../lib/server/GameRepository";
+import { InvalidRequestError } from "../../lib/server/RequestValidator";
+import { Board } from "../../lib/entities/board";
+import { placeKnownFleet } from "../helpers";
+import { fakeSupabase } from "../server/fakeSupabase";
 import type { RateLimiter } from "../../lib/server/RateLimiter";
-import { GameState, GameType, JoinError, LobbyStatus } from "../../lib/enums";
+import { EndReason, GameState, GameType, JoinError, LobbyStatus, ShotResult } from "../../lib/enums";
 
 /**
  * Builds a Server around fakes: `caller` is whose cookie the request carries (null = first visit),
@@ -215,5 +219,203 @@ describe("Server.restoreSeat", () =>
         const { server, lobbies } = setup("stranger");
         hostedLobby(lobbies);
         expect(await server.restoreSeat()).toBeNull();
+    });
+});
+
+// ---------------------------------------------------------------- battle (real GameRepository, fake database)
+
+/**
+ * A host and a guest seated in one lobby, with the real GameRepository on a fake database.
+ * `as(who)` returns a Server acting as that player, like a request carrying their cookie.
+ */
+async function battle()
+{
+    const db = fakeSupabase();
+    const repo = new GameRepository(db.client);
+    const limiter = { allow: vi.fn().mockResolvedValue(true) } as unknown as RateLimiter;
+    const as = (who: string | null) => new Server({
+        currentSessionId: vi.fn().mockResolvedValue(who),
+        signInAnonymously: vi.fn().mockResolvedValue(who)
+    } as unknown as SessionManager, repo, limiter);
+
+    const lobby = await as("host").createLobby("Cian", GameType.ORIGINAL);
+    const code = lobby.getCode();
+    await as("guest").joinLobby(code, "Aoife");
+    return { db, as, code };
+}
+
+/** A legal layout: the shared known fleet, or a random one. */
+function layout(random = false)
+{
+    const board = random ? new Board() : placeKnownFleet();
+    if (random) board.placeFleetRandomly();
+    return { ships: board.toSnapshot().ships };
+}
+
+/** Both fleets placed; returns who moves first and who waits. */
+async function startedBattle()
+{
+    const setup = await battle();
+    await setup.as("host").placeShips(setup.code, layout());
+    await setup.as("guest").placeShips(setup.code, layout());
+    const hostFirst = (await setup.as("host").getMyState(setup.code)).yourTurn;
+    return { ...setup, first: hostFirst ? "host" : "guest", second: hostFirst ? "guest" : "host" };
+}
+
+describe("Server.placeShips", () =>
+{
+    it("marks the caller ready and waits for the other player", async () =>
+    {
+        const { as, code } = await battle();
+        await as("host").placeShips(code, layout());
+
+        const view = await as("host").getMyState(code);
+        expect(view.you.ready).toBe(true);
+        expect(view.opponent?.ready).toBe(false);
+        expect(view.gameState).toBe(GameState.PLACEMENT);
+        expect(view.yourBoard.ships).toHaveLength(5);
+    });
+
+    it("starts the battle once both fleets are placed, with exactly one player to move", async () =>
+    {
+        const { as, code } = await startedBattle();
+        const host = await as("host").getMyState(code);
+        const guest = await as("guest").getMyState(code);
+        expect(host.gameState).toBe(GameState.IN_PROGRESS);
+        expect(host.yourTurn).not.toBe(guest.yourTurn);
+    });
+
+    it("refuses an illegal layout", async () =>
+    {
+        const { as, code } = await battle();
+        const bad = layout();
+        bad.ships.pop();
+        await expect(as("host").placeShips(code, bad)).rejects.toBeInstanceOf(InvalidRequestError);
+    });
+
+    it("refuses before a guest has joined", async () =>
+    {
+        const { as } = await battle();
+        const alone = await as("solo").createLobby("Solo", GameType.ORIGINAL);
+        await expect(as("solo").placeShips(alone.getCode(), layout())).rejects.toBeInstanceOf(MoveRefusedError);
+    });
+
+    it("refuses someone who isn't seated", async () =>
+    {
+        const { as, code } = await battle();
+        await expect(as("stranger").placeShips(code, layout())).rejects.toBeInstanceOf(NotSeatedError);
+        await expect(as(null).placeShips(code, layout())).rejects.toBeInstanceOf(NotSeatedError);
+    });
+});
+
+describe("Server.fireShot", () =>
+{
+    it("resolves a hit for the player to move, who keeps the turn", async () =>
+    {
+        const { as, code, first } = await startedBattle();
+        const shot = await as(first).fireShot(code, { row: 0, col: 0 });
+        expect(shot.getResult()).toBe(ShotResult.HIT);
+        expect((await as(first).getMyState(code)).yourTurn).toBe(true);
+    });
+
+    it("passes the turn on a miss", async () =>
+    {
+        const { as, code, first, second } = await startedBattle();
+        await as(first).fireShot(code, { row: 9, col: 9 });
+        expect((await as(second).getMyState(code)).yourTurn).toBe(true);
+    });
+
+    it("refuses the player who isn't on turn", async () =>
+    {
+        const { as, code, second } = await startedBattle();
+        await expect(as(second).fireShot(code, { row: 0, col: 0 })).rejects.toBeInstanceOf(MoveRefusedError);
+    });
+
+    it("refuses a square already fired at", async () =>
+    {
+        const { as, code, first } = await startedBattle();
+        await as(first).fireShot(code, { row: 0, col: 0 });
+        await expect(as(first).fireShot(code, { row: 0, col: 0 })).rejects.toBeInstanceOf(MoveRefusedError);
+    });
+
+    it("refuses a square off the board", async () =>
+    {
+        const { as, code, first } = await startedBattle();
+        await expect(as(first).fireShot(code, { row: 10, col: 0 })).rejects.toBeInstanceOf(InvalidRequestError);
+    });
+
+    it("lands only one shot when the same click arrives twice at once", async () =>
+    {
+        const { as, code, first } = await startedBattle();
+        const results = await Promise.allSettled([
+            as(first).fireShot(code, { row: 9, col: 9 }),
+            as(first).fireShot(code, { row: 9, col: 9 })
+        ]);
+        expect(results.filter(r => r.status === "fulfilled")).toHaveLength(1);
+        expect((await as(first).getMyState(code)).yourShots).toHaveLength(1);
+    });
+});
+
+describe("Server.getMyState", () =>
+{
+    it("shows your own fleet but never the opponent's while the game is running", async () =>
+    {
+        const { as, code } = await battle();
+        const hostLayout = layout(true);
+        await as("host").placeShips(code, hostLayout);
+        await as("guest").placeShips(code, layout(true));
+
+        const view = await as("host").getMyState(code);
+        expect(view.yourBoard.ships).toEqual(hostLayout.ships);
+        expect(view.opponentBoard).toBeNull();
+        expect(view.result).toBeNull();
+    });
+
+    it("shows the opponent's shots at you and yours at them", async () =>
+    {
+        const { as, code, first, second } = await startedBattle();
+        await as(first).fireShot(code, { row: 9, col: 9 });
+
+        expect((await as(first).getMyState(code)).yourShots).toEqual([{ row: 9, col: 9, result: ShotResult.MISS, sunkShipName: null }]);
+        expect((await as(second).getMyState(code)).opponentShots).toHaveLength(1);
+    });
+
+    it("works while the lobby is still waiting for a guest", async () =>
+    {
+        const { as } = await battle();
+        const alone = await as("solo").createLobby("Solo", GameType.ORIGINAL);
+        const view = await as("solo").getMyState(alone.getCode());
+        expect(view.gameState).toBeNull();
+        expect(view.opponent).toBeNull();
+        expect(view.seat).toBe(1);
+    });
+
+    it("refuses someone who isn't seated", async () =>
+    {
+        const { as, code } = await battle();
+        await expect(as("stranger").getMyState(code)).rejects.toBeInstanceOf(NotSeatedError);
+    });
+});
+
+describe("Server.forfeit", () =>
+{
+    it("ends the game for the other player and reveals both fleets", async () =>
+    {
+        const { as, code, first, second } = await startedBattle();
+        await as(first).forfeit(code);
+
+        const winnerView = await as(second).getMyState(code);
+        expect(winnerView.gameState).toBe(GameState.FINISHED);
+        expect(winnerView.endReason).toBe(EndReason.OPPONENT_FORFEIT);
+        expect(winnerView.result?.won).toBe(true);
+        expect(winnerView.opponentBoard?.ships).toHaveLength(5);
+        expect(winnerView.lobbyStatus).toBe(LobbyStatus.FINISHED);
+    });
+
+    it("does nothing the second time", async () =>
+    {
+        const { as, code, first } = await startedBattle();
+        await as(first).forfeit(code);
+        await expect(as(first).forfeit(code)).resolves.toBeUndefined();
     });
 });
