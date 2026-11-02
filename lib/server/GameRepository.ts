@@ -83,6 +83,16 @@ export class StaleGameError extends Error
     }
 }
 
+/** The rules refused the move, e.g. not your turn or a square already fired at. */
+export class MoveRefusedError extends Error
+{
+    constructor(message: string)
+    {
+        super(message);
+        this.name = "MoveRefusedError";
+    }
+}
+
 /**
  * Loads and saves lobbies, games and fleets in the database.
  * Fleets live in game_secrets, which only the server can read.
@@ -333,7 +343,15 @@ export class GameRepository
         const own = loaded.game.getPlayers().find(q => q.getId() === shooter.getId());
         if (!own) throw new Error(`${shooter.getName()} isn't in game ${code}`);
 
-        const shot = loaded.game.fireShot(own, target);
+        let shot: Shot;
+        try
+        {
+            shot = loaded.game.fireShot(own, target);
+        }
+        catch (e)
+        {
+            throw new MoveRefusedError(e instanceof Error ? e.message : "Move refused");
+        }
         if (await this.saveGame(loaded.game, loaded.version) === null) throw new StaleGameError(code);
         return shot;
     }
