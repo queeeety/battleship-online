@@ -22,13 +22,37 @@ export class HumanPlayer extends Player
         this.disconnectedAt = null;
     }
 
-    public chooseTarget(): Coordinate { throw new Error("not implemented"); }
+    /** A person picks their own square by clicking, so this is never asked of a human. */
+    public chooseTarget(): Coordinate
+    {
+        throw new Error("A human player's target comes from their click, not from chooseTarget()");
+    }
 
-    public disconnect(): void {}
+    /**
+     * Marks the player as gone and starts the 60-second forfeit clock.
+     * `at` defaults to now; GameRepository passes the saved time when it rebuilds the player.
+     */
+    public disconnect(at: Date = new Date()): void
+    {
+        this.connected = false;
+        this.disconnectedAt = at;
+    }
 
-    public reconnect(): void {}
+    /** Back before the grace period ran out: the forfeit clock stops. */
+    public reconnect(): void
+    {
+        this.connected = true;
+        this.disconnectedAt = null;
+    }
 
-    public hasExceededGracePeriod(): boolean { return false; }
+    /** True once a disconnected player has been gone longer than the grace period. */
+    public hasExceededGracePeriod(now: Date = new Date()): boolean
+    {
+        if (this.connected || this.disconnectedAt === null) return false;
+        return now.getTime() - this.disconnectedAt.getTime() > HumanPlayer.GRACE_PERIOD_MS;
+    }
+
+    public getDisconnectedAt(): Date | null { return this.disconnectedAt; }
 
     public getSessionId(): string { return this.sessionId; }
 
