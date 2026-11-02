@@ -3,10 +3,7 @@ import { Board, Coordinate } from "../entities/board";
 import { BOARD_SIZE, LOBBY_CODE_CHARS, LOBBY_CODE_LENGTH, PLAYER_NAME_MAX_LENGTH } from "../config";
 import { GameType } from "../enums";
 
-/**
- * Thrown when a request fails validation. `field` says which input was wrong,
- * so Server can turn it into the right error for the player (e.g. a bad name → JoinError.INVALID_NAME).
- */
+/** Thrown on invalid input. `field` lets Server map it to the right JoinError. */
 export class InvalidRequestError extends Error
 {
     public readonly field: "code" | "name" | "coordinate" | "layout" | "gameType";
@@ -21,8 +18,7 @@ export class InvalidRequestError extends Error
 
 /**
  * Checks the shape of every request before the game rules see it.
- * Anything from the browser is untrusted, so each parse method either returns
- * a clean value or throws an InvalidRequestError. It never passes bad data on.
+ * Each parse method returns a clean value or throws InvalidRequestError.
  */
 export class RequestValidator
 {
@@ -36,18 +32,16 @@ export class RequestValidator
     {
         const square = z.int().min(0).max(BOARD_SIZE - 1);
 
-        // trimmed and upper-cased first, so " 4f7k2m " still works when typed by hand
         this.codeSchema = z.string().trim().toUpperCase()
             .regex(new RegExp(`^[${LOBBY_CODE_CHARS}]{${LOBBY_CODE_LENGTH}}$`));
 
-        // missing or blank → null, meaning "give this player a random name"
+        // blank or missing → null (random name)
         this.nameSchema = z.string().trim().max(PLAYER_NAME_MAX_LENGTH).nullish()
             .transform(name => name ? name : null);
 
-        // the same {row, col} shape the database stores, zero-based
         this.coordinateSchema = z.object({ row: square, col: square });
 
-        // the ships half of a BoardSnapshot; whether they actually fit is Board's job
+        // shape only; Board checks placement
         this.layoutSchema = z.object({
             ships: z.array(z.object({
                 name: z.string(),
@@ -57,11 +51,9 @@ export class RequestValidator
             })).max(10)
         });
 
-        // one of the GameType enum values: beginner, original or quick fire
         this.gameTypeSchema = z.enum(GameType);
     }
 
-    /** A 6-character lobby code, upper-cased, using only the unambiguous characters. */
     public parseCode(raw: unknown): string
     {
         const result = this.codeSchema.safeParse(raw);
@@ -69,7 +61,6 @@ export class RequestValidator
         return result.data;
     }
 
-    /** A trimmed display name of 1 to 16 characters, or null if left blank. */
     public parseName(raw: unknown): string | null
     {
         const result = this.nameSchema.safeParse(raw);
@@ -77,7 +68,6 @@ export class RequestValidator
         return result.data;
     }
 
-    /** One of the three game types. */
     public parseGameType(raw: unknown): GameType
     {
         const result = this.gameTypeSchema.safeParse(raw);
@@ -85,7 +75,6 @@ export class RequestValidator
         return result.data;
     }
 
-    /** A square on the board, sent as {row, col} from 0 to 9. */
     public parseCoordinate(raw: unknown): Coordinate
     {
         const result = this.coordinateSchema.safeParse(raw);
@@ -93,11 +82,7 @@ export class RequestValidator
         return Coordinate.fromRowCol(result.data.row, result.data.col);
     }
 
-    /**
-     * A full fleet layout. Zod checks the shape, then Board checks the rules,
-     * using the same placement code the placement screen uses: every ship once,
-     * inside the grid, no overlaps.
-     */
+    /** Zod checks the shape, then Board applies the same placement rules as the UI. */
     public parseLayout(raw: unknown): Board
     {
         const result = this.layoutSchema.safeParse(raw);

@@ -11,10 +11,7 @@ import { InvalidRequestError, RequestValidator } from "../server/RequestValidato
 import { SessionManager } from "../server/SessionManager";
 import { RateLimiter } from "../server/RateLimiter";
 
-/**
- * Thrown when a player can't create or join a lobby. `reason` is the JoinError
- * the screens show (code not found, lobby full, game finished, invalid name).
- */
+/** A create or join refused with a JoinError the screen can show. */
 export class JoinRefusedError extends Error
 {
     public readonly reason: JoinError;
@@ -27,7 +24,6 @@ export class JoinRefusedError extends Error
     }
 }
 
-/** Thrown when a player sends requests faster than the rate limit allows. */
 export class RateLimitedError extends Error
 {
     constructor()
@@ -44,7 +40,6 @@ export class RateLimitedError extends Error
  */
 export class Server
 {
-    // tries at a unique lobby code before giving up; a clash is already about 1 in 900 million
     private static readonly MAX_CODE_TRIES = 10;
 
     private repo: GameRepository;
@@ -52,7 +47,7 @@ export class Server
     private sessions: SessionManager;
     private limiter: RateLimiter;
 
-    /** App code uses Server.create(). Tests pass in fakes for the database and the rate limit. */
+    // app code uses create(); tests pass fakes
     constructor(sessions: SessionManager, repo: GameRepository = new GameRepository(), limiter: RateLimiter = new RateLimiter())
     {
         this.repo = repo;
@@ -61,17 +56,13 @@ export class Server
         this.limiter = limiter;
     }
 
-    /** Builds a Server for the current request. Each request gets its own, because the session belongs to one player. */
+    /** One Server per request, since the session belongs to one player. */
     public static async create(): Promise<Server>
     {
         return new Server(await SessionManager.create());
     }
 
-    /**
-     * Creates a lobby and seats the caller as the host (seat 1).
-     * A blank name gets a random one; a name over 16 characters is refused with INVALID_NAME.
-     * Signs the caller in anonymously first if this is their first visit.
-     */
+    /** Seats the caller as host, signing them in first if they're new. */
     public async createLobby(name: unknown, type: unknown): Promise<Lobby>
     {
         const sessionId = await this.callerSessionId();
@@ -80,7 +71,7 @@ export class Server
         const gameType = this.validator.parseGameType(type);
         const playerName = this.validName(name);
 
-        // loop while the code is already in use (sequence diagram 5.1)
+        // retry while the code is taken (sequence 5.1)
         let lobby: Lobby | null = null;
         for (let i = 0; i < Server.MAX_CODE_TRIES && lobby === null; i++)
         {
@@ -94,13 +85,7 @@ export class Server
         return lobby;
     }
 
-    /**
-     * Seats the caller as the guest (seat 2), which starts placement for both players.
-     * Refusals follow sequence diagram 5.1: CODE_NOT_FOUND, LOBBY_FULL, GAME_ALREADY_FINISHED, INVALID_NAME.
-     * If the caller already holds a seat in this lobby (e.g. the host opened their own link),
-     * they get that seat back instead of an error.
-     * Returns the lobby too, so the caller knows the code and seat to show.
-     */
+    /** Seats the caller as guest, refusing as in sequence 5.1. A caller already seated gets their seat back. */
     public async joinLobby(code: unknown, name: unknown): Promise<{ lobby: Lobby; player: HumanPlayer }>
     {
         const sessionId = await this.callerSessionId();
@@ -113,7 +98,6 @@ export class Server
         }
         catch
         {
-            // a malformed code can't belong to any lobby
             throw new JoinRefusedError(JoinError.CODE_NOT_FOUND);
         }
         const playerName = this.validName(name);
@@ -144,12 +128,7 @@ export class Server
 
     public getMyState(code: string): Game { throw new Error("not implemented"); }
 
-    /**
-     * After a refresh: finds the game the caller is still seated in and gives them their seat back.
-     * The seat is matched by the session cookie, never by a value the browser sends, so nobody
-     * can take another player's place. If `sessionId` is passed, it must match the cookie.
-     * Returns null if the caller isn't seated in any active game.
-     */
+    /** Gives a refreshed player their seat back, or null. Matched by cookie, never the browser's value, so seats can't be stolen. */
     public async restoreSeat(sessionId?: string): Promise<{ lobby: Lobby; player: HumanPlayer } | null>
     {
         const caller = await this.sessions.currentSessionId();
@@ -170,13 +149,11 @@ export class Server
 
     public chooseAbility(code: string, keep: boolean): void {}
 
-    /** "Player" plus three digits, e.g. "Player482", for players who leave the name blank. */
     private assignRandomName(): string
     {
         return `Player${Math.floor(100 + Math.random() * 900)}`;
     }
 
-    /** The caller's sessionId, signing them in anonymously if this is their first request. */
     private async callerSessionId(): Promise<string>
     {
         return (await this.sessions.currentSessionId()) ?? (await this.sessions.signInAnonymously());
@@ -187,7 +164,6 @@ export class Server
         if (!(await this.limiter.allow(sessionId, action))) throw new RateLimitedError();
     }
 
-    /** The trimmed name, a random one if blank, or INVALID_NAME if it's too long. */
     private validName(raw: unknown): string
     {
         try

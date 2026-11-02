@@ -8,10 +8,7 @@ import type { Board, Coordinate } from "../entities/board";
 import { GameState, GameType, LobbyStatus } from "../enums";
 import { createAdminSupabase } from "../supabase/admin";
 
-/**
- * The columns of a games row that the lobby uses.
- * Matches supabase/migrations/20261027120000_init_schema.sql.
- */
+/** The games columns the lobby uses (see the init_schema migration). */
 interface LobbyRow
 {
     code: string;
@@ -32,13 +29,11 @@ interface LobbyRow
 /**
  * Loads and saves lobbies, games and fleets in the database.
  * Fleets live in game_secrets, which only the server can read.
- *
- * Uses the admin client (secret key, bypasses RLS), so it must only ever run on the server,
- * and only after Server has checked the caller is allowed to make the change.
+ * Uses the admin client (bypasses RLS): server only, after Server's checks.
  */
 export class GameRepository
 {
-    // the enums are numbers in TypeScript but lowercase text in the database
+    // enums are numbers in TS, text in the database
     private static readonly LOBBY_STATUS = new Map<LobbyStatus, string>([
         [LobbyStatus.WAITING, "waiting"],
         [LobbyStatus.IN_PROGRESS, "in_progress"],
@@ -60,17 +55,12 @@ export class GameRepository
 
     private client: SupabaseClient;
 
-    /** App code uses the default admin client; tests pass in a fake one. */
     constructor(client: SupabaseClient = createAdminSupabase())
     {
         this.client = client;
     }
 
-    /**
-     * Rebuilds the lobby with this code, or null if no row has it.
-     * Players come back in seat order with their ready flags and disconnect times.
-     * Game progress (shots, turn, abilities) is loaded separately by loadGame.
-     */
+    /** Null if no row has this code. Game progress is loaded separately by loadGame. */
     public async loadLobby(code: string): Promise<Lobby | null>
     {
         const { data, error } = await this.client
@@ -96,11 +86,7 @@ export class GameRepository
             players);
     }
 
-    /**
-     * Writes the lobby's own columns: code, status, game type and both seats.
-     * Creates the row if it's new, otherwise updates it. Columns the lobby doesn't own
-     * (shots, turn, abilities) are left as they are.
-     */
+    /** Upserts only the lobby's columns; game columns are left alone. */
     public async saveLobby(l: Lobby): Promise<void>
     {
         const [host, guest] = l.getPlayers();
@@ -110,7 +96,7 @@ export class GameRepository
             code: l.getCode(),
             lobby_status: GameRepository.LOBBY_STATUS.get(l.getStatus()),
             game_type: GameRepository.GAME_TYPE.get(l.getGameType()),
-            // the schema keeps game_state empty until the guest joins
+            // null until the guest joins (schema rule)
             game_state: l.getStatus() === LobbyStatus.WAITING ? null : GameRepository.GAME_STATE.get(l.getGame().getState()),
             player1_id: host.getSessionId(),
             player1_name: host.getName(),
@@ -123,10 +109,7 @@ export class GameRepository
         if (error) throw new Error(`Could not save lobby ${l.getCode()}: ${error.message}`);
     }
 
-    /**
-     * The code of the lobby this session is seated in and still playing (waiting or in progress),
-     * or null if there isn't one. Used by restoreSeat after a refresh.
-     */
+    /** The waiting or in-progress lobby this session sits in, for restoreSeat. */
     public async findActiveLobbyCode(sessionId: string): Promise<string | null>
     {
         const { data, error } = await this.client
@@ -152,7 +135,7 @@ export class GameRepository
 
     public runShotTransaction(code: string, shooter: Player, target: Coordinate): Shot { throw new Error("not implemented"); }
 
-    /** Rebuilds one seated player. Their id is their sessionId, so it stays the same across requests. */
+    // id = sessionId so it's stable across requests
     private static seatedPlayer(name: string, sessionId: string, ready: boolean, disconnectedAt: string | null): HumanPlayer
     {
         const p = new HumanPlayer(name, sessionId);
@@ -161,7 +144,6 @@ export class GameRepository
         return p;
     }
 
-    /** Looks up the enum value for a database string, e.g. "in_progress" → LobbyStatus.IN_PROGRESS. */
     private static fromText<E>(map: Map<E, string>, text: string): E
     {
         for (const [value, name] of map)

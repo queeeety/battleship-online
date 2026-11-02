@@ -3,33 +3,24 @@ import { createServerSupabase } from "../supabase/server";
 
 /**
  * Gives each player an anonymous session and checks they own the seat they claim.
- *
- * Uses the server client: the publishable key plus this request's session cookie,
- * so it always acts as the player who sent the request and RLS still applies.
- * A server client belongs to one request, so build a new SessionManager per request
- * with SessionManager.create().
+ * Uses the server client, so it acts as the calling player. One per request: use create().
  */
 export class SessionManager
 {
     private client: SupabaseClient;
 
-    /** Takes the client directly so tests can pass in a fake one. App code uses create(). */
+    // tests pass in a fake client
     constructor(client: SupabaseClient)
     {
         this.client = client;
     }
 
-    /** Builds a SessionManager tied to the current request's cookies. */
     public static async create(): Promise<SessionManager>
     {
         return new SessionManager(await createServerSupabase());
     }
 
-    /**
-     * Signs a new player in with no account. Supabase creates an anonymous user,
-     * and the server client writes the session cookie to the browser.
-     * Returns the new user ID, which is the player's sessionId from now on.
-     */
+    /** Creates an anonymous user and sets the session cookie. Returns the new sessionId. */
     public async signInAnonymously(): Promise<string>
     {
         const { data, error } = await this.client.auth.signInAnonymously();
@@ -40,11 +31,7 @@ export class SessionManager
         return data.user.id;
     }
 
-    /**
-     * The sessionId of whoever sent this request, or null if they have no valid session yet.
-     * getClaims() checks the cookie's signature, so an edited cookie is rejected
-     * rather than letting someone pose as another player.
-     */
+    /** The caller's sessionId, or null. getClaims() verifies the signature, so edited cookies fail. */
     public async currentSessionId(): Promise<string | null>
     {
         const { data, error } = await this.client.auth.getClaims();
@@ -55,11 +42,7 @@ export class SessionManager
         return data.claims.sub ?? null;
     }
 
-    /**
-     * True if sessionId holds one of the two seats in the game with this code.
-     * Reads through the server client, so RLS only returns the row to a seated player:
-     * if no row comes back, the caller is not in this game.
-     */
+    /** True if sessionId holds a seat in this game. RLS hides the row from anyone not seated. */
     public async verifySeat(code: string, sessionId: string): Promise<boolean>
     {
         const { data, error } = await this.client

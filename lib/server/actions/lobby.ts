@@ -5,12 +5,7 @@ import type { Lobby } from "../../controllers/Lobby";
 import type { HumanPlayer } from "../../entities/players";
 import { JoinError } from "../../enums";
 
-/**
- * Server actions for Stage 4: the functions the lobby screens call.
- * Each one runs on the server, builds a Server for this request and turns its result
- * (or its refusal) into plain data the browser can use. Class instances can't cross
- * from server to browser, so only plain objects are returned.
- */
+/** Lobby actions for the screens. They return plain data, since class instances can't reach the browser. */
 
 export type LobbyFailure = JoinError | "RATE_LIMITED" | "SERVER_ERROR";
 
@@ -18,7 +13,7 @@ export type LobbyResult =
     | { ok: true; code: string; shareLink: string; seat: 1 | 2; name: string; sessionId: string }
     | { ok: false; error: LobbyFailure };
 
-/** Create Lobby button. `type` is a GameType value. The caller becomes the host in seat 1. */
+/** `type` is a GameType value. */
 export async function createLobby(name: string, type: number): Promise<LobbyResult>
 {
     try
@@ -32,7 +27,6 @@ export async function createLobby(name: string, type: number): Promise<LobbyResu
     }
 }
 
-/** Join Lobby button, or opening a /game/[code] link. The caller becomes the guest in seat 2. */
 export async function joinLobby(code: string, name: string): Promise<LobbyResult>
 {
     try
@@ -46,10 +40,7 @@ export async function joinLobby(code: string, name: string): Promise<LobbyResult
     }
 }
 
-/**
- * On page load: puts a player who refreshed back in their seat, matched by their session cookie.
- * Returns null if they aren't seated in any game that's still going.
- */
+/** Call on page load. Null if the player has no active seat. */
 export async function restoreSeat(sessionId?: string): Promise<LobbyResult | null>
 {
     try
@@ -63,7 +54,6 @@ export async function restoreSeat(sessionId?: string): Promise<LobbyResult | nul
     }
 }
 
-/** The plain-data version of "this player sits in this lobby". */
 function seated(lobby: Lobby, player: HumanPlayer): LobbyResult
 {
     return {
@@ -76,7 +66,7 @@ function seated(lobby: Lobby, player: HumanPlayer): LobbyResult
     };
 }
 
-/** Expected refusals go back to the screen as-is; anything unexpected is logged and hidden. */
+// unexpected errors are logged, not shown to the player
 function failure(e: unknown): LobbyFailure
 {
     if (e instanceof JoinRefusedError) return e.reason;
