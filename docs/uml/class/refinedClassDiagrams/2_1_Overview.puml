@@ -19,6 +19,7 @@ package "Client (browser)" {
   class ResultScreen <<boundary>>
   class Timer <<boundary>>
   class NetworkHandler <<boundary>>
+  class AudioManager <<boundary>>
 }
 package "Server (server actions)" {
   class Server <<controller>>
@@ -84,6 +85,7 @@ Cell "0..5" --> "0..1" Ship : occupied by >
 Shot "0..*" --> "1" Player : fired by >
 RematchRequest "0..*" --> "1" Player : requested by >
 Reroute "0..1" --> "0..1" Ship : moves >
+UIManager "1" --> "0..1" AudioManager : plays sounds with >
 Player <|-- HumanPlayer
 Player <|-- AIOpponent
 Ship <|-- Carrier
