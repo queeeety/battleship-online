@@ -15,11 +15,13 @@ class Lobby <<controller>> {
   - status : LobbyStatus
   - gameType : GameType
   - createdAt : Date
-  - players : Player[]
+  - players : HumanPlayer[]
   - game : Game
   + {static} generateCode() : string
   + {static} findByCode(code : string) : Lobby | null
-  + join(name : string) : Player
+  + {static} restore(code : string, gameType : GameType, status : LobbyStatus, createdAt : Date, players : HumanPlayer[]) : Lobby
+  + join(name : string, sessionId : string) : HumanPlayer
+  + seatOf(sessionId : string) : 1 | 2 | null
   + isFull() : boolean
   + isJoinable() : boolean
   + shareLink() : string
@@ -81,9 +83,9 @@ class HumanPlayer <<entity>> {
   - connected : boolean
   - disconnectedAt : Date | null
   + chooseTarget() : Coordinate
-  + disconnect() : void
+  + disconnect(at : Date = now) : void
   + reconnect() : void
-  + hasExceededGracePeriod() : boolean
+  + hasExceededGracePeriod(now : Date = now) : boolean
 }
 class AIOpponent <<entity>> {
   - difficulty : Difficulty
@@ -170,7 +172,7 @@ Server "1" --> "0..*" Lobby : manages >
 Server ..> Game : validates & resolves >
 GameRepository ..> Lobby : persists >
 GameRepository ..> Game : persists >
-Lobby "1" o-- "0..2" Player : seats >
+Lobby "1" o-- "0..2" HumanPlayer : seats >
 Lobby "1" *-- "1" Game : runs >
 Game "1" o-- "2" Player : players >
 Game "1" *-- "0..*" Shot : history >
@@ -191,6 +193,11 @@ Game ..> GameSnapshot : saved as >
 GameSnapshot "1" *-- "0..2" PlayerSnapshot : players >
 PlayerSnapshot ..> AIMemory : ai >
 AIOpponent ..> Game : takeTurn(game) >
+note right of Lobby
+  findByCode() is unused: the server is
+  stateless, so lobbies are loaded with
+  GameRepository.loadLobby() (Figure 2.3).
+end note
 note bottom of AIOpponent
   Single-player only. Runs in the browser
   with the same Game / Board classes;
