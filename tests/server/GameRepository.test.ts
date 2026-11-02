@@ -1,8 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { GameRepository } from "../../lib/server/GameRepository";
+import { GameRepository, StaleGameError } from "../../lib/server/GameRepository";
 import { Lobby } from "../../lib/controllers/Lobby";
-import { GameState, GameType, LobbyStatus } from "../../lib/enums";
+import { GameState, GameType, LobbyStatus, ShotResult } from "../../lib/enums";
+import { HumanPlayer } from "../../lib/entities/players";
+import { startedGame, knownFleetSquares, OPEN_WATER, sinkDestroyer } from "../helpers";
 
 /** A games row as Supabase would return it, with a host and no guest by default. */
 function row(overrides: Record<string, unknown> = {})
@@ -133,5 +135,152 @@ describe("GameRepository.saveLobby", () =>
         const lobby = new Lobby(GameType.ORIGINAL, "4F7K2M");
         lobby.join("Cian91", "host-session");
         await expect(new GameRepository(client).saveLobby(lobby)).rejects.toThrow("duplicate key");
+    });
+});
+
+// ---------------------------------------------------------------- running games
+
+/**
+ * A one-game fake database: a games row and a game_secrets row, plus a save_game
+ * that behaves like the real one (only writes if updated_at still matches).
+ */
+function fakeGameDb()
+{
+    let clock = 0;
+    const db = {
+        game: {
+            ...row({ lobby_status: "in_progress", game_state: "placement", player1_id: "session-Aoife", player1_name: "Aoife", player2_id: "session-Cian", player2_name: "Cian" }),
+            turn: null, turn_started_at: null, double_shot_active: false, winner: null, end_reason: null, finished_at: null,
+            shots_p1: [], shots_p2: [], ability_p1: null, ability_p2: null, offered_ability_p1: null, offered_ability_p2: null,
+            updated_at: "v0"
+        } as Record<string, unknown>,
+        secrets: null as { board_p1: unknown; board_p2: unknown } | null,
+        // set to simulate another request saving between this request's load and save
+        concurrentWrite: false
+    };
+    const select = (table: string) =>
+    {
+        const query = {
+            select: () => query,
+            eq: () => query,
+            maybeSingle: async () => ({ data: table === "games" ? { ...db.game } : db.secrets, error: null })
+        };
+        return query;
+    };
+    const client = {
+        from: vi.fn((table: string) => select(table)),
+        rpc: vi.fn(async (_name: string, args: Record<string, unknown>) =>
+        {
+            if (db.concurrentWrite) db.game.updated_at = "someone-else";
+            if (db.game.updated_at !== args.p_expected_updated_at) return { data: null, error: null };
+            Object.assign(db.game, args.p_game, { updated_at: `v${++clock}` });
+            db.secrets = { board_p1: args.p_board_p1, board_p2: args.p_board_p2 };
+            return { data: db.game.updated_at, error: null };
+        })
+    } as unknown as SupabaseClient;
+    return { db, repo: new GameRepository(client) };
+}
+
+describe("GameRepository.loadGame / saveGame", () =>
+{
+    it("has no game to load while the lobby is still waiting", async () =>
+    {
+        const { db, repo } = fakeGameDb();
+        Object.assign(db.game, { game_state: null, player2_id: null, player2_name: null });
+        expect(await repo.loadGame("4F7K2M")).toBeNull();
+    });
+
+    it("saves a game and loads back the same state", async () =>
+    {
+        const { db, repo } = fakeGameDb();
+        const { game, first } = startedGame();
+        game.fireShot(first, knownFleetSquares()[0]);           // a hit, so first keeps the turn
+        game.fireShot(first, OPEN_WATER);                        // a miss, the turn passes
+
+        const version = await repo.saveGame(game, "v0");
+        expect(version).toBe("v1");
+
+        const firstSeat = game.getPlayers().indexOf(first);
+        expect(db.game[`shots_p${firstSeat + 1}`]).toMatchObject([{ row: 0, col: 0, result: "hit" }, { row: 9, col: 9, result: "miss" }]);
+        expect(db.game.turn).toBe(2 - firstSeat);
+
+        const loaded = await repo.loadGame("4F7K2M");
+        expect(loaded?.version).toBe("v1");
+        const g = loaded!.game;
+        expect(g.getState()).toBe(GameState.IN_PROGRESS);
+        expect(g.getShots().map(s => s.getResult())).toEqual([ShotResult.HIT, ShotResult.MISS]);
+        expect(g.getPlayers().indexOf(g.getCurrentTurn()!)).toBe(1 - firstSeat);
+        expect(g.opponentOf(g.getPlayers()[firstSeat]).getBoard().hasBeenTargeted(knownFleetSquares()[0])).toBe(true);
+        expect((g.getPlayers()[0] as HumanPlayer).getSessionId()).toBe("session-Aoife");
+    });
+
+    it("stores abilities by database key and loads them back by name", async () =>
+    {
+        const { db, repo } = fakeGameDb();
+        const { game, first, second } = startedGame();
+        sinkDestroyer(game, first);                              // second loses a ship and draws an ability
+
+        await repo.saveGame(game, "v0");
+        const seat = game.getPlayers().indexOf(second) + 1;
+        expect(["double_shot", "radar_sweep", "line_scan", "reroute"]).toContain(db.game[`ability_p${seat}`]);
+
+        const loaded = await repo.loadGame("4F7K2M");
+        expect(loaded!.game.getPlayers()[seat - 1].getHeldAbility()?.getName()).toBe(second.getHeldAbility()?.getName());
+    });
+
+    it("refuses a save against an old version and writes nothing", async () =>
+    {
+        const { db, repo } = fakeGameDb();
+        const { game } = startedGame();
+        await repo.saveGame(game, "v0");
+        const before = { ...db.game };
+
+        expect(await repo.saveGame(game, "v0")).toBeNull();
+        expect(db.game).toEqual(before);
+    });
+
+    it("restores a disconnect time on the right player", async () =>
+    {
+        const { db, repo } = fakeGameDb();
+        await repo.saveGame(startedGame().game, "v0");
+        db.game.disconnected_at_p2 = "2026-11-02T12:00:00Z";
+
+        const players = (await repo.loadGame("4F7K2M"))!.game.getPlayers() as HumanPlayer[];
+        expect(players[0].isConnected()).toBe(true);
+        expect(players[1].getDisconnectedAt()).toEqual(new Date("2026-11-02T12:00:00Z"));
+    });
+});
+
+describe("GameRepository.runShotTransaction", () =>
+{
+    async function startedInDb()
+    {
+        const setup = fakeGameDb();
+        await setup.repo.saveGame(startedGame().game, "v0");
+        const game = (await setup.repo.loadGame("4F7K2M"))!.game;
+        return { ...setup, shooter: game.getCurrentTurn()!, waiting: game.opponentOf(game.getCurrentTurn()!) };
+    }
+
+    it("fires, saves and returns the shot", async () =>
+    {
+        const { repo, shooter } = await startedInDb();
+        const shot = await repo.runShotTransaction("4F7K2M", shooter, knownFleetSquares()[0]);
+        expect(shot.getResult()).toBe(ShotResult.HIT);
+        expect((await repo.loadGame("4F7K2M"))!.game.getShots()).toHaveLength(1);
+    });
+
+    it("refuses a shot from the player whose turn it isn't", async () =>
+    {
+        const { repo, waiting } = await startedInDb();
+        await expect(repo.runShotTransaction("4F7K2M", waiting, OPEN_WATER)).rejects.toThrow("turn");
+    });
+
+    it("throws StaleGameError if another request saved first, and writes nothing", async () =>
+    {
+        const { db, repo, shooter } = await startedInDb();
+        db.concurrentWrite = true;
+        await expect(repo.runShotTransaction("4F7K2M", shooter, OPEN_WATER)).rejects.toBeInstanceOf(StaleGameError);
+        expect(db.game.shots_p1).toEqual([]);
+        expect(db.game.shots_p2).toEqual([]);
     });
 });
