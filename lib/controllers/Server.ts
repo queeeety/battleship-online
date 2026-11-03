@@ -1,14 +1,17 @@
-import { EndReason, GameState, JoinError, LobbyStatus, RematchStatus } from "../enums";
-import type { GameType, ShotResult } from "../enums";
+import { EndReason, GameState, JoinError, LobbyStatus, Orientation, RematchStatus, ShotResult } from "../enums";
+import type { GameType } from "../enums";
 import { Lobby } from "./Lobby";
-import type { HumanPlayer } from "../entities/players";
-import type { BoardSnapshot, Coordinate } from "../entities/board";
+import type { HumanPlayer, Player } from "../entities/players";
+import { Coordinate } from "../entities/board";
+import type { BoardSnapshot } from "../entities/board";
 import type { Game } from "./Game";
 import type { Shot, RematchRequest } from "../entities/game";
-import type { Ability } from "../abilities";
-import { GameRepository, MoveRefusedError, StaleGameError } from "../server/GameRepository";
-import type { LoadedGame } from "../server/GameRepository";
+import { LineScan, RadarSweep, Reroute } from "../abilities";
+import type { NetworkHandler, PrivatePayload } from "../boundary/NetworkHandler";
+import { EMPTY_SCAN_LOG, GameRepository, MoveRefusedError, StaleGameError } from "../server/GameRepository";
+import type { LoadedGame, ScanLog } from "../server/GameRepository";
 import { InvalidRequestError, RequestValidator } from "../server/RequestValidator";
+import type { AbilityRequest } from "../server/RequestValidator";
 import { SessionManager } from "../server/SessionManager";
 import { RateLimiter } from "../server/RateLimiter";
 
@@ -60,6 +63,8 @@ export interface PlayerView
     winner: 1 | 2 | null;
     endReason: EndReason | null;
     opponentBoard: BoardSnapshot | null;
+    // ship squares your own scans found that haven't been shot yet (green highlights)
+    revealedSquares: { row: number; col: number }[];
     rematch: { by: 1 | 2; status: RematchStatus } | null;
     result: { won: boolean; shotsFired: number; accuracy: number; shipsSunk: number } | null;
 }
@@ -100,14 +105,17 @@ export class Server
     private validator: RequestValidator;
     private sessions: SessionManager;
     private limiter: RateLimiter;
+    private notifier: Pick<NetworkHandler, "sendPrivate"> | null;
 
     // app code uses create(); tests pass fakes
-    constructor(sessions: SessionManager, repo: GameRepository = new GameRepository(), limiter: RateLimiter = new RateLimiter())
+    constructor(sessions: SessionManager, repo: GameRepository = new GameRepository(), limiter: RateLimiter = new RateLimiter(),
+        notifier: Pick<NetworkHandler, "sendPrivate"> | null = null)
     {
         this.repo = repo;
         this.validator = new RequestValidator();
         this.sessions = sessions;
         this.limiter = limiter;
+        this.notifier = notifier;
     }
 
     /** One Server per request, since the session belongs to one player. */
@@ -202,10 +210,55 @@ export class Server
     {
         const { lobbyCode, player } = await this.seatedCaller(code);
         const square = this.validator.parseCoordinate(target);
-        return this.repo.runShotTransaction(lobbyCode, player, square, g => Server.fireIfTurnExpired(g));
+        const shot = await this.repo.runShotTransaction(lobbyCode, player, square, g => Server.fireIfTurnExpired(g));
+
+        // sinking a ship of someone who already holds an ability puts a keep-or-replace offer to them
+        if (shot.getResult() === ShotResult.SUNK)
+        {
+            const game = (await this.repo.loadGame(lobbyCode))?.game;
+            const sunkOwner = game?.getPlayers().find(p => p.getId() !== player.getId());
+            const current = sunkOwner?.getHeldAbility();
+            const drawn = sunkOwner?.getOfferedAbility();
+            if (sunkOwner && current && drawn) await this.notify(lobbyCode, sunkOwner, { kind: "abilityOffer", current, drawn });
+        }
+        return shot;
     }
 
-    public useAbility(code: string, a: Ability, target: Coordinate): void {}
+    /**
+     * Checks the caller holds that ability and it's their turn, applies it, discards it.
+     * Scan results reach the caller only: sent privately and kept in scan_log for getMyState.
+     * Not retried, so a double-click can't use it twice.
+     */
+    public async useAbility(code: unknown, ability: unknown, target?: unknown): Promise<void>
+    {
+        const { lobbyCode, seat } = await this.seatedCaller(code);
+        const request = this.validator.parseAbilityRequest(ability);
+        // Double Shot has no target
+        const square = request.name === "Double Shot" && target == null ? Coordinate.fromRowCol(0, 0) : this.validator.parseCoordinate(target);
+
+        const loaded = await this.loadStarted(lobbyCode);
+        const { game, version } = loaded;
+        const scanLog: ScanLog = structuredClone(loaded.scanLog);
+        const me = game.getPlayers()[seat - 1];
+        const held = me.getHeldAbility();
+
+        const changed = Server.fireIfTurnExpired(game);
+        let revealed: Coordinate[];
+        try
+        {
+            revealed = Server.applyRequested(game, me, seat, request, square, scanLog);
+        }
+        catch (e)
+        {
+            if (changed) await this.repo.saveGame(game, version);
+            if (e instanceof MoveRefusedError) throw e;
+            throw new MoveRefusedError(e instanceof Error ? e.message : "Ability refused");
+        }
+        if (await this.repo.saveGame(game, version, lobbyCode, scanLog) === null) throw new StaleGameError(lobbyCode);
+
+        if (held instanceof RadarSweep || held instanceof LineScan) await this.notify(lobbyCode, me, { kind: "scanResult", cells: revealed });
+        if (held) await this.notify(lobbyCode, game.opponentOf(me), { kind: "abilityUsed", by: me.getName(), ability: held });
+    }
 
     public async forfeit(code: unknown): Promise<void>
     {
@@ -253,7 +306,7 @@ export class Server
             rematch.accept();
             lobby.reset();
             for (const p of lobby.getPlayers()) p.reconnect();
-            return await this.repo.saveGame(lobby.getGame(), version, lobbyCode) !== null;
+            return await this.repo.saveGame(lobby.getGame(), version, lobbyCode, EMPTY_SCAN_LOG) !== null;
         });
         return answer!;
     }
@@ -265,7 +318,7 @@ export class Server
         const loaded = await this.repo.loadGame(lobbyCode);
         let game = loaded?.game ?? null;
         if (game && !(game.getPlayers()[seat - 1] as HumanPlayer).isConnected()) game = await this.markBack(lobbyCode, seat);
-        return Server.viewFor(lobby, game, seat, loaded?.rematch ?? null);
+        return Server.viewFor(lobby, game, seat, loaded?.rematch ?? null, loaded?.scanLog[seat === 1 ? "p1" : "p2"] ?? []);
     }
 
     /**
@@ -339,7 +392,21 @@ export class Server
         return claimed;
     }
 
-    public chooseAbility(code: string, keep: boolean): void {}
+    /** Answers a keep-or-replace offer: true keeps the held ability, false swaps in the new draw. */
+    public async chooseAbility(code: unknown, keep: unknown): Promise<void>
+    {
+        const { lobbyCode, seat } = await this.seatedCaller(code);
+        const yes = this.validator.parseAnswer(keep);
+
+        await this.retryIfStale(lobbyCode, async () =>
+        {
+            const { game, version } = await this.loadStarted(lobbyCode);
+            const me = game.getPlayers()[seat - 1];
+            if (!me.getOfferedAbility()) return true;   // nothing to answer, or already answered
+            me.resolveOffer(yes);
+            return await this.repo.saveGame(game, version) !== null;
+        });
+    }
 
     /** The waiting host's heartbeat. False once the lobby isn't waiting any more. */
     public async keepLobbyOpen(code: unknown): Promise<boolean>
@@ -394,6 +461,60 @@ export class Server
         return { lobbyCode, lobby, seat, player: lobby.getPlayers()[seat - 1] };
     }
 
+    // configures and applies the held ability, updating scanLog; returns what a scan revealed
+    private static applyRequested(game: Game, me: Player, seat: 1 | 2, request: AbilityRequest, square: Coordinate, scanLog: ScanLog): Coordinate[]
+    {
+        // using it before answering an offer counts as keeping it
+        if (me.getOfferedAbility()) me.resolveOffer(true);
+
+        const held = me.getHeldAbility();
+        if (!held || held.getName() !== request.name) throw new MoveRefusedError(`You don't hold ${request.name}`);
+
+        let movedFrom: Coordinate[] = [];
+        if (held instanceof LineScan && request.name === "Line Scan") held.setDirection(request.line === "row");
+        if (held instanceof Reroute && request.name === "Reroute")
+        {
+            const ship = me.getBoard().getShips().find(s => s.getName() === request.ship);
+            if (!ship) throw new MoveRefusedError(`You have no ${request.ship}`);
+            held.selectShip(ship);
+            held.setOrientation(request.orientation === "horizontal" ? Orientation.HORIZONTAL : Orientation.VERTICAL);
+            movedFrom = ship.getCoordinates();
+        }
+
+        game.applyAbility(me, square);
+
+        const revealed = held instanceof RadarSweep || held instanceof LineScan ? held.getRevealed() : [];
+        const mine = seat === 1 ? "p1" : "p2";
+        const theirs = seat === 1 ? "p2" : "p1";
+        const same = (a: { row: number; col: number }, b: Coordinate) => a.row === b.toRowCol().row && a.col === b.toRowCol().col;
+        for (const c of revealed)
+        {
+            if (!scanLog[mine].some(s => same(s, c))) scanLog[mine].push(c.toRowCol());
+        }
+        // a rerouted ship leaves no green highlight on its old, now empty, squares
+        scanLog[theirs] = scanLog[theirs].filter(s => !movedFrom.some(c => same(s, c)));
+        return revealed;
+    }
+
+    // best effort: a lost private message is recovered by the next getMyState
+    private async notify(code: string, p: Player, payload: PrivatePayload): Promise<void>
+    {
+        try
+        {
+            if (!this.notifier)
+            {
+                const { NetworkHandler } = await import("../boundary/NetworkHandler");
+                const { createAdminSupabase } = await import("../supabase/admin");
+                this.notifier = new NetworkHandler(createAdminSupabase());
+            }
+            await this.notifier.sendPrivate(p as HumanPlayer, payload, code);
+        }
+        catch (e)
+        {
+            console.error("Private message failed", e);
+        }
+    }
+
     // the timer is paused while the player to move is disconnected
     private static fireIfTurnExpired(game: Game): boolean
     {
@@ -443,7 +564,8 @@ export class Server
         throw new StaleGameError(code);
     }
 
-    private static viewFor(lobby: Lobby, game: Game | null, seat: 1 | 2, rematch: RematchRequest | null = null): PlayerView
+    private static viewFor(lobby: Lobby, game: Game | null, seat: 1 | 2, rematch: RematchRequest | null = null,
+        scanned: { row: number; col: number }[] = []): PlayerView
     {
         // the game's copy is newer once started (markBack may have just changed it)
         const seated = (game?.getPlayers() as HumanPlayer[] | undefined) ?? lobby.getPlayers();
@@ -465,7 +587,8 @@ export class Server
             return {
                 ...base, gameState: null, yourTurn: false, turnStartedAt: null, doubleShotActive: false,
                 yourBoard: { ships: [], shots: [] }, yourShots: [], opponentShots: [],
-                heldAbility: null, offeredAbility: null, winner: null, endReason: null, opponentBoard: null, rematch: null, result: null
+                heldAbility: null, offeredAbility: null, winner: null, endReason: null, opponentBoard: null,
+                revealedSquares: [], rematch: null, result: null
             };
         }
 
@@ -493,6 +616,7 @@ export class Server
             winner: winner === null ? null : (players.indexOf(winner) + 1) as 1 | 2,
             endReason: game.getEndReason(),
             opponentBoard: finished ? opponent.getBoard().toSnapshot() : null,
+            revealedSquares: finished ? [] : scanned.filter(s => !opponent.getBoard().hasBeenTargeted(Coordinate.fromRowCol(s.row, s.col))),
             rematch: rematch && {
                 by: (players.findIndex(p => p.getId() === rematch.getRequestedBy().getId()) + 1) as 1 | 2,
                 status: rematch.getStatus()

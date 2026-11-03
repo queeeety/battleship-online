@@ -8,7 +8,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export function fakeSupabase()
 {
     const games = new Map<string, Record<string, unknown>>();
-    const secrets = new Map<string, { board_p1: unknown; board_p2: unknown }>();
+    const secrets = new Map<string, { board_p1: unknown; board_p2: unknown; scan_log: unknown }>();
     let clock = 0;
     const nextVersion = () => `v${++clock}`;
 
@@ -65,7 +65,8 @@ export function fakeSupabase()
             if (!row || row.updated_at !== args.p_expected_updated_at) return { data: null, error: null };
             Object.assign(row, args.p_game, { updated_at: nextVersion() });
             if (row.game_state !== "finished") Object.assign(row, { rematch_by: null, rematch_status: "none" });
-            secrets.set(args.p_code as string, { board_p1: args.p_board_p1, board_p2: args.p_board_p2 });
+            const scanLog = args.p_scan_log ?? secrets.get(args.p_code as string)?.scan_log ?? { p1: [], p2: [] };
+            secrets.set(args.p_code as string, { board_p1: args.p_board_p1, board_p2: args.p_board_p2, scan_log: scanLog });
             return { data: row.updated_at, error: null };
         }
     } as unknown as SupabaseClient;

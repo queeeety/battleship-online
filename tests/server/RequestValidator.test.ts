@@ -173,3 +173,23 @@ describe("RequestValidator.parseGameType", () =>
         expect(() => validator.parseGameType("ORIGINAL")).toThrow(InvalidRequestError);
     });
 });
+
+describe("RequestValidator.parseAbilityRequest", () =>
+{
+    it("accepts each ability with the details it needs", () =>
+    {
+        expect(validator.parseAbilityRequest({ name: "Double Shot" })).toEqual({ name: "Double Shot" });
+        expect(validator.parseAbilityRequest({ name: "Radar Sweep" })).toEqual({ name: "Radar Sweep" });
+        expect(validator.parseAbilityRequest({ name: "Line Scan", line: "column" })).toEqual({ name: "Line Scan", line: "column" });
+        expect(validator.parseAbilityRequest({ name: "Reroute", ship: "Destroyer", orientation: "vertical" }))
+            .toEqual({ name: "Reroute", ship: "Destroyer", orientation: "vertical" });
+    });
+
+    it("refuses an unknown ability, missing details or a bad direction", () =>
+    {
+        for (const bad of [{ name: "Nuke" }, { name: "Line Scan" }, { name: "Line Scan", line: "diagonal" }, { name: "Reroute", ship: "Destroyer" }, "Radar Sweep", null])
+        {
+            expect(() => validator.parseAbilityRequest(bad)).toThrow(InvalidRequestError);
+        }
+    });
+});

@@ -389,3 +389,42 @@ describe("GameRepository rematch", () =>
         expect(db.games.get("4F7K2M")!.rematch_status).toBe("none");
     });
 });
+
+describe("GameRepository scan log", () =>
+{
+    async function startedInFakeDb()
+    {
+        const db = fakeSupabase();
+        const repo = new GameRepository(db.client);
+        const lobby = new Lobby(GameType.ORIGINAL, "4F7K2M");
+        lobby.join("Cian91", "host-session");
+        lobby.join("Aoife", "guest-session");
+        await repo.saveLobby(lobby);
+        return { db, repo };
+    }
+
+    it("loads an empty log for a game nobody has scanned in", async () =>
+    {
+        const { repo } = await startedInFakeDb();
+        expect((await repo.loadGame("4F7K2M"))!.scanLog).toEqual({ p1: [], p2: [] });
+    });
+
+    it("saves a scan log with the game and loads it back", async () =>
+    {
+        const { repo } = await startedInFakeDb();
+        const { game, version } = (await repo.loadGame("4F7K2M"))!;
+        await repo.saveGame(game, version, "4F7K2M", { p1: [{ row: 0, col: 0 }], p2: [] });
+        expect((await repo.loadGame("4F7K2M"))!.scanLog).toEqual({ p1: [{ row: 0, col: 0 }], p2: [] });
+    });
+
+    it("leaves the log alone on a save that doesn't pass one", async () =>
+    {
+        const { repo } = await startedInFakeDb();
+        const first = (await repo.loadGame("4F7K2M"))!;
+        await repo.saveGame(first.game, first.version, "4F7K2M", { p1: [{ row: 0, col: 0 }], p2: [] });
+        const second = (await repo.loadGame("4F7K2M"))!;
+        await repo.saveGame(second.game, second.version);
+
+        expect((await repo.loadGame("4F7K2M"))!.scanLog.p1).toHaveLength(1);
+    });
+});
