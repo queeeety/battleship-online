@@ -168,8 +168,9 @@ note bottom of NetworkHandler
   goes to onBroadcast (fast path), then
   resync() refetches getMyState for onState
   (the truth), also after every reconnect.
-  PrivatePayload (scan result or ability
-  offer) goes to the owner's own channel.
+  PrivatePayload (scan result, ability offer,
+  or the opponent's abilityUsed notice) goes
+  to the owner's own channel.
   The opponent's presence leave calls
   reportDisconnect(); a waiting host calls
   keepLobbyOpen() every 10 s. ServerCalls

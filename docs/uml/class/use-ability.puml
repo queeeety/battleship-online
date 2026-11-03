@@ -20,12 +20,20 @@ class UIManager <<boundary>> {
 }
 
 class NetworkHandler <<boundary>> {
-  + broadcast(g : Game) : void
-  + sendPrivate(p : HumanPlayer, cells : List<Coordinate>) : void
+  + sendPrivate(p : HumanPlayer, payload : PrivatePayload, code : String) : Promise<void>
+  + resync(code : String) : Promise<void>
 }
 
 class Server <<controller>> {
-  + useAbility(code : String, a : Ability, target : Coordinate) : void
+  + useAbility(code : String, ability : AbilityRequest, target : Coordinate) : Promise<void>
+  + chooseAbility(code : String, keep : boolean) : Promise<void>
+  + fireShot(code : String, target : Coordinate) : Promise<Shot>
+  + getMyState(code : String) : Promise<PlayerView>
+}
+
+class GameRepository <<persistence>> {
+  + loadGame(code : String) : Promise<LoadedGame | null>
+  + saveGame(g : Game, version : String, code : String, scanLog : ScanLog) : Promise<String | null>
 }
 
 class Game <<controller>> {
@@ -36,7 +44,10 @@ class Game <<controller>> {
 
 abstract class Player <<entity>> {
   - heldAbility : Ability
+  - offeredAbility : Ability
   + receiveAbility(drawn : Ability) : void
+  + resolveOffer(keep : boolean) : void
+  + consumeAbility() : void
 }
 
 class HumanPlayer <<entity>>
@@ -101,9 +112,12 @@ abstract class Ship <<entity>> {
 }
 
 ' ---------- Relationships ----------
-UIManager ..> Server : useAbility >
+UIManager ..> Server : useAbility / chooseAbility >
 Server ..> Game : validates & applies >
-Server --> NetworkHandler : scan result to scanner only >
+Server ..> Player : resolveOffer(keep) >
+Server *-- GameRepository : loads / saves via >
+GameRepository ..> NetworkHandler : save triggers broadcast >
+Server --> NetworkHandler : private messages (scan, offer, abilityUsed) >
 
 Game ..> Ability : grants (random draw) >
 Game "1" o-- "2" Player : players >
@@ -133,9 +147,20 @@ end note
 
 note right of Player
   Max 1 held ability. If one is already
-  held, receiveAbility() asks via
-  UIManager.promptKeepOrReplace();
-  the AI decides itself.
+  held, receiveAbility() keeps the draw as
+  offeredAbility; Server sends the offer
+  privately and chooseAbility() calls
+  resolveOffer(keep). Using the held one
+  first counts as keeping it.
+  The AI decides itself.
+end note
+
+note bottom of Server
+  Scan results reach the scanner only: sent
+  privately, saved in game_secrets.scan_log,
+  returned as PlayerView.revealedSquares until
+  shot. The opponent gets an abilityUsed notice,
+  never what was revealed.
 end note
 
 note bottom of Reroute
