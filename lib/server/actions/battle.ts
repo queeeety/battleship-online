@@ -37,6 +37,21 @@ export async function getMyState(code: string): Promise<BattleResult<PlayerView>
     return run(server => server.getMyState(code));
 }
 
+/**
+ * `ability` is { name }, plus { line: "row" | "column" } for Line Scan or { ship, orientation } for Reroute.
+ * Scan results arrive on the player's private channel and in getMyState's revealedSquares.
+ */
+export async function useAbility(code: string, ability: unknown, target?: { row: number; col: number }): Promise<BattleResult<null>>
+{
+    return run(async server => { await server.useAbility(code, ability, target); return null; });
+}
+
+/** Keep-or-replace answer: true keeps the held ability, false takes the new draw. */
+export async function chooseAbility(code: string, keep: boolean): Promise<BattleResult<null>>
+{
+    return run(async server => { await server.chooseAbility(code, keep); return null; });
+}
+
 /** Rematch or Accept sends true; Decline or Home sends false, which closes the lobby. */
 export async function requestRematch(code: string, accept: boolean): Promise<BattleResult<RematchStatus>>
 {

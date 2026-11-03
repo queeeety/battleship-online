@@ -233,15 +233,16 @@ async function battle()
     const db = fakeSupabase();
     const repo = new GameRepository(db.client);
     const limiter = { allow: vi.fn().mockResolvedValue(true) } as unknown as RateLimiter;
+    const notifier = { sendPrivate: vi.fn().mockResolvedValue(undefined) };
     const as = (who: string | null) => new Server({
         currentSessionId: vi.fn().mockResolvedValue(who),
         signInAnonymously: vi.fn().mockResolvedValue(who)
-    } as unknown as SessionManager, repo, limiter);
+    } as unknown as SessionManager, repo, limiter, notifier);
 
     const lobby = await as("host").createLobby("Cian", GameType.ORIGINAL);
     const code = lobby.getCode();
     await as("guest").joinLobby(code, "Aoife");
-    return { db, as, code };
+    return { db, as, code, notifier };
 }
 
 /** A legal layout: the shared known fleet, or a random one. */
@@ -725,5 +726,195 @@ describe("Server.requestRematch", () =>
     {
         const { as, code, first } = await finished();
         await expect(as(first).requestRematch(code, "yes")).rejects.toBeInstanceOf(InvalidRequestError);
+    });
+});
+
+// ---------------------------------------------------------------- abilities
+
+/** A started battle where `first` (to move) holds `held` and maybe has an offer pending, set straight in the fake database. */
+async function withAbility(held: string, offered: string | null = null)
+{
+    const setup = await startedBattle();
+    const seat = setup.first === "host" ? 1 : 2;
+    Object.assign(setup.db.games.get(setup.code)!, { [`ability_p${seat}`]: held, [`offered_ability_p${seat}`]: offered });
+    return { ...setup, seat };
+}
+
+/** What a private message to this session carried, by kind. */
+function sentTo(notifier: { sendPrivate: ReturnType<typeof vi.fn> }, sessionId: string, kind: string)
+{
+    return notifier.sendPrivate.mock.calls
+        .filter(([p, payload]) => p.getSessionId() === sessionId && payload.kind === kind)
+        .map(([, payload]) => payload);
+}
+
+describe("Server.useAbility", () =>
+{
+    it("scans a 3x3 area for the caller only and uses up the turn's shot", async () =>
+    {
+        const { as, code, first, second, notifier } = await withAbility("radar_sweep");
+        await as(first).useAbility(code, { name: "Radar Sweep" }, { row: 0, col: 0 });
+
+        const mine = await as(first).getMyState(code);
+        expect(mine.heldAbility).toBeNull();
+        expect(mine.yourTurn).toBe(false);
+        expect(mine.revealedSquares).toHaveLength(9);                  // the known fleet fills that corner
+
+        const theirs = await as(second).getMyState(code);
+        expect(theirs.revealedSquares).toEqual([]);
+        expect(JSON.stringify(theirs)).not.toContain("Radar Sweep");
+        expect(sentTo(notifier, first, "scanResult")[0].cells).toHaveLength(9);
+        expect(sentTo(notifier, second, "abilityUsed")[0]).toMatchObject({ by: first === "host" ? "Cian" : "Aoife" });
+        expect(sentTo(notifier, second, "scanResult")).toEqual([]);
+    });
+
+    it("scans a row with Line Scan", async () =>
+    {
+        const { as, code, first } = await withAbility("line_scan");
+        await as(first).useAbility(code, { name: "Line Scan", line: "row" }, { row: 4, col: 0 });
+        expect((await as(first).getMyState(code)).revealedSquares).toEqual([{ row: 4, col: 0 }, { row: 4, col: 1 }]);
+    });
+
+    it("keeps a revealed square highlighted until it's shot", async () =>
+    {
+        const { as, code, first, second } = await withAbility("radar_sweep");
+        await as(first).useAbility(code, { name: "Radar Sweep" }, { row: 0, col: 0 });
+        await as(second).fireShot(code, { row: 9, col: 9 });           // a miss, back to first
+        await as(first).fireShot(code, { row: 0, col: 0 });
+        expect((await as(first).getMyState(code)).revealedSquares).toHaveLength(8);
+    });
+
+    it("arms Double Shot without a target and keeps the turn", async () =>
+    {
+        const { as, code, first } = await withAbility("double_shot");
+        await as(first).useAbility(code, { name: "Double Shot" });
+        const view = await as(first).getMyState(code);
+        expect(view.doubleShotActive).toBe(true);
+        expect(view.yourTurn).toBe(true);
+    });
+
+    it("reroutes your own undamaged ship and clears the opponent's scan of it", async () =>
+    {
+        const { as, code, first, second, db } = await startedBattle();
+        const firstSeat = first === "host" ? 1 : 2;
+        Object.assign(db.games.get(code)!, { [`ability_p${3 - firstSeat}`]: "line_scan" });
+        await as(first).fireShot(code, { row: 9, col: 9 });            // a miss, second to move
+        await as(second).useAbility(code, { name: "Line Scan", line: "row" }, { row: 4, col: 0 });
+        expect((await as(second).getMyState(code)).revealedSquares).toHaveLength(2);
+
+        Object.assign(db.games.get(code)!, { [`ability_p${firstSeat}`]: "reroute" });
+        await as(first).useAbility(code, { name: "Reroute", ship: "Destroyer", orientation: "horizontal" }, { row: 9, col: 0 });
+
+        const moved = (await as(first).getMyState(code)).yourBoard.ships.find(s => s.name === "Destroyer");
+        expect(moved).toMatchObject({ row: 9, col: 0 });
+        expect((await as(second).getMyState(code)).revealedSquares).toEqual([]);
+    });
+
+    it("uses the held ability before an offer is answered, and that counts as keeping it", async () =>
+    {
+        const { as, code, first } = await withAbility("radar_sweep", "line_scan");
+        await as(first).useAbility(code, { name: "Radar Sweep" }, { row: 0, col: 0 });
+        const view = await as(first).getMyState(code);
+        expect(view.heldAbility).toBeNull();
+        expect(view.offeredAbility).toBeNull();
+    });
+
+    it("refuses an ability the caller doesn't hold", async () =>
+    {
+        const { as, code, first } = await withAbility("double_shot");
+        await expect(as(first).useAbility(code, { name: "Radar Sweep" }, { row: 0, col: 0 })).rejects.toBeInstanceOf(MoveRefusedError);
+    });
+
+    it("refuses when it isn't the caller's turn, and the ability stays held", async () =>
+    {
+        const { as, code, second, db } = await startedBattle();
+        const seat = second === "host" ? 1 : 2;
+        Object.assign(db.games.get(code)!, { [`ability_p${seat}`]: "radar_sweep" });
+        await expect(as(second).useAbility(code, { name: "Radar Sweep" }, { row: 0, col: 0 })).rejects.toBeInstanceOf(MoveRefusedError);
+        expect((await as(second).getMyState(code)).heldAbility).toBe("Radar Sweep");
+    });
+
+    it("refuses a target off the board without using the ability up", async () =>
+    {
+        const { as, code, first } = await withAbility("radar_sweep");
+        await expect(as(first).useAbility(code, { name: "Radar Sweep" }, { row: 8, col: 8 })).rejects.toBeInstanceOf(MoveRefusedError);
+        expect((await as(first).getMyState(code)).heldAbility).toBe("Radar Sweep");
+    });
+
+    it("refuses an unknown ability or missing details", async () =>
+    {
+        const { as, code, first } = await withAbility("line_scan");
+        await expect(as(first).useAbility(code, { name: "Nuke" }, { row: 0, col: 0 })).rejects.toBeInstanceOf(InvalidRequestError);
+        await expect(as(first).useAbility(code, { name: "Line Scan" }, { row: 0, col: 0 })).rejects.toBeInstanceOf(InvalidRequestError);
+    });
+});
+
+describe("Server.chooseAbility", () =>
+{
+    it("swaps in the new draw when the player doesn't keep", async () =>
+    {
+        const { as, code, first } = await withAbility("radar_sweep", "double_shot");
+        await as(first).chooseAbility(code, false);
+        const view = await as(first).getMyState(code);
+        expect(view.heldAbility).toBe("Double Shot");
+        expect(view.offeredAbility).toBeNull();
+    });
+
+    it("keeps the held one when the player keeps", async () =>
+    {
+        const { as, code, first } = await withAbility("radar_sweep", "double_shot");
+        await as(first).chooseAbility(code, true);
+        const view = await as(first).getMyState(code);
+        expect(view.heldAbility).toBe("Radar Sweep");
+        expect(view.offeredAbility).toBeNull();
+    });
+
+    it("does nothing when there's no offer to answer", async () =>
+    {
+        const { as, code, first } = await withAbility("radar_sweep");
+        await as(first).chooseAbility(code, false);
+        expect((await as(first).getMyState(code)).heldAbility).toBe("Radar Sweep");
+    });
+
+    it("refuses an answer that isn't true or false", async () =>
+    {
+        const { as, code, first } = await withAbility("radar_sweep", "double_shot");
+        await expect(as(first).chooseAbility(code, "no")).rejects.toBeInstanceOf(InvalidRequestError);
+    });
+});
+
+describe("Server ability offers and scans", () =>
+{
+    it("sends a keep-or-replace offer to a player who already holds one when their ship sinks", async () =>
+    {
+        const { as, code, first, second, db, notifier } = await startedBattle();
+        const seat = second === "host" ? 1 : 2;
+        Object.assign(db.games.get(code)!, { [`ability_p${seat}`]: "radar_sweep" });
+        await as(first).fireShot(code, { row: 4, col: 0 });
+        await as(first).fireShot(code, { row: 4, col: 1 });           // sinks the Destroyer
+
+        const [offer] = sentTo(notifier, second, "abilityOffer");
+        expect(offer.current.getName()).toBe("Radar Sweep");
+        expect((await as(second).getMyState(code)).offeredAbility).toBe(offer.drawn.getName());
+    });
+
+    it("clears every scan when a rematch starts", async () =>
+    {
+        const { as, code, first, second, db } = await withAbility("radar_sweep");
+        await as(first).useAbility(code, { name: "Radar Sweep" }, { row: 0, col: 0 });
+        await as(second).forfeit(code);
+        await as(first).requestRematch(code, true);
+        await as(second).requestRematch(code, true);
+        expect(db.secrets.get(code)!.scan_log).toEqual({ p1: [], p2: [] });
+    });
+
+    it("keeps going when a private message can't be sent", async () =>
+    {
+        const { as, code, first, notifier } = await withAbility("radar_sweep");
+        notifier.sendPrivate.mockRejectedValue(new Error("Realtime down"));
+        const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+        await expect(as(first).useAbility(code, { name: "Radar Sweep" }, { row: 0, col: 0 })).resolves.toBeUndefined();
+        expect((await as(first).getMyState(code)).revealedSquares).toHaveLength(9);
+        quiet.mockRestore();
     });
 });

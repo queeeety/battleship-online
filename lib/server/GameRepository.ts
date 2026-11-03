@@ -67,12 +67,22 @@ interface SavedShot
     sunkShipName?: string | null;
 }
 
-/** A game plus its version, for saveGame's clash check. The rematch offer is stored next to the game, not in it. */
+/** Squares each player's scans revealed (game_secrets.scan_log). */
+export interface ScanLog
+{
+    p1: { row: number; col: number }[];
+    p2: { row: number; col: number }[];
+}
+
+export const EMPTY_SCAN_LOG: ScanLog = { p1: [], p2: [] };
+
+/** A game plus its version, for saveGame's clash check. The rematch offer and scan log are stored next to the game, not in it. */
 export interface LoadedGame
 {
     game: Game;
     version: string;
     rematch: RematchRequest | null;
+    scanLog: ScanLog;
 }
 
 /** Someone saved first (e.g. a double-click); the client should resync. */
@@ -248,9 +258,9 @@ export class GameRepository
 
         const { data: secrets, error: secretsError } = await this.client
             .from("game_secrets")
-            .select("board_p1, board_p2")
+            .select("board_p1, board_p2, scan_log")
             .eq("code", code)
-            .maybeSingle<{ board_p1: BoardSnapshot | null; board_p2: BoardSnapshot | null }>();
+            .maybeSingle<{ board_p1: BoardSnapshot | null; board_p2: BoardSnapshot | null; scan_log?: ScanLog | null }>();
         if (secretsError) throw new Error(`Could not load fleets for ${code}: ${secretsError.message}`);
 
         const seats = [
@@ -289,11 +299,19 @@ export class GameRepository
             if (at) (game.getPlayers()[i] as HumanPlayer).disconnect(new Date(at));
         });
 
-        return { game, version: row.updated_at, rematch: GameRepository.rematchFrom(game, row) };
+        return {
+            game,
+            version: row.updated_at,
+            rematch: GameRepository.rematchFrom(game, row),
+            scanLog: secrets?.scan_log ?? structuredClone(EMPTY_SCAN_LOG)
+        };
     }
 
-    /** One transaction via save_game(). Null if someone saved first; nothing is then written. `code` is needed for a fresh rematch Game. */
-    public async saveGame(g: Game, version: string, code: string = g.getId()): Promise<string | null>
+    /**
+     * One transaction via save_game(). Null if someone saved first; nothing is then written.
+     * `code` is needed for a fresh rematch Game; scanLog is left as it is unless given.
+     */
+    public async saveGame(g: Game, version: string, code: string = g.getId(), scanLog: ScanLog | null = null): Promise<string | null>
     {
         const saved = g.toJSON();
         const [p1, p2] = saved.players;
@@ -330,7 +348,8 @@ export class GameRepository
                 offered_ability_p2: GameRepository.abilityKey(p2.offeredAbility)
             },
             p_board_p1: p1.board,
-            p_board_p2: p2.board
+            p_board_p2: p2.board,
+            ...(scanLog ? { p_scan_log: scanLog } : {})
         });
         if (error) throw new Error(`Could not save game ${g.getId()}: ${error.message}`);
         return (data as string | null) ?? null;

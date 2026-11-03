@@ -11,13 +11,16 @@ import { LOBBY_HEARTBEAT_MS } from "../config";
 
 type Channel = RealtimeChannel;
 
+// abilityUsed tells the opponent "[Name] used Radar Sweep", never what it revealed
 export type PrivatePayload =
     | { kind: "scanResult"; cells: Coordinate[] }
-    | { kind: "abilityOffer"; current: Ability; drawn: Ability };
+    | { kind: "abilityOffer"; current: Ability; drawn: Ability }
+    | { kind: "abilityUsed"; by: string; ability: Ability };
 
 export type WirePrivatePayload =
     | { kind: "scanResult"; cells: { row: number; col: number }[] }
-    | { kind: "abilityOffer"; current: string; drawn: string };
+    | { kind: "abilityOffer"; current: string; drawn: string }
+    | { kind: "abilityUsed"; by: string; ability: string };
 
 /** What the database trigger broadcasts. Enums are database text, e.g. "in_progress". */
 export interface GameBroadcast
@@ -161,9 +164,10 @@ export class NetworkHandler
     public async sendPrivate(p: HumanPlayer, payload: PrivatePayload, code: string | null = this.code): Promise<void>
     {
         if (!code) throw new Error("No game code to send on");
-        const wire: WirePrivatePayload = payload.kind === "scanResult"
-            ? { kind: "scanResult", cells: payload.cells.map(c => c.toRowCol()) }
-            : { kind: "abilityOffer", current: payload.current.getName(), drawn: payload.drawn.getName() };
+        const wire: WirePrivatePayload =
+            payload.kind === "scanResult" ? { kind: "scanResult", cells: payload.cells.map(c => c.toRowCol()) }
+            : payload.kind === "abilityOffer" ? { kind: "abilityOffer", current: payload.current.getName(), drawn: payload.drawn.getName() }
+            : { kind: "abilityUsed", by: payload.by, ability: payload.ability.getName() };
 
         const result = await this.client.channel(`game:${code}:${p.getSessionId()}`, { config: { private: true } }).httpSend("private", wire);
         if (!result.success) throw new Error(`Private message failed: ${result.error}`);

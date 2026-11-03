@@ -189,6 +189,13 @@ describe("NetworkHandler.sendPrivate", () =>
         await net.sendPrivate(new HumanPlayer("Aoife", "them"), { kind: "abilityOffer", current: new RadarSweep(), drawn: new LineScan() }, "ABC234");
         expect(channels.get("game:ABC234:them")!.sent).toEqual([{ kind: "abilityOffer", current: "Radar Sweep", drawn: "Line Scan" }]);
     });
+
+    it("tells the opponent which ability was used, but nothing it revealed", async () =>
+    {
+        const { net, channels } = setup();
+        await net.sendPrivate(new HumanPlayer("Aoife", "them"), { kind: "abilityUsed", by: "Cian", ability: new RadarSweep() }, "ABC234");
+        expect(channels.get("game:ABC234:them")!.sent).toEqual([{ kind: "abilityUsed", by: "Cian", ability: "Radar Sweep" }]);
+    });
 });
 
 describe("NetworkHandler.resync / broadcast", () =>
