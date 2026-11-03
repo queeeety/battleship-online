@@ -2,9 +2,11 @@ import { describe, it, expect, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { GameRepository, StaleGameError } from "../../lib/server/GameRepository";
 import { Lobby } from "../../lib/controllers/Lobby";
-import { GameState, GameType, LobbyStatus, ShotResult } from "../../lib/enums";
+import type { Game } from "../../lib/controllers/Game";
+import { EndReason, GameState, GameType, LobbyStatus, RematchStatus, ShotResult } from "../../lib/enums";
 import { HumanPlayer } from "../../lib/entities/players";
 import { startedGame, knownFleetSquares, OPEN_WATER, sinkDestroyer } from "../helpers";
+import { fakeSupabase } from "./fakeSupabase";
 
 /** A games row as Supabase would return it, with a host and no guest by default. */
 function row(overrides: Record<string, unknown> = {})
@@ -23,6 +25,7 @@ function row(overrides: Record<string, unknown> = {})
         disconnected_at_p1: null,
         disconnected_at_p2: null,
         created_at: "2026-11-02T12:00:00Z",
+        updated_at: "2026-11-02T12:00:10Z",
         ...overrides
     };
 }
@@ -249,6 +252,21 @@ describe("GameRepository.loadGame / saveGame", () =>
         expect(players[0].isConnected()).toBe(true);
         expect(players[1].getDisconnectedAt()).toEqual(new Date("2026-11-02T12:00:00Z"));
     });
+
+    it("saves a disconnect time and clears it once the player is back", async () =>
+    {
+        const { db, repo } = fakeGameDb();
+        const { game } = startedGame();
+        const guest = game.getPlayers()[1] as HumanPlayer;
+        guest.disconnect(new Date("2026-11-03T12:00:00Z"));
+        await repo.saveGame(game, "v0");
+        expect(db.game.disconnected_at_p1).toBeNull();
+        expect(db.game.disconnected_at_p2).toBe("2026-11-03T12:00:00.000Z");
+
+        guest.reconnect();
+        await repo.saveGame(game, "v1");
+        expect(db.game.disconnected_at_p2).toBeNull();
+    });
 });
 
 describe("GameRepository.runShotTransaction", () =>
@@ -275,6 +293,19 @@ describe("GameRepository.runShotTransaction", () =>
         await expect(repo.runShotTransaction("4F7K2M", waiting, OPEN_WATER)).rejects.toThrow("turn");
     });
 
+    it("saves what beforeShot changed even when the shot itself is refused", async () =>
+    {
+        const { db, repo, shooter } = await startedInDb();
+        const seat = (await repo.loadGame("4F7K2M"))!.game.getPlayers().findIndex(p => p.getId() === shooter.getId()) + 1;
+        const missFirst = (g: Game) =>
+        {
+            g.fireShot(g.getCurrentTurn()!, OPEN_WATER);       // the turn passes, so `shooter` is then refused
+            return true;
+        };
+        await expect(repo.runShotTransaction("4F7K2M", shooter, knownFleetSquares()[0], missFirst)).rejects.toThrow("turn");
+        expect(db.game[`shots_p${seat}`]).toMatchObject([{ row: 9, col: 9, result: "miss" }]);
+    });
+
     it("throws StaleGameError if another request saved first, and writes nothing", async () =>
     {
         const { db, repo, shooter } = await startedInDb();
@@ -282,5 +313,79 @@ describe("GameRepository.runShotTransaction", () =>
         await expect(repo.runShotTransaction("4F7K2M", shooter, OPEN_WATER)).rejects.toBeInstanceOf(StaleGameError);
         expect(db.game.shots_p1).toEqual([]);
         expect(db.game.shots_p2).toEqual([]);
+    });
+});
+
+describe("GameRepository.keepLobbyOpen", () =>
+{
+    it("moves a waiting lobby's updated_at on, and says false once it isn't waiting", async () =>
+    {
+        const db = fakeSupabase();
+        const repo = new GameRepository(db.client);
+        const lobby = new Lobby(GameType.ORIGINAL, "4F7K2M");
+        lobby.join("Cian91", "host-session");
+        await repo.saveLobby(lobby);
+        const before = db.games.get("4F7K2M")!.updated_at;
+
+        expect(await repo.keepLobbyOpen("4F7K2M")).toBe(true);
+        expect(db.games.get("4F7K2M")!.updated_at).not.toBe(before);
+
+        lobby.join("Aoife", "guest-session");
+        await repo.saveLobby(lobby);
+        expect(await repo.keepLobbyOpen("4F7K2M")).toBe(false);
+    });
+
+    it("loads the last check-in as the lobby's lastSeenAt", async () =>
+    {
+        const { client } = fakeClient(row());
+        const lobby = (await new GameRepository(client).loadLobby("4F7K2M"))!;
+        expect(lobby.getLastSeenAt()).toEqual(new Date("2026-11-02T12:00:10Z"));
+    });
+});
+
+describe("GameRepository rematch", () =>
+{
+    async function finishedInDb()
+    {
+        const db = fakeSupabase();
+        const repo = new GameRepository(db.client);
+        const lobby = new Lobby(GameType.ORIGINAL, "4F7K2M");
+        lobby.join("Cian91", "host-session");
+        lobby.join("Aoife", "guest-session");
+        await repo.saveLobby(lobby);
+        const { game, version } = (await repo.loadGame("4F7K2M"))!;
+        game.declareWinner(game.getPlayers()[0], EndReason.OPPONENT_FORFEIT);
+        await repo.saveGame(game, version);
+        return { db, repo };
+    }
+
+    it("saves an offer and loads it back with who asked", async () =>
+    {
+        const { db, repo } = await finishedInDb();
+        const { game, version } = (await repo.loadGame("4F7K2M"))!;
+        expect(await repo.saveRematch(game, version, game.getPlayers()[1].requestRematch())).not.toBeNull();
+        expect(db.games.get("4F7K2M")).toMatchObject({ rematch_by: 2, rematch_status: "requested" });
+
+        const r = (await repo.loadGame("4F7K2M"))!.rematch!;
+        expect(r.getStatus()).toBe(RematchStatus.REQUESTED);
+        expect(r.getRequestedBy().getId()).toBe("guest-session");
+    });
+
+    it("closes the lobby with a decline when asked to", async () =>
+    {
+        const { db, repo } = await finishedInDb();
+        const { game, version } = (await repo.loadGame("4F7K2M"))!;
+        const r = game.getPlayers()[0].requestRematch();
+        r.decline();
+        await repo.saveRematch(game, version, r, true);
+        expect(db.games.get("4F7K2M")).toMatchObject({ lobby_status: "abandoned", rematch_status: "declined" });
+    });
+
+    it("refuses an offer against an old version", async () =>
+    {
+        const { db, repo } = await finishedInDb();
+        const { game } = (await repo.loadGame("4F7K2M"))!;
+        expect(await repo.saveRematch(game, "old", game.getPlayers()[0].requestRematch())).toBeNull();
+        expect(db.games.get("4F7K2M")!.rematch_status).toBe("none");
     });
 });

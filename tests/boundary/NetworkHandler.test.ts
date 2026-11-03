@@ -1,10 +1,11 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { NetworkHandler } from "../../lib/boundary/NetworkHandler";
 import { HumanPlayer } from "../../lib/entities/players";
 import { Coordinate } from "../../lib/entities/board";
 import { RadarSweep, LineScan } from "../../lib/abilities";
 import type { PlayerView } from "../../lib/controllers/Server";
+import { LobbyStatus } from "../../lib/enums";
 
 /**
  * A fake Supabase client whose channels remember their handlers, so a test can
@@ -48,7 +49,10 @@ function setup(me: string | null = "me")
     const rt = fakeRealtime(me);
     const listener = { onBroadcast: vi.fn(), onState: vi.fn(), onError: vi.fn(), onPresence: vi.fn(), onDisconnect: vi.fn(), onPrivate: vi.fn() };
     const fetchState = vi.fn().mockResolvedValue({ ok: true, data: view });
-    return { ...rt, listener, fetchState, net: new NetworkHandler(rt.client, listener, fetchState) };
+    const reportLeft = vi.fn().mockResolvedValue({ ok: true, data: null });
+    const keepOpen = vi.fn().mockResolvedValue({ ok: true, data: true });
+    const net = new NetworkHandler(rt.client, listener, { getMyState: fetchState, reportDisconnect: reportLeft, keepLobbyOpen: keepOpen });
+    return { ...rt, listener, fetchState, reportLeft, keepOpen, net };
 }
 
 describe("NetworkHandler.subscribe", () =>
@@ -146,6 +150,23 @@ describe("NetworkHandler presence", () =>
         expect(left.getName()).toBe("Aoife");
     });
 
+    it("tells the server when the opponent leaves, so their 60-second clock starts", async () =>
+    {
+        const { net, emit, reportLeft } = setup();
+        await net.subscribe("ABC234");
+        emit("game:ABC234", "presence:leave", { leftPresences: [{ sessionId: "them", name: "Aoife" }] });
+        expect(reportLeft).toHaveBeenCalledWith("ABC234");
+    });
+
+    it("doesn't report its own player leaving (e.g. another tab closing)", async () =>
+    {
+        const { net, emit, reportLeft, listener } = setup();
+        await net.subscribe("ABC234");
+        emit("game:ABC234", "presence:leave", { leftPresences: [{ sessionId: "me", name: "Cian" }] });
+        expect(reportLeft).not.toHaveBeenCalled();
+        expect(listener.onDisconnect).not.toHaveBeenCalled();
+    });
+
     it("refuses to track presence before subscribing", async () =>
     {
         const { net } = setup();
@@ -184,5 +205,40 @@ describe("NetworkHandler.resync / broadcast", () =>
     {
         const { net } = setup();
         expect(() => net.broadcast({ getId: () => "ABC234" } as never)).toThrow("database trigger");
+    });
+});
+
+describe("NetworkHandler waiting-lobby heartbeat", () =>
+{
+    afterEach(() => vi.useRealTimers());
+
+    it("checks in every 10 seconds while the lobby is waiting, then stops", async () =>
+    {
+        vi.useFakeTimers();
+        const { net, fetchState, keepOpen, connect } = setup();
+        fetchState.mockResolvedValue({ ok: true, data: { ...view, lobbyStatus: LobbyStatus.WAITING } });
+        await net.subscribe("ABC234");
+        connect("game:ABC234");
+        await vi.waitFor(() => expect(keepOpen).toHaveBeenCalledTimes(1));
+
+        await vi.advanceTimersByTimeAsync(20_000);
+        expect(keepOpen).toHaveBeenCalledTimes(3);
+
+        fetchState.mockResolvedValue({ ok: true, data: { ...view, lobbyStatus: LobbyStatus.IN_PROGRESS } });
+        await net.resync("ABC234");
+        await vi.advanceTimersByTimeAsync(30_000);
+        expect(keepOpen).toHaveBeenCalledTimes(3);
+    });
+
+    it("stops when the page leaves the game", async () =>
+    {
+        vi.useFakeTimers();
+        const { net, fetchState, keepOpen } = setup();
+        fetchState.mockResolvedValue({ ok: true, data: { ...view, lobbyStatus: LobbyStatus.WAITING } });
+        await net.subscribe("ABC234");
+        await net.resync("ABC234");
+        await net.unsubscribe();
+        await vi.advanceTimersByTimeAsync(30_000);
+        expect(keepOpen).toHaveBeenCalledTimes(1);
     });
 });

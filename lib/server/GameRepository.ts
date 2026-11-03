@@ -2,11 +2,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { Lobby } from "../controllers/Lobby";
 import { Game } from "../controllers/Game";
 import type { GameSnapshot } from "../controllers/Game";
-import type { Shot } from "../entities/game";
+import type { RematchRequest, Shot } from "../entities/game";
 import type { Player } from "../entities/players";
 import { HumanPlayer } from "../entities/players";
 import type { Board, BoardSnapshot, Coordinate } from "../entities/board";
-import { EndReason, GameState, GameType, LobbyStatus, ShotResult } from "../enums";
+import { EndReason, GameState, GameType, LobbyStatus, RematchStatus, ShotResult } from "../enums";
 import { createAdminSupabase } from "../supabase/admin";
 
 /** The games columns the lobby uses (see the init_schema migration). */
@@ -25,6 +25,7 @@ interface LobbyRow
     disconnected_at_p1: string | null;
     disconnected_at_p2: string | null;
     created_at: string;
+    updated_at: string;
 }
 
 interface GameRow
@@ -52,6 +53,8 @@ interface GameRow
     ability_p2: string | null;
     offered_ability_p1: string | null;
     offered_ability_p2: string | null;
+    rematch_by: number | null;
+    rematch_status: string | null;
     updated_at: string;
 }
 
@@ -64,11 +67,12 @@ interface SavedShot
     sunkShipName?: string | null;
 }
 
-/** A game plus its version, for saveGame's clash check. */
+/** A game plus its version, for saveGame's clash check. The rematch offer is stored next to the game, not in it. */
 export interface LoadedGame
 {
     game: Game;
     version: string;
+    rematch: RematchRequest | null;
 }
 
 /** Someone saved first (e.g. a double-click); the client should resync. */
@@ -130,6 +134,13 @@ export class GameRepository
         [EndReason.OPPONENT_DISCONNECTED, "opponent_disconnected"]
     ]);
 
+    private static readonly REMATCH_STATUS = new Map<RematchStatus, string>([
+        [RematchStatus.NONE, "none"],
+        [RematchStatus.REQUESTED, "requested"],
+        [RematchStatus.ACCEPTED, "accepted"],
+        [RematchStatus.DECLINED, "declined"]
+    ]);
+
     private static readonly ABILITY = new Map<string, string>([
         ["Double Shot", "double_shot"],
         ["Radar Sweep", "radar_sweep"],
@@ -149,7 +160,7 @@ export class GameRepository
     {
         const { data, error } = await this.client
             .from("games")
-            .select("code, lobby_status, game_type, game_state, player1_id, player1_name, player2_id, player2_name, ready_p1, ready_p2, disconnected_at_p1, disconnected_at_p2, created_at")
+            .select("code, lobby_status, game_type, game_state, player1_id, player1_name, player2_id, player2_name, ready_p1, ready_p2, disconnected_at_p1, disconnected_at_p2, created_at, updated_at")
             .eq("code", code)
             .maybeSingle<LobbyRow>();
 
@@ -167,7 +178,22 @@ export class GameRepository
             GameRepository.fromText(GameRepository.GAME_TYPE, data.game_type),
             GameRepository.fromText(GameRepository.LOBBY_STATUS, data.lobby_status),
             new Date(data.created_at),
-            players);
+            players,
+            new Date(data.updated_at));
+    }
+
+    /** The waiting host's heartbeat: a no-op update, so the trigger moves updated_at on. False once the lobby isn't waiting. */
+    public async keepLobbyOpen(code: string): Promise<boolean>
+    {
+        const { data, error } = await this.client
+            .from("games")
+            .update({ lobby_status: "waiting" })
+            .eq("code", code)
+            .eq("lobby_status", "waiting")
+            .select("code");
+
+        if (error) throw new Error(`Could not keep lobby ${code} open: ${error.message}`);
+        return (data ?? []).length > 0;
     }
 
     /** Upserts only the lobby's columns; game columns are left alone. */
@@ -214,7 +240,7 @@ export class GameRepository
     {
         const { data: row, error } = await this.client
             .from("games")
-            .select("code, game_type, game_state, player1_id, player1_name, player2_id, player2_name, ready_p1, ready_p2, disconnected_at_p1, disconnected_at_p2, turn, turn_started_at, double_shot_active, winner, end_reason, finished_at, shots_p1, shots_p2, ability_p1, ability_p2, offered_ability_p1, offered_ability_p2, updated_at")
+            .select("code, game_type, game_state, player1_id, player1_name, player2_id, player2_name, ready_p1, ready_p2, disconnected_at_p1, disconnected_at_p2, turn, turn_started_at, double_shot_active, winner, end_reason, finished_at, shots_p1, shots_p2, ability_p1, ability_p2, offered_ability_p1, offered_ability_p2, rematch_by, rematch_status, updated_at")
             .eq("code", code)
             .maybeSingle<GameRow>();
         if (error) throw new Error(`Could not load game ${code}: ${error.message}`);
@@ -263,26 +289,33 @@ export class GameRepository
             if (at) (game.getPlayers()[i] as HumanPlayer).disconnect(new Date(at));
         });
 
-        return { game, version: row.updated_at };
+        return { game, version: row.updated_at, rematch: GameRepository.rematchFrom(game, row) };
     }
 
-    /** One transaction via save_game(). Null if someone saved first; nothing is then written. */
-    public async saveGame(g: Game, version: string): Promise<string | null>
+    /** One transaction via save_game(). Null if someone saved first; nothing is then written. `code` is needed for a fresh rematch Game. */
+    public async saveGame(g: Game, version: string, code: string = g.getId()): Promise<string | null>
     {
         const saved = g.toJSON();
         const [p1, p2] = saved.players;
         const shotsBy = (seat: number) => saved.shots
             .filter(s => s.shooter === seat)
             .map(s => ({ row: s.row, col: s.col, result: GameRepository.SHOT_RESULT.get(s.result), firedAt: s.firedAt, sunkShipName: s.sunkShipName }));
+        const awaySince = (seat: number) =>
+        {
+            const p = g.getPlayers()[seat];
+            return p instanceof HumanPlayer ? p.getDisconnectedAt()?.toISOString() ?? null : null;
+        };
 
         const { data, error } = await this.client.rpc("save_game", {
-            p_code: g.getId(),
+            p_code: code,
             p_expected_updated_at: version,
             p_game: {
                 lobby_status: saved.state === GameState.FINISHED ? "finished" : "in_progress",
                 game_state: GameRepository.GAME_STATE.get(saved.state),
                 ready_p1: p1.isReady,
                 ready_p2: p2.isReady,
+                disconnected_at_p1: awaySince(0),
+                disconnected_at_p2: awaySince(1),
                 turn: saved.currentTurn === null ? null : saved.currentTurn + 1,
                 turn_started_at: saved.turnStartedAt,
                 double_shot_active: saved.doubleShotActive,
@@ -303,6 +336,24 @@ export class GameRepository
         return (data as string | null) ?? null;
     }
 
+    /** Writes a rematch offer or answer, closing the lobby if asked. Null if someone saved first. */
+    public async saveRematch(g: Game, version: string, r: RematchRequest, closeLobby: boolean = false): Promise<string | null>
+    {
+        const { data, error } = await this.client
+            .from("games")
+            .update({
+                rematch_by: g.getPlayers().indexOf(r.getRequestedBy()) + 1,
+                rematch_status: GameRepository.REMATCH_STATUS.get(r.getStatus()),
+                ...(closeLobby ? { lobby_status: "abandoned" } : {})
+            })
+            .eq("code", g.getId())
+            .eq("updated_at", version)
+            .select("updated_at");
+
+        if (error) throw new Error(`Could not save the rematch for ${g.getId()}: ${error.message}`);
+        return (data as { updated_at: string }[] | null)?.[0]?.updated_at ?? null;
+    }
+
     public async loadFleet(code: string, p: Player): Promise<Board>
     {
         const loaded = await this.loadGame(code);
@@ -320,14 +371,19 @@ export class GameRepository
         return (await this.saveGame(loaded.game, loaded.version)) !== null;
     }
 
-    /** Load, apply the rules, save. A double-click or second tab gets StaleGameError. */
-    public async runShotTransaction(code: string, shooter: Player, target: Coordinate): Promise<Shot>
+    /**
+     * Load, apply the rules, save. A double-click or second tab gets StaleGameError.
+     * `beforeShot` may change the game first (e.g. an expired turn's random shot); returns true if it did,
+     * and that change is saved even when this shot is then refused.
+     */
+    public async runShotTransaction(code: string, shooter: Player, target: Coordinate, beforeShot?: (g: Game) => boolean): Promise<Shot>
     {
         const loaded = await this.loadGame(code);
         if (!loaded) throw new Error(`Game ${code} hasn't started`);
         const own = loaded.game.getPlayers().find(q => q.getId() === shooter.getId());
         if (!own) throw new Error(`${shooter.getName()} isn't in game ${code}`);
 
+        const changed = beforeShot?.(loaded.game) ?? false;
         let shot: Shot;
         try
         {
@@ -335,6 +391,7 @@ export class GameRepository
         }
         catch (e)
         {
+            if (changed) await this.saveGame(loaded.game, loaded.version);
             throw new MoveRefusedError(e instanceof Error ? e.message : "Move refused");
         }
         if (await this.saveGame(loaded.game, loaded.version) === null) throw new StaleGameError(code);
@@ -348,6 +405,16 @@ export class GameRepository
         p.restoreState(sessionId, ready, null, null);
         if (disconnectedAt) p.disconnect(new Date(disconnectedAt));
         return p;
+    }
+
+    private static rematchFrom(game: Game, row: GameRow): RematchRequest | null
+    {
+        if (!row.rematch_by || !row.rematch_status || row.rematch_status === "none") return null;
+        const r = game.getPlayers()[row.rematch_by - 1].requestRematch();
+        const status = GameRepository.fromText(GameRepository.REMATCH_STATUS, row.rematch_status);
+        if (status === RematchStatus.ACCEPTED) r.accept();
+        if (status === RematchStatus.DECLINED) r.decline();
+        return r;
     }
 
     private static savedShots(saved: SavedShot[], shooter: number): GameSnapshot["shots"]

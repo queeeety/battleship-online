@@ -6,9 +6,9 @@ import { GameType } from "../enums";
 /** Thrown on invalid input. `field` lets Server map it to the right JoinError. */
 export class InvalidRequestError extends Error
 {
-    public readonly field: "code" | "name" | "coordinate" | "layout" | "gameType";
+    public readonly field: "code" | "name" | "coordinate" | "layout" | "gameType" | "answer";
 
-    constructor(field: "code" | "name" | "coordinate" | "layout" | "gameType", message: string)
+    constructor(field: "code" | "name" | "coordinate" | "layout" | "gameType" | "answer", message: string)
     {
         super(message);
         this.name = "InvalidRequestError";
@@ -66,6 +66,13 @@ export class RequestValidator
         const result = this.nameSchema.safeParse(raw);
         if (!result.success) throw new InvalidRequestError("name", `Names can be at most ${PLAYER_NAME_MAX_LENGTH} characters`);
         return result.data;
+    }
+
+    /** A yes/no answer, e.g. accepting a rematch. */
+    public parseAnswer(raw: unknown): boolean
+    {
+        if (typeof raw !== "boolean") throw new InvalidRequestError("answer", "Expected true or false");
+        return raw;
     }
 
     public parseGameType(raw: unknown): GameType

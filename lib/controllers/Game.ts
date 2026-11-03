@@ -149,6 +149,12 @@ export class Game
         return now.getTime() - this.turnStartedAt.getTime() > limitMs;
     }
 
+    // the clock doesn't run while the player to move is disconnected
+    public resumeTurnTimer(awayMs: number): void
+    {
+        if (this.turnStartedAt && awayMs > 0) this.turnStartedAt = new Date(this.turnStartedAt.getTime() + awayMs);
+    }
+
     public switchTurn(): void
     {
         if (!this.currentTurn) return;

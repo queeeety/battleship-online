@@ -1,5 +1,5 @@
-import { GameState, JoinError, LobbyStatus } from "../enums";
-import type { EndReason, GameType, ShotResult } from "../enums";
+import { EndReason, GameState, JoinError, LobbyStatus, RematchStatus } from "../enums";
+import type { GameType, ShotResult } from "../enums";
 import { Lobby } from "./Lobby";
 import type { HumanPlayer } from "../entities/players";
 import type { BoardSnapshot, Coordinate } from "../entities/board";
@@ -30,6 +30,15 @@ export interface ShotView
     sunkShipName: string | null;
 }
 
+/** disconnectedAt starts the 60-second countdown on screen. */
+export interface SeatView
+{
+    name: string;
+    ready: boolean;
+    connected: boolean;
+    disconnectedAt: string | null;
+}
+
 /** getMyState's result: only what this player may see. */
 export interface PlayerView
 {
@@ -38,8 +47,8 @@ export interface PlayerView
     lobbyStatus: LobbyStatus;
     gameState: GameState | null;
     seat: 1 | 2;
-    you: { name: string; ready: boolean; connected: boolean };
-    opponent: { name: string; ready: boolean; connected: boolean } | null;
+    you: SeatView;
+    opponent: SeatView | null;
     yourTurn: boolean;
     turnStartedAt: string | null;
     doubleShotActive: boolean;
@@ -51,6 +60,7 @@ export interface PlayerView
     winner: 1 | 2 | null;
     endReason: EndReason | null;
     opponentBoard: BoardSnapshot | null;
+    rematch: { by: 1 | 2; status: RematchStatus } | null;
     result: { won: boolean; shotsFired: number; accuracy: number; shipsSunk: number } | null;
 }
 
@@ -152,6 +162,14 @@ export class Server
         const seat = lobby.seatOf(sessionId);
         if (seat !== null) return { lobby, player: lobby.getPlayers()[seat - 1] };
 
+        // the host left more than 30 s ago, so the code stops working
+        if (lobby.isHostGone())
+        {
+            lobby.abandon();
+            await this.repo.saveLobby(lobby);
+            throw new JoinRefusedError(JoinError.CODE_NOT_FOUND);
+        }
+
         if (lobby.getStatus() === LobbyStatus.FINISHED) throw new JoinRefusedError(JoinError.GAME_ALREADY_FINISHED);
         if (!lobby.isJoinable()) throw new JoinRefusedError(JoinError.LOBBY_FULL);
 
@@ -179,12 +197,12 @@ export class Server
         });
     }
 
-    /** Not retried, so a double-click can't fire twice. */
+    /** Not retried, so a double-click can't fire twice. An expired turn gets its random shot first. */
     public async fireShot(code: unknown, target: unknown): Promise<Shot>
     {
         const { lobbyCode, player } = await this.seatedCaller(code);
         const square = this.validator.parseCoordinate(target);
-        return this.repo.runShotTransaction(lobbyCode, player, square);
+        return this.repo.runShotTransaction(lobbyCode, player, square, g => Server.fireIfTurnExpired(g));
     }
 
     public useAbility(code: string, a: Ability, target: Coordinate): void {}
@@ -201,14 +219,73 @@ export class Server
         });
     }
 
-    public requestRematch(code: string, accept: boolean): RematchRequest { throw new Error("not implemented"); }
+    /**
+     * One player asks (accept = true), the other answers. Both agreeing resets the same lobby to placement;
+     * a decline, or leaving with false, closes the lobby so the code stops working.
+     */
+    public async requestRematch(code: unknown, accept: unknown): Promise<RematchRequest>
+    {
+        const { lobbyCode, lobby, seat } = await this.seatedCaller(code);
+        const yes = this.validator.parseAnswer(accept);
+        let answer: RematchRequest | null = null;
 
-    /** Own board in full, opponent's as shots only; their fleet is revealed once finished. */
+        await this.retryIfStale(lobbyCode, async () =>
+        {
+            const { game, version, rematch } = await this.loadStarted(lobbyCode);
+            if (game.getState() !== GameState.FINISHED) throw new MoveRefusedError("The game isn't over yet");
+            const me = game.getPlayers()[seat - 1];
+            answer = rematch;
+            if (rematch && rematch.getStatus() !== RematchStatus.REQUESTED) return true;
+
+            if (!yes)
+            {
+                answer = rematch ?? me.requestRematch();
+                answer.decline();
+                return await this.repo.saveRematch(game, version, answer, true) !== null;
+            }
+            if (rematch?.getRequestedBy() === me) return true;
+            if (!rematch)
+            {
+                answer = me.requestRematch();
+                return await this.repo.saveRematch(game, version, answer) !== null;
+            }
+
+            rematch.accept();
+            lobby.reset();
+            for (const p of lobby.getPlayers()) p.reconnect();
+            return await this.repo.saveGame(lobby.getGame(), version, lobbyCode) !== null;
+        });
+        return answer!;
+    }
+
+    /** Own board in full, opponent's as shots only; their fleet is revealed once finished. Also marks the caller as back. */
     public async getMyState(code: unknown): Promise<PlayerView>
     {
-        const { lobby, seat } = await this.seatedCaller(code);
-        const game = (await this.repo.loadGame(lobby.getCode()))?.game ?? null;
-        return Server.viewFor(lobby, game, seat);
+        const { lobbyCode, lobby, seat } = await this.seatedCaller(code);
+        const loaded = await this.repo.loadGame(lobbyCode);
+        let game = loaded?.game ?? null;
+        if (game && !(game.getPlayers()[seat - 1] as HumanPlayer).isConnected()) game = await this.markBack(lobbyCode, seat);
+        return Server.viewFor(lobby, game, seat, loaded?.rematch ?? null);
+    }
+
+    /**
+     * The other client saw this player's presence drop, so their 60-second clock starts.
+     * A false report is undone by that player's next getMyState.
+     */
+    public async reportDisconnect(code: unknown): Promise<void>
+    {
+        const { lobbyCode, seat, player } = await this.seatedCaller(code);
+        await this.checkRateLimit(player.getSessionId(), "reportDisconnect");
+
+        await this.retryIfStale(lobbyCode, async () =>
+        {
+            const loaded = await this.repo.loadGame(lobbyCode);
+            if (!loaded || loaded.game.getState() === GameState.FINISHED) return true;
+            const them = loaded.game.getPlayers()[2 - seat] as HumanPlayer;
+            if (!them.isConnected()) return true; // keep the first time, or the clock restarts
+            them.disconnect();
+            return await this.repo.saveGame(loaded.game, loaded.version) !== null;
+        });
     }
 
     /** Gives a refreshed player their seat back, or null. Matched by cookie, never the browser's value, so seats can't be stolen. */
@@ -228,9 +305,48 @@ export class Server
         return { lobby, player: lobby.getPlayers()[seat - 1] };
     }
 
-    public claimTimeout(code: string): void {}
+    /**
+     * Called when a countdown on screen hits zero: the 60 s disconnect or the turn timer.
+     * The server decides if time is really up; false means not yet.
+     */
+    public async claimTimeout(code: unknown): Promise<boolean>
+    {
+        const { lobbyCode, seat } = await this.seatedCaller(code);
+        let claimed = false;
+
+        await this.retryIfStale(lobbyCode, async () =>
+        {
+            claimed = false;
+            const loaded = await this.repo.loadGame(lobbyCode);
+            if (!loaded || loaded.game.getState() === GameState.FINISHED) return true;
+            const game = loaded.game;
+            const me = game.getPlayers()[seat - 1] as HumanPlayer;
+            const them = game.opponentOf(me) as HumanPlayer;
+
+            if (them.hasExceededGracePeriod())
+            {
+                me.reconnect();
+                game.declareWinner(me, EndReason.OPPONENT_DISCONNECTED);
+                claimed = true;
+            }
+            else
+            {
+                claimed = Server.fireIfTurnExpired(game);
+            }
+            if (!claimed) return true;
+            return await this.repo.saveGame(game, loaded.version) !== null;
+        });
+        return claimed;
+    }
 
     public chooseAbility(code: string, keep: boolean): void {}
+
+    /** The waiting host's heartbeat. False once the lobby isn't waiting any more. */
+    public async keepLobbyOpen(code: unknown): Promise<boolean>
+    {
+        const { lobbyCode } = await this.seatedCaller(code);
+        return this.repo.keepLobbyOpen(lobbyCode);
+    }
 
     private assignRandomName(): string
     {
@@ -278,6 +394,38 @@ export class Server
         return { lobbyCode, lobby, seat, player: lobby.getPlayers()[seat - 1] };
     }
 
+    // the timer is paused while the player to move is disconnected
+    private static fireIfTurnExpired(game: Game): boolean
+    {
+        const current = game.getCurrentTurn() as HumanPlayer | null;
+        if (!current || !current.isConnected() || !game.isTurnExpired()) return false;
+        game.fireRandomShot(current);
+        return true;
+    }
+
+    // clears the caller's disconnect and gives back the turn time they were away for
+    private async markBack(code: string, seat: 1 | 2): Promise<Game>
+    {
+        let game: Game | null = null;
+        await this.retryIfStale(code, async () =>
+        {
+            const loaded = await this.loadStarted(code);
+            game = loaded.game;
+            const me = game.getPlayers()[seat - 1] as HumanPlayer;
+            const awaySince = me.getDisconnectedAt();
+            if (me.isConnected() || awaySince === null) return true;
+
+            const turnStart = game.getTurnStartedAt();
+            if (game.getState() === GameState.IN_PROGRESS && game.getCurrentTurn() === me && turnStart)
+            {
+                game.resumeTurnTimer(Date.now() - Math.max(awaySince.getTime(), turnStart.getTime()));
+            }
+            me.reconnect();
+            return await this.repo.saveGame(game, loaded.version) !== null;
+        });
+        return game!;
+    }
+
     private async loadStarted(code: string): Promise<LoadedGame>
     {
         const loaded = await this.repo.loadGame(code);
@@ -295,25 +443,29 @@ export class Server
         throw new StaleGameError(code);
     }
 
-    private static viewFor(lobby: Lobby, game: Game | null, seat: 1 | 2): PlayerView
+    private static viewFor(lobby: Lobby, game: Game | null, seat: 1 | 2, rematch: RematchRequest | null = null): PlayerView
     {
-        const seated = lobby.getPlayers();
-        const you = seated[seat - 1];
-        const them = seated[2 - seat] ?? null;
+        // the game's copy is newer once started (markBack may have just changed it)
+        const seated = (game?.getPlayers() as HumanPlayer[] | undefined) ?? lobby.getPlayers();
+        const seatView = (p: HumanPlayer): SeatView => ({
+            name: p.getName(), ready: p.getIsReady(), connected: p.isConnected(),
+            disconnectedAt: p.getDisconnectedAt()?.toISOString() ?? null
+        });
+        const them = seated[2 - seat];
         const base = {
             code: lobby.getCode(),
             gameType: lobby.getGameType(),
             lobbyStatus: lobby.getStatus(),
             seat,
-            you: { name: you.getName(), ready: you.getIsReady(), connected: you.isConnected() },
-            opponent: them ? { name: them.getName(), ready: them.getIsReady(), connected: them.isConnected() } : null
+            you: seatView(seated[seat - 1]),
+            opponent: them ? seatView(them) : null
         };
         if (!game)
         {
             return {
                 ...base, gameState: null, yourTurn: false, turnStartedAt: null, doubleShotActive: false,
                 yourBoard: { ships: [], shots: [] }, yourShots: [], opponentShots: [],
-                heldAbility: null, offeredAbility: null, winner: null, endReason: null, opponentBoard: null, result: null
+                heldAbility: null, offeredAbility: null, winner: null, endReason: null, opponentBoard: null, rematch: null, result: null
             };
         }
 
@@ -330,7 +482,7 @@ export class Server
         return {
             ...base,
             gameState: game.getState(),
-            yourTurn: game.getCurrentTurn() === me,
+            yourTurn: !finished && game.getCurrentTurn() === me,
             turnStartedAt: game.getTurnStartedAt()?.toISOString() ?? null,
             doubleShotActive: game.isDoubleShotActive(),
             yourBoard: me.getBoard().toSnapshot(),
@@ -341,6 +493,10 @@ export class Server
             winner: winner === null ? null : (players.indexOf(winner) + 1) as 1 | 2,
             endReason: game.getEndReason(),
             opponentBoard: finished ? opponent.getBoard().toSnapshot() : null,
+            rematch: rematch && {
+                by: (players.findIndex(p => p.getId() === rematch.getRequestedBy().getId()) + 1) as 1 | 2,
+                status: rematch.getStatus()
+            },
             result: result && {
                 won: result.getDidWin(), shotsFired: result.getShotsFired(),
                 accuracy: result.getAccuracy(), shipsSunk: result.getShipsSunk()

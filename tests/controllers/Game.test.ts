@@ -161,6 +161,16 @@ describe("Game timer", () =>
         expect(game.isTurnExpired(new Date(start + seconds * 1000 + 1))).toBe(true);
     });
 
+    it("resumeTurnTimer moves the start on by the time away, so the clock is paused", () =>
+    {
+        const { game } = startedGame();
+        const start = game.getTurnStartedAt()!.getTime();
+        game.resumeTurnTimer(20_000);
+        expect(game.getTurnStartedAt()!.getTime()).toBe(start + 20_000);
+        game.resumeTurnTimer(-5);
+        expect(game.getTurnStartedAt()!.getTime()).toBe(start + 20_000);
+    });
+
     it("fireRandomShot fires for the current player at an untargeted square", () =>
     {
         const { game, first, second } = startedGame();

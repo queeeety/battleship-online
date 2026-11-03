@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { Lobby } from "../../lib/controllers/Lobby";
 import { GameState, GameType, LobbyStatus } from "../../lib/enums";
 import { LOBBY_CODE_CHARS, LOBBY_CODE_LENGTH } from "../../lib/config";
+import { HumanPlayer } from "../../lib/entities/players";
 
 describe("Lobby.generateCode", () =>
 {
@@ -144,5 +145,31 @@ describe("Lobby.restore", () =>
         expect(restored.seatOf("a")).toBe(1);
         expect(restored.seatOf("b")).toBe(2);
         expect(restored.getGame().getPlayers()).toHaveLength(2);
+    });
+});
+
+describe("Lobby.isHostGone", () =>
+{
+    const at = (seconds: number) => new Date(Date.parse("2026-11-03T12:00:00Z") + seconds * 1000);
+
+    it("closes a waiting lobby once the host has been gone over 30 seconds", () =>
+    {
+        const lobby = Lobby.restore("4F7K2M", GameType.ORIGINAL, LobbyStatus.WAITING, at(-60), [new HumanPlayer("Cian", "a")], at(0));
+        expect(lobby.isHostGone(at(30))).toBe(false);
+        expect(lobby.isHostGone(at(31))).toBe(true);
+    });
+
+    it("never applies once the guest has joined", () =>
+    {
+        const host = new HumanPlayer("Cian", "a");
+        const guest = new HumanPlayer("Aoife", "b");
+        const lobby = Lobby.restore("4F7K2M", GameType.ORIGINAL, LobbyStatus.IN_PROGRESS, at(-60), [host, guest], at(0));
+        expect(lobby.isHostGone(at(300))).toBe(false);
+    });
+
+    it("counts from creation when there's no check-in yet", () =>
+    {
+        const lobby = Lobby.restore("4F7K2M", GameType.ORIGINAL, LobbyStatus.WAITING, at(0), [new HumanPlayer("Cian", "a")]);
+        expect(lobby.getLastSeenAt()).toEqual(at(0));
     });
 });

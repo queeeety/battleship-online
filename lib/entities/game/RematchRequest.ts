@@ -18,11 +18,20 @@ export class RematchRequest
         this.requestedAt = new Date();
     }
 
-    public accept(): void {}
+    public accept(): void
+    {
+        if (this.status !== RematchStatus.REQUESTED) throw new Error("This rematch has already been answered");
+        this.status = RematchStatus.ACCEPTED;
+    }
 
-    public decline(): void {}
+    public decline(): void
+    {
+        if (this.status !== RematchStatus.REQUESTED) throw new Error("This rematch has already been answered");
+        this.status = RematchStatus.DECLINED;
+    }
 
-    public isMutual(): boolean { return false; }
+    // one player asked and the other accepted
+    public isMutual(): boolean { return this.status === RematchStatus.ACCEPTED; }
 
     public getRequestedBy(): Player { return this.requestedBy; }
 
