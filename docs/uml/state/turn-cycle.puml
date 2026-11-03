@@ -33,7 +33,7 @@ state "Game :: InProgress" as InProgress {
 
   AwaitingAction --> ActionRejected : fireShot(target)\n[Board.hasBeenTargeted(target)]\n/ no shot fired
   AwaitingAction --> ResolvingShot : fireShot(target)\n[shooter == currentTurn\nand not hasBeenTargeted(target)]
-  AwaitingAction --> ResolvingShot : claimTimeout() or next fireShot()\n[isTurnExpired()\nand player connected]\n/ fireRandomShot(currentTurn)
+  AwaitingAction --> ResolvingShot : claimTimeout(), or next fireShot() / useAbility()\n[isTurnExpired()\nand player connected]\n/ fireRandomShot(currentTurn)
   AwaitingAction --> ApplyingAbility : useAbility(a, target)\n[heldAbility != null\nand a.canUse(g)\nand a.isValidTarget(b, target)]
   AwaitingAction --> ActionRejected : useAbility(a, target)\n[not a.isValidTarget(b, target)]\n/ ability not consumed
   AwaitingAction --> TurnPaused : reportDisconnect()\n[p == currentTurn]\n/ p.disconnect()

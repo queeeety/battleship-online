@@ -5,23 +5,30 @@ frame "sd UseAbility" {
   rectangle "net : NetworkHandler" as Net
   rectangle "oppUI : UIManager" as OppUI
   rectangle "server : Server" as Server
+  rectangle "repo : GameRepository" as Repo
   rectangle "game : Game" as Game
   rectangle "owner : Player" as Player
   rectangle "ability : Ability" as Ability
   rectangle "ownBoard : Board" as OwnBoard
   rectangle "oppBoard : Board" as OppBoard
-  Owner -down- UI : ⇡ 1.4.1.1 : "Keep current or take drawn?"\n↓ 2 [owner already holds an unused ability] : selects Keep\n↓ 4 : selects Radar Sweep, targets area E4-G6\n⇡ 4.2 [not ability.isValidTarget(oppBoard, E4)] : choose another target (UC4 4b)\n⇡ 4.3 : green scan markers on F5, F6
-  UI -down- Net : ⇡ 1.4.1 : promptKeepOrReplace(current, drawn)\n⇡ 4.1.3.1 : showScanResult([F5, F6])
-  OppUI -down- Net : ⇡ 3.1 : "[Name] was granted an ability"\n⇡ 4.1.4.1 : &#34;[Name] used Radar Sweep&#34;
-  UI -down- Server : ↓ 2.1 : chooseAbility(code, true)\n↓ 4.1 : useAbility(code, ability, E4)\n⇡ 4.1.2 [not ability.isValidTarget(oppBoard, E4)] : reject\n⇡ 4.1.5 : ok
-  Net -down- Server : ↑ 4.1.3 : sendPrivate(owner, [F5, F6])\n↑ 4.1.4 : broadcast(game)
-  Net -down- Game : ↑ 1.4 [owner already holds an unused ability] : sendPrivate(owner, [current, drawn])\n↑ 3 : broadcast(game)
-  Server -down- Game : ↓ 4.1.1 : applyAbility(owner, E4)\n⇡ 4.1.1.2 [not ability.isValidTarget(oppBoard, E4)] : invalid target\n⇡ 4.1.1.6 : result
-  Server -down- Player : ↓ 2.1.1 : receiveAbility(kept)
-  Game -- Game : 1 : grantAbility(owner)\n1.1 *[drawn == Reroute and Reroute.validPositions(ownBoard, s).isEmpty()\n         for every undamaged Ship] : draw again from the other three\n4.1.1.4 [valid target and ability.usesTurnShot] : switchTurn()\n4.1.1.5 [valid target and not ability.usesTurnShot] : turn continues, player still fires\n5 [holder is the AIOpponent] : AIOpponent.takeTurn(game): shouldUseAbility() and canUse(), then applyAbility(ai, chooseAbilityTarget())
-  Game -down- Ability : ↓ 1.2 : <<create>> RadarSweep\n↓ 4.1.1.1 : canUse(game)\n⇡ 4.1.1.1.1 : owner's turn, before firing, not used\n↓ 4.1.1.3 [valid target] : apply(game, oppBoard, E4)\n↑ 4.1.1.3.5 [ability is DoubleShot] : doubleShotActive = true\n⇡ 4.1.1.3.6 : applied, used = true
-  Game -down- Player : ↓ 1.3 [owner.heldAbility == null] : receiveAbility(drawn)\n⇡ 1.3.1 : held
-  Ability -down- OppBoard : ↓ 4.1.1.3.1 [ability is RadarSweep] : scanArea(E4, 3)\n⇡ 4.1.1.3.1.1 : [F5, F6] unshot ship squares\n↓ 4.1.1.3.2 [ability is LineScan] : scanLine(index, isRow)\n⇡ 4.1.1.3.2.1 : unshot ship squares on that line
-  Ability -down- OwnBoard : ↓ 4.1.1.3.3 [ability is Reroute] : validPositions(ownBoard, ship)\n↓ 4.1.1.3.4 [ability is Reroute] : moveShip(ship, start, orientation)
+  Owner -down- UI : ⇡ 3.1.1 : "Keep current or take drawn?"\n↓ 4 : selects Keep (or no choice in 10 s)\n↓ 5 : selects Radar Sweep, targets area E4-G6\n⇡ 5.3 [not ability.isValidTarget(oppBoard, E4)] : choose another target (UC4 4b)\n⇡ 5.2 : green scan markers on F5, F6 (revealedSquares, until shot)
+  UI -down- Net : ⇡ 3.1 : promptKeepOrReplace(current, drawn)\n⇡ 5.1.9.1 : showScanResult([F5, F6])
+  OppUI -down- Net : ⇡ 2.1 : SUNK result: "[Name] was granted an ability"\n⇡ 5.1.10.1 : &#34;[Name] used Radar Sweep&#34;
+  UI -down- Server : ↓ 4.1 : chooseAbility(code, true)\n↓ 5.1 : useAbility(code, {name: "Radar Sweep"}, E4)\n⇡ 5.1.6 [not ability.isValidTarget(oppBoard, E4)] : MOVE_REFUSED, ability kept\n⇡ 5.1.11 [saved] : ok\n⇡ 5.1.12 [another save landed first] : STALE
+  Net -down- Server : ↑ 3 [owner already holds an unused ability] : sendPrivate(owner, abilityOffer {current, drawn})\n↑ 5.1.9 : sendPrivate(owner, scanResult [F5, F6])\n↑ 5.1.10 : sendPrivate(opponent, abilityUsed {by, ability})
+  Net -down- Repo : ↑ 2 : game_updated (database trigger, no ability columns)\n↑ 5.1.8.2 [saved] : game_updated
+  Server -- Server : 5.1.2 : fireIfTurnExpired(game)\n5.1.7 : scanLog: add [F5, F6] for owner; a rerouted ship's old squares leave the opponent's scanLog
+  Server -down- Repo : ↓ 4.1.1 : loadGame(code)\n↓ 4.1.3 : saveGame(game, version)\n↓ 5.1.1 : loadGame(code) : game, version, scanLog\n↓ 5.1.8 : saveGame(game, version, code, scanLog)\n⇡ 5.1.8.1 [another save landed first] : StaleGameError
+  Server -down- Player : ↓ 4.1.2 : resolveOffer(keep)\n↓ 5.1.3 [an offer is still pending] : resolveOffer(true)\n↓ 5.1.4 : getHeldAbility()\n⇡ 5.1.4.1 : ability (must match the request)
+  Server -down- Game : ↓ 5.1.5 : applyAbility(owner, E4)\n⇡ 5.1.5.2 [not ability.isValidTarget(oppBoard, E4)] : invalid target\n⇡ 5.1.5.7 : applied
+  Game -- Game : 1 : grantAbility(owner)\n1.1 *[drawn == Reroute and Reroute.validPositions(ownBoard, s).isEmpty()\n         for every undamaged Ship] : draw again from the other three\n5.1.5.5 [valid target and ability.usesTurnShot] : switchTurn()\n5.1.5.6 [valid target and not ability.usesTurnShot] : turn continues, player still fires\n6 [holder is the AIOpponent] : AIOpponent.takeTurn(game): shouldUseAbility() and canUse(), then applyAbility(ai, chooseAbilityTarget())
+  Game -down- Ability : ↓ 1.2 : <<create>> RadarSweep\n↓ 5.1.5.1 : canUse(game)\n⇡ 5.1.5.1.1 : owner's turn, before firing, not used\n↓ 5.1.5.3 [valid target] : apply(game, oppBoard, E4)\n↑ 5.1.5.3.5 [ability is DoubleShot] : doubleShotActive = true\n⇡ 5.1.5.3.6 : applied, used = true
+  Game -down- Player : ↓ 1.3 : receiveAbility(drawn)\n⇡ 1.3.1 [owner.heldAbility == null] : held\n⇡ 1.3.2 [owner already holds an unused ability] : kept as offeredAbility\n↓ 5.1.5.4 [valid target] : consumeAbility()
+  Ability -down- OppBoard : ↓ 5.1.5.3.1 [ability is RadarSweep] : scanArea(E4, 3)\n⇡ 5.1.5.3.1.1 : [F5, F6] unshot ship squares\n↓ 5.1.5.3.2 [ability is LineScan] : scanLine(index, isRow)\n⇡ 5.1.5.3.2.1 : unshot ship squares on that line
+  Ability -down- OwnBoard : ↓ 5.1.5.3.3 [ability is Reroute] : validPositions(ownBoard, ship)\n↓ 5.1.5.3.4 [ability is Reroute] : moveShip(ship, start, orientation)
 }
+legend bottom
+  1 runs inside 5.3 / 6.3 Fire Shot when one of the owner's Ships is sunk; 3 is sent by fireShot once the shot is saved.
+  5.1.2: an expired turn gets its random shot first. The opponent never learns what a scan revealed (1.2).
+endlegend
 @enduml

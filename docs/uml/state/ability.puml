@@ -34,11 +34,12 @@ state "Player.heldAbility within Game::InProgress" as Lifecycle {
 
   Drawn --> Drawn : drawCompleted(a)\n[a is Reroute and Reroute.validPositions(b, s).isEmpty() for every undamaged Ship]\n/ draw again from the other three
   Drawn --> Held : receiveAbility(drawn)\n[heldAbility == null]
-  Drawn --> ChoicePending : receiveAbility(drawn)\n[heldAbility != null and holder is human]
+  Drawn --> ChoicePending : receiveAbility(drawn)\n[heldAbility != null and holder is human]\n/ Server sends the offer privately
   Drawn --> Held : receiveAbility(drawn)\n[heldAbility != null and holder is AIOpponent]\n/ keep current, discard drawn
 
   ChoicePending --> Held : chooseAbility(keep)\n[not keep]\n/ discard current, hold drawn
-  ChoicePending --> Held : chooseAbility(keep)\n[keep]\n/ discard drawn, keep current
+  ChoicePending --> Held : chooseAbility(keep)\n[keep, or no choice in 10 s]\n/ discard drawn, keep current
+  ChoicePending --> Held : useAbility(a, target)\n[offer still pending]\n/ resolveOffer(keep), then use current
 
   Held --> Held : useAbility(a, target)\n[not a.canUse(g) or not a.isValidTarget(b, target)]\n/ reject, nothing consumed
   Held --> Used : useAbility(a, target)\n[a.canUse(g) and a.isValidTarget(b, target) and a.usesTurnShot]\n/ apply(), turn's shot consumed
@@ -55,7 +56,9 @@ state "Player.heldAbility within Game::InProgress" as Lifecycle {
 
 note bottom of Lifecycle
   One ability per player at a time (requirement 1.2).
-  Scan results reach only the player who scanned;
+  Scan results reach only the player who scanned (private
+  channel and scan_log); the opponent learns only which
+  ability was used (abilityUsed notice).
   Reroute cannot land on an already-targeted square.
 end note
 @enduml

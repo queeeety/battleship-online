@@ -9,6 +9,7 @@ autonumber
 actor "Aoife\n(ability holder)" as Owner
 boundary "ownerUI : UIManager" as UI
 control "server : Server" as Server
+database "repo : GameRepository" as Repo
 control "game : Game" as Game
 entity "owner : Player" as Player
 entity "ability : Ability" as Ability
@@ -17,7 +18,7 @@ entity "oppBoard : Board" as OppBoard
 boundary "net : NetworkHandler" as Net
 boundary "oppUI : UIManager" as OppUI
 
-group Grant (called from 5.3 Fire Shot when a Ship is sunk)
+group Grant (inside 5.3 Fire Shot, when one of the owner's Ships is sunk)
   Game -> Game : grantAbility(owner)
   activate Game
   loop while drawn == Reroute and Reroute.validPositions(ownBoard, s).isEmpty() for every undamaged Ship
@@ -25,28 +26,47 @@ group Grant (called from 5.3 Fire Shot when a Ship is sunk)
     note right of Game : UC4 1a
   end
   Game -> Ability : <<create>> RadarSweep
+  Game -> Player : receiveAbility(drawn)
   alt owner.heldAbility == null
-    Game -> Player : receiveAbility(drawn)
     Player --> Game : held
   else owner already holds an unused ability
-    Game -> Net : sendPrivate(owner, [current, drawn])
+    Player --> Game : kept as offeredAbility
+  end
+  deactivate Game
+  Repo -> Net : game_updated (database trigger, no ability columns)
+  Net --> OppUI : SUNK result: "[Name] was granted an ability"
+
+  opt owner already holds an unused ability
+    Server -> Net : sendPrivate(owner, abilityOffer {current, drawn})
+    note right of Server : Sent by fireShot once the shot is saved
     Net --> UI : promptKeepOrReplace(current, drawn)
     UI --> Owner : "Keep current or take drawn?"
-    Owner -> UI : selects Keep
+    Owner -> UI : selects Keep (or no choice in 10 s)
     UI -> Server : chooseAbility(code, true)
-    Server -> Player : receiveAbility(kept)
+    activate Server
+    Server -> Repo : loadGame(code) : game, version
+    Server -> Player : resolveOffer(keep)
     note right of Player : UC4 2a: exactly one\nability is held afterwards
+    Server -> Repo : saveGame(game, version)
+    deactivate Server
   end
-  Game -> Net : broadcast(game)
-  Net --> OppUI : "[Name] was granted an ability"
-  deactivate Game
 end
 
 group Use (on the holder's own turn, before firing)
   Owner -> UI : selects Radar Sweep, targets area E4-G6
   activate UI
-  UI -> Server : useAbility(code, ability, E4)
+  UI -> Server : useAbility(code, {name: "Radar Sweep"}, E4)
   activate Server
+  Server -> Repo : loadGame(code) : game, version, scanLog
+  Server -> Server : fireIfTurnExpired(game)
+  note right of Server : An expired turn gets its\nrandom shot first (5.3)
+  opt an offer is still pending
+    Server -> Player : resolveOffer(true)
+    note right of Player : Using the held ability\ncounts as keeping it
+  end
+  Server -> Player : getHeldAbility()
+  Player --> Server : ability (must match the request)
+  note right of Server : Line Scan: setDirection(row or column)\nReroute: selectShip(ship), setOrientation(o)
   Server -> Game : applyAbility(owner, E4)
   activate Game
   Game -> Ability : canUse(game)
@@ -54,7 +74,7 @@ group Use (on the holder's own turn, before firing)
 
   alt not ability.isValidTarget(oppBoard, E4)
     Game --> Server : invalid target
-    Server --> UI : reject
+    Server --> UI : MOVE_REFUSED, ability kept
     UI --> Owner : choose another target (UC4 4b)
   else valid target
     Game -> Ability : apply(game, oppBoard, E4)
@@ -74,6 +94,7 @@ group Use (on the holder's own turn, before firing)
     end
     Ability --> Game : applied, used = true
     deactivate Ability
+    Game -> Player : consumeAbility()
 
     alt ability.usesTurnShot
       Game -> Game : switchTurn()
@@ -82,26 +103,37 @@ group Use (on the holder's own turn, before firing)
       Game -> Game : turn continues, player still fires
       ref over Game : 5.3 Fire Shot
     end
-  end
+    Game --> Server : applied
+    deactivate Game
 
-  Game --> Server : result
-  deactivate Game
-  Server -> Net : sendPrivate(owner, [F5, F6])
-  activate Net
-  Net --> UI : showScanResult([F5, F6])
-  Server -> Net : broadcast(game)
-  Net --> OppUI : "[Name] used Radar Sweep"
-  note right of OppUI : The opponent never learns\nwhat the scan revealed (1.2)
-  deactivate Net
-  Server --> UI : ok
+    Server -> Server : scanLog: add [F5, F6] for owner
+    note right of Server : A rerouted ship's old squares\nleave the opponent's scanLog
+    Server -> Repo : saveGame(game, version, code, scanLog)
+    activate Repo
+    alt another save landed first (double-click, second tab)
+      Repo --> Server : StaleGameError, nothing written
+      Server --> UI : STALE
+    else saved
+      Repo -> Net : game_updated (database trigger on games)
+      deactivate Repo
+      Server -> Net : sendPrivate(owner, scanResult [F5, F6])
+      activate Net
+      Net --> UI : showScanResult([F5, F6])
+      Server -> Net : sendPrivate(opponent, abilityUsed {by, ability})
+      Net --> OppUI : "[Name] used Radar Sweep"
+      note right of OppUI : The opponent never learns\nwhat the scan revealed (1.2)
+      deactivate Net
+      Server --> UI : ok
+    end
+  end
   deactivate Server
-  UI --> Owner : green scan markers on F5, F6
+  UI --> Owner : green scan markers on F5, F6\n(getMyState.revealedSquares, until shot)
   deactivate UI
 end
 
 opt holder is the AIOpponent
   Player -> Player : takeTurn(game)\n[shouldUseAbility() and ability.canUse(game)]
   Player -> Game : applyAbility(owner, chooseAbilityTarget())
-  note right of Game : UC4 3a: the computer decides\nby the same rules. With no target,\nor a rejected one, it fires instead
+  note right of Game : UC4 3a: the computer decides\nby the same rules. With no target,\nor a rejected one, it fires instead.\nAI mode runs in the browser, no Server
 end
 @enduml

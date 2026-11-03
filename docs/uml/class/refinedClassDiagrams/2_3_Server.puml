@@ -14,6 +14,7 @@ class Server <<controller>> {
   - validator : RequestValidator
   - sessions : SessionManager
   - limiter : RateLimiter
+  - notifier : NetworkHandler | null
   - {static} MAX_CODE_TRIES : number = 10
   - {static} MAX_SAVE_TRIES : number = 3
   + {static} create() : Promise<Server>
@@ -21,8 +22,8 @@ class Server <<controller>> {
   + joinLobby(code : unknown, name : unknown) : Promise<{lobby : Lobby, player : HumanPlayer}>
   + placeShips(code : unknown, layout : unknown) : Promise<boolean>
   + fireShot(code : unknown, target : unknown) : Promise<Shot>
-  + useAbility(code : string, a : Ability, target : Coordinate) : void
-  + chooseAbility(code : string, keep : boolean) : void
+  + useAbility(code : unknown, ability : unknown, target? : unknown) : Promise<void>
+  + chooseAbility(code : unknown, keep : unknown) : Promise<void>
   + claimTimeout(code : unknown) : Promise<boolean>
   + reportDisconnect(code : unknown) : Promise<void>
   + keepLobbyOpen(code : unknown) : Promise<boolean>
@@ -37,9 +38,11 @@ class Server <<controller>> {
   - seatedCaller(code : unknown) : Promise<{lobbyCode, lobby, seat, player}>
   - loadStarted(code : string) : Promise<LoadedGame>
   - markBack(code : string, seat : 1 | 2) : Promise<Game>
+  - notify(code : string, p : Player, payload : PrivatePayload) : Promise<void>
+  - {static} applyRequested(game, me, seat, request, square, scanLog) : Coordinate[]
   - retryIfStale(code : string, fn : () => Promise<boolean>) : Promise<true>
   - {static} fireIfTurnExpired(game : Game) : boolean
-  - {static} viewFor(lobby : Lobby, game : Game | null, seat : 1 | 2, rematch) : PlayerView
+  - {static} viewFor(lobby : Lobby, game : Game | null, seat : 1 | 2, rematch, scanned) : PlayerView
 }
 class RequestValidator <<utility>> {
   - codeSchema : ZodSchema
@@ -47,12 +50,20 @@ class RequestValidator <<utility>> {
   - coordinateSchema : ZodSchema
   - layoutSchema : ZodSchema
   - gameTypeSchema : ZodSchema
+  - abilitySchema : ZodSchema
   + parseCode(raw : unknown) : string
   + parseName(raw : unknown) : string | null
   + parseCoordinate(raw : unknown) : Coordinate
   + parseLayout(raw : unknown) : Board
   + parseGameType(raw : unknown) : GameType
   + parseAnswer(raw : unknown) : boolean
+  + parseAbilityRequest(raw : unknown) : AbilityRequest
+}
+class AbilityRequest <<value>> {
+  + name : "Double Shot" | "Radar Sweep" | "Line Scan" | "Reroute"
+  + line : "row" | "column" [Line Scan]
+  + ship : string [Reroute]
+  + orientation : "horizontal" | "vertical" [Reroute]
 }
 class SessionManager <<utility>> {
   - client : SupabaseClient
@@ -74,7 +85,7 @@ class GameRepository <<persistence>> {
   + findActiveLobbyCode(sessionId : string) : Promise<string | null>
   + keepLobbyOpen(code : string) : Promise<boolean>
   + loadGame(code : string) : Promise<LoadedGame | null>
-  + saveGame(g : Game, version : string, code : string = g.getId()) : Promise<string | null>
+  + saveGame(g : Game, version : string, code = g.getId(), scanLog = null) : Promise<string | null>
   + saveRematch(g : Game, version : string, r : RematchRequest, closeLobby = false) : Promise<string | null>
   + loadFleet(code : string, p : Player) : Promise<Board>
   + saveFleet(code : string, p : Player, b : Board) : Promise<boolean>
@@ -84,6 +95,11 @@ class LoadedGame <<value>> {
   + game : Game
   + version : string
   + rematch : RematchRequest | null
+  + scanLog : ScanLog
+}
+class ScanLog <<value>> {
+  + p1 : {row, col}[]
+  + p2 : {row, col}[]
 }
 class PlayerView <<value>> {
   + code : string
@@ -98,6 +114,7 @@ class PlayerView <<value>> {
   + heldAbility : string | null
   + offeredAbility : string | null
   + opponentBoard : BoardSnapshot | null
+  + revealedSquares : {row, col}[]
   + rematch : {by : 1 | 2, status : RematchStatus} | null
   + result : {won, shotsFired, accuracy, shipsSunk} | null
 }
@@ -150,6 +167,8 @@ NetworkHandler ..> Server : reportDisconnect() / keepLobbyOpen() >
 Server ..> RematchRequest : requestRematch() >
 GameRepository ..> RematchRequest : persists >
 GameRepository ..> LoadedGame : returns >
+LoadedGame "1" *-- "1" ScanLog
+RequestValidator ..> AbilityRequest : returns >
 GameRepository ..> MoveRefusedError : throws >
 GameRepository ..> StaleGameError : throws >
 GameRepository ..> Lobby : persists >
@@ -172,6 +191,8 @@ note bottom of GameRepository
   keepLobbyOpen() is the waiting host's heartbeat.
   beforeShot (Fn: Game => boolean) fires an
   expired turn's random shot first.
+  scanLog is saved in game_secrets with the game
+  (save_game() p_scan_log); null leaves it as is.
   A pg_cron job (every 15 min) closes silent waiting
   lobbies and deletes abandoned (> 1 h) and idle
   (> 24 h) ones.
@@ -180,6 +201,14 @@ note right of Timer
   claimTimeout() covers the 60 s disconnect
   and the turn timer; the server re-checks
   the time and returns false if not yet up.
+end note
+note bottom of AbilityRequest
+  useAbility() uses the ability the caller really
+  holds: the request only names it and gives Line
+  Scan's line or Reroute's ship and orientation.
+  Scan results go only to the caller (private
+  channel, then PlayerView.revealedSquares until
+  shot); the opponent gets an abilityUsed notice.
 end note
 legend bottom right
   Grey dashed boxes are classes detailed in another figure.
