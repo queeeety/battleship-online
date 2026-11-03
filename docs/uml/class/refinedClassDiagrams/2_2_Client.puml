@@ -79,7 +79,9 @@ class NetworkHandler <<boundary>> {
   - privateChannel : Channel | null
   - client : SupabaseClient
   - listener : NetworkListener
+  - calls : ServerCalls
   - code : string | null
+  - heartbeat : Interval | null
   + subscribe(code : string) : Promise<void>
   + unsubscribe() : Promise<void>
   + broadcast(g : Game) : void
@@ -87,6 +89,8 @@ class NetworkHandler <<boundary>> {
   + onDisconnect(p : HumanPlayer) : void
   + sendPrivate(p : HumanPlayer, payload : PrivatePayload, code? : string) : Promise<void>
   + resync(code : string) : Promise<void>
+  - startHeartbeat(code : string) : void
+  - stopHeartbeat() : void
 }
 interface NetworkListener {
   + onBroadcast?(update : GameBroadcast) : void
@@ -155,7 +159,8 @@ note bottom of Timer
   waiting client calls Server.claimTimeout();
   the server re-checks turnStartedAt /
   disconnectedAt (turnTimerExpired,
-  gracePeriodElapsed in 6.2 and 6.3).
+  gracePeriodElapsed in 6.2 and 6.3) and
+  returns false if not yet up (try again).
 end note
 note bottom of NetworkHandler
   Broadcasts come from a database trigger on
@@ -165,6 +170,10 @@ note bottom of NetworkHandler
   (the truth), also after every reconnect.
   PrivatePayload (scan result or ability
   offer) goes to the owner's own channel.
+  The opponent's presence leave calls
+  reportDisconnect(); a waiting host calls
+  keepLobbyOpen() every 10 s. ServerCalls
+  are those server actions (fakes in tests).
 end note
 note bottom of AudioManager
   Optional. Does nothing while

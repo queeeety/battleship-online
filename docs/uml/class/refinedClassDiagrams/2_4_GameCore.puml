@@ -15,11 +15,12 @@ class Lobby <<controller>> {
   - status : LobbyStatus
   - gameType : GameType
   - createdAt : Date
+  - lastSeenAt : Date
   - players : HumanPlayer[]
   - game : Game
   + {static} generateCode() : string
   + {static} findByCode(code : string) : Lobby | null
-  + {static} restore(code : string, gameType : GameType, status : LobbyStatus, createdAt : Date, players : HumanPlayer[]) : Lobby
+  + {static} restore(code, gameType, status, createdAt, players, lastSeenAt = createdAt) : Lobby
   + join(name : string, sessionId : string) : HumanPlayer
   + seatOf(sessionId : string) : 1 | 2 | null
   + isFull() : boolean
@@ -27,6 +28,7 @@ class Lobby <<controller>> {
   + shareLink() : string
   + reset() : void
   + abandon() : void
+  + isHostGone(now : Date = new Date()) : boolean
 }
 class Game <<controller>> {
   - id : string
@@ -46,6 +48,7 @@ class Game <<controller>> {
   + fireShot(shooter : Player, target : Coordinate) : Shot
   + fireRandomShot(p : Player) : Shot
   + isTurnExpired(now : Date = new Date()) : boolean
+  + resumeTurnTimer(awayMs : number) : void
   + switchTurn() : void
   + grantAbility(p : Player) : void
   + applyAbility(p : Player, target : Coordinate) : void
@@ -197,6 +200,7 @@ note right of Lobby
   findByCode() is unused: the server is
   stateless, so lobbies are loaded with
   GameRepository.loadLobby() (Figure 2.3).
+  isHostGone(): no host check-in for 30 s.
 end note
 note bottom of AIOpponent
   Single-player only. Runs in the browser
@@ -214,7 +218,8 @@ note bottom of GameSnapshot
   AI mode saves the whole Game to localStorage
   after every action and restores it on reload.
   Players are referred to by index.
-  The rematch request isn't saved.
+  The rematch request isn't saved (multiplayer
+  keeps it in the database, Figure 2.3).
 end note
 legend bottom right
   Grey dashed boxes are classes detailed in another figure.

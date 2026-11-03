@@ -21,6 +21,7 @@ skinparam state {
 
 state Waiting : entry / shareLink() shown to host
 state Waiting : do / await second player
+state Waiting : keepLobbyOpen() / lastSeenAt = now (host's page, every 10 s)
 
 state InProgress : entry / Game created in PLACEMENT
 state InProgress : do / run match (see section 4.1 (Game))
@@ -30,20 +31,23 @@ state Abandoned : entry / code stops resolving
 
 Waiting --> Waiting : joinLobby(code)\n[isFull() or not isJoinable()]\n/ return JoinError
 Waiting --> InProgress : joinLobby(code)\n[isJoinable() and not isFull()]\n/ seat guest, notify both clients
-Waiting --> Abandoned : hostPresenceLost\n[no host presence > 30 s and no guest seated]\n/ abandon()
+Waiting --> Abandoned : joinLobby(code) or sweep\n[isHostGone(): no check-in > 30 s, no guest seated]\n/ abandon()
 
 InProgress --> Finished : gameEnded(endReason)\n[winner declared]\n/ status = FINISHED
+InProgress --> [*] : sweep\n[idle > 24 h]\n/ row deleted
 
-Finished --> InProgress : rematchAnswered(accept)\n[isMutual()]\n/ reset(), same code reused
-Finished --> Abandoned : rematchAnswered(accept)\n[not isMutual() or no answer]\n/ abandon()
-Finished --> Abandoned : sweep\n[idle > 24 h]\n/ abandon()
+Finished --> InProgress : requestRematch(code, true)\n[isMutual()]\n/ reset(), same code reused
+Finished --> Abandoned : requestRematch(code, false)\n[declined, or a player left with Home]\n/ status = ABANDONED
+Finished --> [*] : sweep\n[no answer, idle > 24 h]\n/ row deleted
 
-Abandoned --> [*] : cleanup\n[row deleted]
+Abandoned --> [*] : sweep\n[abandoned > 1 h]\n/ row deleted
 
 note right of Waiting
   Guard source: requirement 1.1
   "delete a waiting lobby if the host is
   disconnected for 30 seconds before a
-  guest joins".
+  guest joins". The server can't see presence,
+  so the host's page checks in instead.
+  The pg_cron sweep runs every 15 minutes.
 end note
 @enduml

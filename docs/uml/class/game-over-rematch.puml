@@ -45,9 +45,22 @@ class NetworkHandler <<boundary>> {
   + onDisconnect(p : HumanPlayer) : void
 }
 
+class Timer <<boundary>> {
+  + hasExpired() : boolean
+}
+
 class Server <<controller>> {
-  + forfeit(code : String) : void
-  + requestRematch(code : String, accept : boolean) : RematchRequest
+  + forfeit(code : String) : Promise<void>
+  + reportDisconnect(code : String) : Promise<void>
+  + claimTimeout(code : String) : Promise<boolean>
+  + requestRematch(code : String, accept : boolean) : Promise<RematchRequest>
+  + getMyState(code : String) : Promise<PlayerView>
+}
+
+class GameRepository <<persistence>> {
+  + loadGame(code : String) : Promise<LoadedGame>
+  + saveGame(g : Game, version : String, code : String) : Promise<String>
+  + saveRematch(g : Game, version : String, r : RematchRequest, closeLobby : boolean) : Promise<String>
 }
 
 class Lobby <<controller>> {
@@ -94,6 +107,8 @@ abstract class Player <<entity>> {
 class HumanPlayer <<entity>> {
   - connected : boolean
   - disconnectedAt : DateTime
+  + disconnect(at : DateTime) : void
+  + reconnect() : void
   + hasExceededGracePeriod() : boolean
 }
 
@@ -117,9 +132,12 @@ class Shot <<entity>> {
 ' ---------- Relationships ----------
 UIManager ..> GameResult : shows >
 UIManager ..> Server : requestRematch >
-NetworkHandler ..> Game : reports disconnect >
+NetworkHandler ..> Server : reportDisconnect >
+Timer ..> Server : claimTimeout >
 Server ..> Lobby : resets on mutual accept >
-Server ..> Game : forfeits for caller >
+Server ..> Game : forfeits / declares winner >
+Server ..> GameRepository : loads / saves via >
+GameRepository ..> RematchRequest : persists >
 
 Lobby "1" *-- "1" Game : runs >
 Lobby --> LobbyStatus
@@ -146,16 +164,20 @@ GameResult ..> Shot : derived from >
 note bottom of Game
   Win detection runs once per shot and
   must be authoritative, so it lives on
-  the server (brief, 3.2.1). If a
-  HumanPlayer has no presence for 60 s,
-  declareWinner(opponent,
-  OPPONENT_DISCONNECTED) is called.
+  the server (brief, 3.2.1). The other
+  client reports a lost presence; once
+  hasExceededGracePeriod() (60 s), its
+  claimTimeout() calls declareWinner(
+  opponent, OPPONENT_DISCONNECTED).
 end note
 
 note right of RematchRequest
   Multiplayer rematch needs both players
   to agree. Accepting calls Lobby.reset():
   same code, new Game in PLACEMENT.
+  Declining (or Home) closes the lobby.
+  The offer is saved beside the game by
+  GameRepository.saveRematch().
   In single-player the AI always accepts.
 end note
 

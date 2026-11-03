@@ -23,9 +23,11 @@ class Server <<controller>> {
   + fireShot(code : unknown, target : unknown) : Promise<Shot>
   + useAbility(code : string, a : Ability, target : Coordinate) : void
   + chooseAbility(code : string, keep : boolean) : void
-  + claimTimeout(code : string) : void
+  + claimTimeout(code : unknown) : Promise<boolean>
+  + reportDisconnect(code : unknown) : Promise<void>
+  + keepLobbyOpen(code : unknown) : Promise<boolean>
   + forfeit(code : unknown) : Promise<void>
-  + requestRematch(code : string, accept : boolean) : RematchRequest
+  + requestRematch(code : unknown, accept : unknown) : Promise<RematchRequest>
   + getMyState(code : unknown) : Promise<PlayerView>
   + restoreSeat(sessionId? : string) : Promise<{lobby : Lobby, player : HumanPlayer} | null>
   - assignRandomName() : string
@@ -34,8 +36,10 @@ class Server <<controller>> {
   - validName(raw : unknown) : string
   - seatedCaller(code : unknown) : Promise<{lobbyCode, lobby, seat, player}>
   - loadStarted(code : string) : Promise<LoadedGame>
+  - markBack(code : string, seat : 1 | 2) : Promise<Game>
   - retryIfStale(code : string, fn : () => Promise<boolean>) : Promise<true>
-  - {static} viewFor(lobby : Lobby, game : Game | null, seat : 1 | 2) : PlayerView
+  - {static} fireIfTurnExpired(game : Game) : boolean
+  - {static} viewFor(lobby : Lobby, game : Game | null, seat : 1 | 2, rematch) : PlayerView
 }
 class RequestValidator <<utility>> {
   - codeSchema : ZodSchema
@@ -48,6 +52,7 @@ class RequestValidator <<utility>> {
   + parseCoordinate(raw : unknown) : Coordinate
   + parseLayout(raw : unknown) : Board
   + parseGameType(raw : unknown) : GameType
+  + parseAnswer(raw : unknown) : boolean
 }
 class SessionManager <<utility>> {
   - client : SupabaseClient
@@ -67,19 +72,24 @@ class GameRepository <<persistence>> {
   + loadLobby(code : string) : Promise<Lobby | null>
   + saveLobby(l : Lobby) : Promise<void>
   + findActiveLobbyCode(sessionId : string) : Promise<string | null>
+  + keepLobbyOpen(code : string) : Promise<boolean>
   + loadGame(code : string) : Promise<LoadedGame | null>
-  + saveGame(g : Game, version : string) : Promise<string | null>
+  + saveGame(g : Game, version : string, code : string = g.getId()) : Promise<string | null>
+  + saveRematch(g : Game, version : string, r : RematchRequest, closeLobby = false) : Promise<string | null>
   + loadFleet(code : string, p : Player) : Promise<Board>
   + saveFleet(code : string, p : Player, b : Board) : Promise<boolean>
-  + runShotTransaction(code : string, shooter : Player, target : Coordinate) : Promise<Shot>
+  + runShotTransaction(code : string, shooter : Player, target : Coordinate, beforeShot? : Fn) : Promise<Shot>
 }
 class LoadedGame <<value>> {
   + game : Game
   + version : string
+  + rematch : RematchRequest | null
 }
 class PlayerView <<value>> {
   + code : string
   + seat : 1 | 2
+  + you : SeatView
+  + opponent : SeatView | null
   + gameState : GameState | null
   + yourTurn : boolean
   + yourBoard : BoardSnapshot
@@ -88,7 +98,14 @@ class PlayerView <<value>> {
   + heldAbility : string | null
   + offeredAbility : string | null
   + opponentBoard : BoardSnapshot | null
+  + rematch : {by : 1 | 2, status : RematchStatus} | null
   + result : {won, shotsFired, accuracy, shipsSunk} | null
+}
+class SeatView <<value>> {
+  + name : string
+  + ready : boolean
+  + connected : boolean
+  + disconnectedAt : string | null
 }
 class ShotView <<value>> {
   + row : number
@@ -108,6 +125,7 @@ class MoveRefusedError <<exception>>
 class StaleGameError <<exception>>
 class Game <<controller>> #F4F4F4;line.dashed;line:999999
 class Lobby <<controller>> #F4F4F4;line.dashed;line:999999
+class RematchRequest <<entity>> #F4F4F4;line.dashed;line:999999
 class NetworkHandler <<boundary>> #F4F4F4;line.dashed;line:999999
 class Timer <<boundary>> #F4F4F4;line.dashed;line:999999
 class UIManager <<boundary>> #F4F4F4;line.dashed;line:999999
@@ -127,6 +145,10 @@ Server ..> RateLimitedError : throws >
 Server ..> NotSeatedError : throws >
 Server ..> PlayerView : builds >
 PlayerView "1" *-- "0..*" ShotView
+PlayerView "1" *-- "1..2" SeatView
+NetworkHandler ..> Server : reportDisconnect() / keepLobbyOpen() >
+Server ..> RematchRequest : requestRematch() >
+GameRepository ..> RematchRequest : persists >
 GameRepository ..> LoadedGame : returns >
 GameRepository ..> MoveRefusedError : throws >
 GameRepository ..> StaleGameError : throws >
@@ -142,6 +164,22 @@ note bottom of Server
   transaction, refused if another save
   landed first. A database trigger on
   games broadcasts after every write.
+end note
+note bottom of GameRepository
+  The rematch offer is stored beside the game
+  (rematch_by / rematch_status) by saveRematch();
+  save_game() clears it on the reset to placement.
+  keepLobbyOpen() is the waiting host's heartbeat.
+  beforeShot (Fn: Game => boolean) fires an
+  expired turn's random shot first.
+  A pg_cron job (every 15 min) closes silent waiting
+  lobbies and deletes abandoned (> 1 h) and idle
+  (> 24 h) ones.
+end note
+note right of Timer
+  claimTimeout() covers the 60 s disconnect
+  and the turn timer; the server re-checks
+  the time and returns false if not yet up.
 end note
 legend bottom right
   Grey dashed boxes are classes detailed in another figure.
