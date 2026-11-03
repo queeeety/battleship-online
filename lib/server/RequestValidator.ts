@@ -16,7 +16,6 @@ export class InvalidRequestError extends Error
     }
 }
 
-/** Which ability to use, plus what Line Scan and Reroute need to know. */
 export type AbilityRequest =
     | { name: "Double Shot" }
     | { name: "Radar Sweep" }
@@ -83,7 +82,7 @@ export class RequestValidator
         return result.data;
     }
 
-    /** Shape only; Server checks the caller really holds it. */
+    /** Shape only; Server checks the caller holds it. */
     public parseAbilityRequest(raw: unknown): AbilityRequest
     {
         const result = this.abilitySchema.safeParse(raw);
@@ -91,7 +90,6 @@ export class RequestValidator
         return result.data;
     }
 
-    /** A yes/no answer, e.g. accepting a rematch. */
     public parseAnswer(raw: unknown): boolean
     {
         if (typeof raw !== "boolean") throw new InvalidRequestError("answer", "Expected true or false");

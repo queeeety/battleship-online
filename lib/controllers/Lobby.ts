@@ -95,7 +95,7 @@ export class Lobby
 
     public abandon(): void { this.status = LobbyStatus.ABANDONED; }
 
-    /** A waiting lobby whose host stopped checking in; a quick refresh stays well under the limit. */
+    // a refresh stays well under the 30 s
     public isHostGone(now: Date = new Date()): boolean
     {
         return this.status === LobbyStatus.WAITING && now.getTime() - this.lastSeenAt.getTime() > HOST_GONE_MS;

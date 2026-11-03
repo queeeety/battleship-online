@@ -33,7 +33,6 @@ export interface ShotView
     sunkShipName: string | null;
 }
 
-/** disconnectedAt starts the 60-second countdown on screen. */
 export interface SeatView
 {
     name: string;
@@ -63,7 +62,7 @@ export interface PlayerView
     winner: 1 | 2 | null;
     endReason: EndReason | null;
     opponentBoard: BoardSnapshot | null;
-    // ship squares your own scans found that haven't been shot yet (green highlights)
+    // your scans' unshot ship squares
     revealedSquares: { row: number; col: number }[];
     rematch: { by: 1 | 2; status: RematchStatus } | null;
     result: { won: boolean; shotsFired: number; accuracy: number; shipsSunk: number } | null;
@@ -170,7 +169,6 @@ export class Server
         const seat = lobby.seatOf(sessionId);
         if (seat !== null) return { lobby, player: lobby.getPlayers()[seat - 1] };
 
-        // the host left more than 30 s ago, so the code stops working
         if (lobby.isHostGone())
         {
             lobby.abandon();
@@ -182,7 +180,8 @@ export class Server
         if (!lobby.isJoinable()) throw new JoinRefusedError(JoinError.LOBBY_FULL);
 
         const guest = lobby.join(playerName, sessionId);
-        await this.repo.saveLobby(lobby);
+        // two guests at once: only the first gets seat 2
+        if (!(await this.repo.seatGuest(lobby))) throw new JoinRefusedError(JoinError.LOBBY_FULL);
         return { lobby, player: guest };
     }
 
@@ -205,14 +204,14 @@ export class Server
         });
     }
 
-    /** Not retried, so a double-click can't fire twice. An expired turn gets its random shot first. */
+    /** Not retried, so a double-click fires once. */
     public async fireShot(code: unknown, target: unknown): Promise<Shot>
     {
         const { lobbyCode, player } = await this.seatedCaller(code);
         const square = this.validator.parseCoordinate(target);
         const shot = await this.repo.runShotTransaction(lobbyCode, player, square, g => Server.fireIfTurnExpired(g));
 
-        // sinking a ship of someone who already holds an ability puts a keep-or-replace offer to them
+        // a sink can leave the owner a keep-or-replace offer
         if (shot.getResult() === ShotResult.SUNK)
         {
             const game = (await this.repo.loadGame(lobbyCode))?.game;
@@ -224,11 +223,7 @@ export class Server
         return shot;
     }
 
-    /**
-     * Checks the caller holds that ability and it's their turn, applies it, discards it.
-     * Scan results reach the caller only: sent privately and kept in scan_log for getMyState.
-     * Not retried, so a double-click can't use it twice.
-     */
+    /** Not retried. Scan results reach the caller only. */
     public async useAbility(code: unknown, ability: unknown, target?: unknown): Promise<void>
     {
         const { lobbyCode, seat } = await this.seatedCaller(code);
@@ -272,10 +267,7 @@ export class Server
         });
     }
 
-    /**
-     * One player asks (accept = true), the other answers. Both agreeing resets the same lobby to placement;
-     * a decline, or leaving with false, closes the lobby so the code stops working.
-     */
+    /** true asks or accepts; false declines and closes the lobby. */
     public async requestRematch(code: unknown, accept: unknown): Promise<RematchRequest>
     {
         const { lobbyCode, lobby, seat } = await this.seatedCaller(code);
@@ -311,7 +303,7 @@ export class Server
         return answer!;
     }
 
-    /** Own board in full, opponent's as shots only; their fleet is revealed once finished. Also marks the caller as back. */
+    /** Also marks the caller as back. */
     public async getMyState(code: unknown): Promise<PlayerView>
     {
         const { lobbyCode, lobby, seat } = await this.seatedCaller(code);
@@ -321,10 +313,7 @@ export class Server
         return Server.viewFor(lobby, game, seat, loaded?.rematch ?? null, loaded?.scanLog[seat === 1 ? "p1" : "p2"] ?? []);
     }
 
-    /**
-     * The other client saw this player's presence drop, so their 60-second clock starts.
-     * A false report is undone by that player's next getMyState.
-     */
+    /** A false report is undone by that player's next getMyState. */
     public async reportDisconnect(code: unknown): Promise<void>
     {
         const { lobbyCode, seat, player } = await this.seatedCaller(code);
@@ -358,10 +347,7 @@ export class Server
         return { lobby, player: lobby.getPlayers()[seat - 1] };
     }
 
-    /**
-     * Called when a countdown on screen hits zero: the 60 s disconnect or the turn timer.
-     * The server decides if time is really up; false means not yet.
-     */
+    /** False means not yet. */
     public async claimTimeout(code: unknown): Promise<boolean>
     {
         const { lobbyCode, seat } = await this.seatedCaller(code);
@@ -392,7 +378,7 @@ export class Server
         return claimed;
     }
 
-    /** Answers a keep-or-replace offer: true keeps the held ability, false swaps in the new draw. */
+    /** true keeps the held ability, false takes the new draw. */
     public async chooseAbility(code: unknown, keep: unknown): Promise<void>
     {
         const { lobbyCode, seat } = await this.seatedCaller(code);
@@ -408,7 +394,6 @@ export class Server
         });
     }
 
-    /** The waiting host's heartbeat. False once the lobby isn't waiting any more. */
     public async keepLobbyOpen(code: unknown): Promise<boolean>
     {
         const { lobbyCode } = await this.seatedCaller(code);
@@ -461,10 +446,9 @@ export class Server
         return { lobbyCode, lobby, seat, player: lobby.getPlayers()[seat - 1] };
     }
 
-    // configures and applies the held ability, updating scanLog; returns what a scan revealed
     private static applyRequested(game: Game, me: Player, seat: 1 | 2, request: AbilityRequest, square: Coordinate, scanLog: ScanLog): Coordinate[]
     {
-        // using it before answering an offer counts as keeping it
+        // using it before answering keeps it
         if (me.getOfferedAbility()) me.resolveOffer(true);
 
         const held = me.getHeldAbility();
@@ -491,12 +475,12 @@ export class Server
         {
             if (!scanLog[mine].some(s => same(s, c))) scanLog[mine].push(c.toRowCol());
         }
-        // a rerouted ship leaves no green highlight on its old, now empty, squares
+        // no highlight left on a rerouted ship's old squares
         scanLog[theirs] = scanLog[theirs].filter(s => !movedFrom.some(c => same(s, c)));
         return revealed;
     }
 
-    // best effort: a lost private message is recovered by the next getMyState
+    // best effort: getMyState recovers anything lost
     private async notify(code: string, p: Player, payload: PrivatePayload): Promise<void>
     {
         try
@@ -515,7 +499,7 @@ export class Server
         }
     }
 
-    // the timer is paused while the player to move is disconnected
+    // paused while the player to move is away
     private static fireIfTurnExpired(game: Game): boolean
     {
         const current = game.getCurrentTurn() as HumanPlayer | null;
@@ -524,7 +508,7 @@ export class Server
         return true;
     }
 
-    // clears the caller's disconnect and gives back the turn time they were away for
+    // clears the disconnect and gives back lost turn time
     private async markBack(code: string, seat: 1 | 2): Promise<Game>
     {
         let game: Game | null = null;
@@ -567,7 +551,7 @@ export class Server
     private static viewFor(lobby: Lobby, game: Game | null, seat: 1 | 2, rematch: RematchRequest | null = null,
         scanned: { row: number; col: number }[] = []): PlayerView
     {
-        // the game's copy is newer once started (markBack may have just changed it)
+        // the game's copy is newer once started
         const seated = (game?.getPlayers() as HumanPlayer[] | undefined) ?? lobby.getPlayers();
         const seatView = (p: HumanPlayer): SeatView => ({
             name: p.getName(), ready: p.getIsReady(), connected: p.isConnected(),

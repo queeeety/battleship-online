@@ -42,6 +42,7 @@ export function fakeSupabase()
                 const matches: [string, unknown][] = [];
                 const chain = {
                     eq: (column: string, value: unknown) => { matches.push([column, value]); return chain; },
+                    is: (column: string, value: unknown) => { matches.push([column, value]); return chain; },
                     select: async (columns: string) =>
                     {
                         const hit = [...games.values()].filter(r => matches.every(([c, v]) => r[c] === v));
