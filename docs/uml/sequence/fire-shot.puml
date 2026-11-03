@@ -30,18 +30,17 @@ UI -> Server : fireShot(code, H8)
 activate Server
 Server -> Server : seatedCaller(code)
 note right of Server : Seat from the session cookie;\nZod checks code and square
-Server -> Repo : runShotTransaction(code, shooter, H8)
+Server -> Repo : runShotTransaction(code, shooter, H8, beforeShot)
 activate Repo
 Repo -> Repo : loadGame(code) : game, version
+Repo -> Server : beforeShot(game)
+Server -> Server : fireIfTurnExpired(game)
+opt turn timer expired before this click\n[isTurnExpired() and player to move connected]
+  Server -> Game : fireRandomShot(currentTurn)
+  note right of Game : Turn timer by GameType:\n30 s / 15 s / 5 s (UC3 *a).\nSaved even if H8 is then refused
+end
 Repo -> Game : fireShot(shooter, H8)
 activate Game
-
-opt turn timer expired before this click
-  Timer -> Game : turnTimerExpired
-  Game -> Game : isTurnExpired()
-  Game -> Game : fireRandomShot(currentTurn)
-  note right of Game : Turn timer by GameType:\n30 s / 15 s / 5 s (UC3 *a)
-end
 
 Game -> Board : receiveShot(H8, shooter)
 activate Board
@@ -106,7 +105,26 @@ UI --> Player : hit / miss / "You sunk their Destroyer"
 deactivate UI
 
 opt current player loses presence
-  Net -> Game : onDisconnect(p)
-  note right of Net : Turn timer pauses; after 60 s\nthe opponent wins (UC3 *b)
+  Net -> Server : reportDisconnect(code)
+  activate Server
+  note right of Net : Sent by the opponent's client
+  Server -> Repo : loadGame(), p.disconnect(), saveGame()
+  deactivate Server
+  note right of Repo : Turn timer pauses while the player to move is away.\nBack within 60 s: getMyState() calls resumeTurnTimer(awayMs).\nOtherwise claimTimeout() awards the win (5.2, UC3 *b)
+end
+
+opt countdown ends and nobody acted
+  Timer -> Server : claimTimeout(code)
+  activate Server
+  Server -> Repo : loadGame(code) : game, version
+  Server -> Game : isTurnExpired()
+  alt expired and player to move connected
+    Server -> Game : fireRandomShot(currentTurn)
+    Server -> Repo : saveGame(game, version)
+    Server --> Timer : true
+  else not yet
+    Server --> Timer : false (try again)
+  end
+  deactivate Server
 end
 @enduml

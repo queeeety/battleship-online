@@ -31,14 +31,14 @@ state Finished : do / hold RematchRequest
 Placement --> Placement : confirmPlacement()\n[one player isReady, other not]\n/ show waiting state
 Placement --> Placement : placeShips(layout)\n[not canPlace(...)]\n/ return PlacementError
 Placement --> InProgress : confirmPlacement()\n[both players isReady and server re-validated]\n/ turnStartedAt = now
-Placement --> Finished : graceExpired\n[no presence > 60 s during placement]\n/ declareWinner(OPPONENT_DISCONNECTED)
+Placement --> Finished : claimTimeout(code)\n[opponent gone > 60 s during placement]\n/ declareWinner(OPPONENT_DISCONNECTED)
 
 InProgress --> Finished : shotResolved\n[allShipsSunk() on either Board]\n/ declareWinner(FLEET_DESTROYED)
 InProgress --> Finished : forfeit(p)\n[player selects Forfeit]\n/ declareWinner(OPPONENT_FORFEIT)
-InProgress --> Finished : graceExpired\n[no presence > 60 s]\n/ declareWinner(OPPONENT_DISCONNECTED)
+InProgress --> Finished : claimTimeout(code)\n[opponent gone > 60 s]\n/ declareWinner(OPPONENT_DISCONNECTED)
 
-Finished --> Placement : rematchAnswered(accept)\n[isMutual()]\n/ Board.reset(), new Game in same Lobby
-Finished --> [*] : lobbyAbandoned\n[not isMutual()]
+Finished --> Placement : requestRematch(code, true)\n[isMutual()]\n/ Lobby.reset(): empty Boards, new Game in same Lobby
+Finished --> [*] : requestRematch(code, false)\n[declined, or a player left]\n/ lobby abandoned
 
 note bottom of InProgress
   Composite state. Its sub-states, events and

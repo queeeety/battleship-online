@@ -10,6 +10,7 @@ actor "Cian\n(winner)" as Winner
 actor "timer : Timer" as Timer
 boundary "winnerUI : UIManager" as WinUI
 control "server : Server" as Server
+database "repo : GameRepository" as Repo
 control "lobby : Lobby" as Lobby
 control "game : Game" as Game
 entity "result : GameResult" as Result
@@ -20,49 +21,68 @@ actor "Aoife\n(loser)" as Loser
 
 alt last ship sunk
   Game -> Game : checkWinCondition()
-  activate Game
   Game -> Game : declareWinner(shooter, FLEET_DESTROYED)
+  note right of Game : Inside runShotTransaction (5.3)
 else player selects Forfeit
   Loser -> LoseUI : selects Forfeit
   LoseUI -> Server : forfeit(code)
   activate Server
+  Server -> Repo : loadGame(code) : game, version
   Server -> Game : forfeit(loser)
   Game -> Game : declareWinner(opponent, OPPONENT_FORFEIT)
   deactivate Server
 else no presence for 60 s
-  Net -> Game : onDisconnect(loser)
-  Timer -> Game : gracePeriodElapsed
-  Game -> Game : hasExceededGracePeriod()
-  Game -> Game : declareWinner(opponent, OPPONENT_DISCONNECTED)
-  note right of Game : Timer paused while disconnected (1.1)
+  Net -> Server : reportDisconnect(code)
+  activate Server
+  note right of Net : Cian's client sees Aoife's\npresence leave the channel
+  Server -> Repo : loadGame(), loser.disconnect(), saveGame()
+  note right of Repo : disconnected_at saved; Aoife's next\ngetMyState() clears it (she is back)\nand gives back any paused turn time
+  deactivate Server
+  Timer -> Server : claimTimeout(code)
+  activate Server
+  note right of Timer : Cian's 60 s countdown ends
+  Server -> Repo : loadGame(code) : game, version
+  Server -> Server : loser.hasExceededGracePeriod()
+  opt not 60 s yet
+    Server --> Timer : false (try again)
+  end
+  Server -> Game : declareWinner(winner, OPPONENT_DISCONNECTED)
 end
 
 Game -> Game : finishedAt = now, state = FINISHED
-Game -> Result : <<create>> resultFor(winner)
+Server -> Repo : saveGame(game, version)
+activate Repo
+note right of Repo : save_game() also sets\nlobby_status = finished
+Repo -> Net : game_updated (database trigger on games)
+deactivate Repo
+deactivate Server
+activate Net
+Net --> WinUI : onBroadcast(update), then onState(getMyState)
+Net --> LoseUI : onBroadcast(update), then onState(getMyState)
+deactivate Net
+WinUI -> Server : getMyState(code)
+activate Server
+Server -> Game : resultFor(winner)
+Game -> Result : <<create>> GameResult
 activate Result
 Result -> Result : didWin, shotsFired, accuracy, shipsSunk\nfrom the Shot history
-Result --> Game : winnerResult
-Game -> Result : resultFor(loser)
-Result --> Game : loserResult
+Result --> Server : winnerResult
 deactivate Result
-Game -> Lobby : status = FINISHED
-activate Lobby
-Game -> Net : broadcast(game)
-activate Net
-Net --> WinUI : showResult(winnerResult)
-Net --> LoseUI : showResult(loserResult)
-deactivate Net
-deactivate Game
+Server --> WinUI : PlayerView (result, opponentBoard revealed)
+deactivate Server
+note right of LoseUI : loserUI does the same\nwith resultFor(loser)
 WinUI --> Winner : "You win", opponent layout revealed
 LoseUI --> Loser : "You lose", opponent layout revealed
 
 Winner -> WinUI : selects Rematch
 WinUI -> Server : requestRematch(code, true)
 activate Server
-Server -> Rematch : <<create>> RematchRequest(requestedBy = winner)
+Server -> Repo : loadGame(code) : game, version, rematch = null
+Server -> Rematch : <<create>> winner.requestRematch()
 activate Rematch
 Rematch --> Server : status = REQUESTED
-Server -> Net : broadcast(game)
+Server -> Repo : saveRematch(game, version, rematch)
+Repo -> Net : game_updated (rematch_by, rematch_status)
 Net --> LoseUI : "[Name] wants a rematch"
 deactivate Server
 
@@ -70,30 +90,37 @@ alt opponent accepts
   Loser -> LoseUI : selects Accept
   LoseUI -> Server : requestRematch(code, true)
   activate Server
+  Server -> Repo : loadGame(code) : rematch (REQUESTED by winner)
   Server -> Rematch : accept()
   Rematch --> Server : isMutual() == true
   Server -> Lobby : reset()
+  activate Lobby
   Lobby -> Game : <<create>> new Game(same gameType)
+  deactivate Lobby
   note right of Lobby : Same 6-character code reused (UC5 6)
-  Server -> Net : broadcast(game)
+  Server -> Repo : saveGame(newGame, version, code)
+  note right of Repo : Empty boards, nobody ready;\nsave_game() clears the rematch
+  Repo -> Net : game_updated
   Net --> WinUI : showScreen(Placement)
   Net --> LoseUI : showScreen(Placement)
   deactivate Server
   ref over WinUI, LoseUI : UC2 Place Fleet
-else opponent declines or does not answer
-  Loser -> LoseUI : selects Home
+else opponent declines or leaves (Home)
+  Loser -> LoseUI : selects Decline / Home
   LoseUI -> Server : requestRematch(code, false)
   activate Server
   Server -> Rematch : decline()
   Rematch --> Server : status = DECLINED
-  Server -> Lobby : abandon()
-  Lobby --> Server : status = ABANDONED
+  Server -> Repo : saveRematch(game, version, rematch, closeLobby = true)
+  note right of Repo : lobby_status = abandoned:\ncode stops working (UC5 5a)
+  Repo -> Net : game_updated
+  Net --> WinUI : rematch declined, lobby closed
   deactivate Server
-  note right of Lobby : Lobby abandoned, code stops working (UC5 5a)
+else nobody answers
+  note over Repo : The pg_cron sweep deletes the\nlobby once idle for 24 h
 else opponent is the AIOpponent
   Server -> Rematch : accept()
-  note right of Rematch : The computer always accepts (UC5 5c)
+  note right of Rematch : The computer always accepts (UC5 5c);\nAI mode runs in the browser, no Server
 end
 deactivate Rematch
-deactivate Lobby
 @enduml

@@ -8,24 +8,31 @@ frame "sd GameOverRematch" {
   rectangle "rematch : RematchRequest" as Rematch
   rectangle "server : Server" as Server
   actor "timer : Timer" as Timer
+  rectangle "repo : GameRepository" as Repo
   rectangle "lobby : Lobby" as Lobby
   rectangle "game : Game" as Game
   rectangle "result : GameResult" as Result
-  Loser -down- LoseUI : ↓ 2 [player selects Forfeit] : selects Forfeit\n⇡ 5.4.2.1 : "You lose", opponent layout revealed\n↓ 7 [opponent accepts] : selects Accept\n↓ 8 [opponent declines or does not answer] : selects Home
-  Winner -down- WinUI : ⇡ 5.4.1.1 : "You win", opponent layout revealed\n↓ 6 : selects Rematch
-  WinUI -down- Net : ⇡ 5.4.1 : showResult(winnerResult)\n⇡ 7.1.3.1 : showScreen(Placement)
-  LoseUI -down- Net : ⇡ 5.4.2 : showResult(loserResult)\n⇡ 6.1.2.1 : "[Name] wants a rematch"\n⇡ 7.1.3.2 : showScreen(Placement)
-  LoseUI -down- Server : ↓ 2.1 : forfeit(code)\n↓ 7.1 : requestRematch(code, true)\n↓ 8.1 : requestRematch(code, false)
-  WinUI -down- Server : ↓ 6.1 : requestRematch(code, true)
-  Net -down- Server : ↑ 6.1.2 : broadcast(game)\n↑ 7.1.3 : broadcast(game)
-  Net -down- Game : ↓ 3 [no presence for 60 s] : onDisconnect(loser)\n↑ 5.4 : broadcast(game)
-  Server -down- Game : ↓ 2.1.1 : forfeit(loser)
-  Timer -down- Game : ↓ 4 [no presence for 60 s] : gracePeriodElapsed
-  Server -down- Rematch : ↓ 6.1.1 : <<create>> RematchRequest(requestedBy = winner)\n⇡ 6.1.1.1 : status = REQUESTED\n↓ 7.1.1 : accept()\n⇡ 7.1.1.1 : isMutual() == true\n↓ 8.1.1 : decline()\n⇡ 8.1.1.1 : status = DECLINED\n↓ 9 [opponent is the AIOpponent] : accept()
-  Server -down- Lobby : ↓ 7.1.2 : reset()\n↓ 8.1.2 : abandon()\n⇡ 8.1.2.1 : status = ABANDONED
-  Game -- Game : 1 [last ship sunk] : checkWinCondition()\n1.1 : declareWinner(shooter, FLEET_DESTROYED)\n2.1.1.1 : declareWinner(opponent, OPPONENT_FORFEIT)\n4.1 : hasExceededGracePeriod()\n4.2 : declareWinner(opponent, OPPONENT_DISCONNECTED)\n5 : finishedAt = now, state = FINISHED
-  Game -down- Result : ↓ 5.1 : <<create>> resultFor(winner)\n⇡ 5.1.2 : winnerResult\n↓ 5.2 : resultFor(loser)\n⇡ 5.2.1 : loserResult
-  Game -down- Lobby : ↓ 5.3 : status = FINISHED\n↑ 7.1.2.1 : <<create>> new Game(same gameType)
-  Result -- Result : 5.1.1 : didWin, shotsFired, accuracy, shipsSunk\nfrom the Shot history
+  Loser -down- LoseUI : ↓ 2 [player selects Forfeit] : selects Forfeit\n⇡ 8.3 : "You lose", opponent layout revealed\n↓ 10 [opponent accepts] : selects Accept\n↓ 11 [opponent declines or leaves] : selects Decline / Home
+  Winner -down- WinUI : ⇡ 7.3 : "You win", opponent layout revealed\n↓ 9 : selects Rematch
+  WinUI -down- Net : ⇡ 6.1.1 : onBroadcast(update), then onState(getMyState)\n⇡ 10.1.4.1.1 : showScreen(Placement)\n⇡ 11.1.2.1.1 : rematch declined, lobby closed
+  LoseUI -down- Net : ⇡ 6.1.2 : onBroadcast(update), then onState(getMyState)\n⇡ 9.1.3.1.1 : "[Name] wants a rematch"\n⇡ 10.1.4.1.2 : showScreen(Placement)
+  WinUI -down- Server : ↓ 7 : getMyState(code)\n⇡ 7.2 : PlayerView (result, opponentBoard revealed)\n↓ 9.1 : requestRematch(code, true)
+  LoseUI -down- Server : ↓ 2.1 : forfeit(code)\n↓ 8 : getMyState(code)\n⇡ 8.2 : PlayerView (result, opponentBoard revealed)\n↓ 10.1 : requestRematch(code, true)\n↓ 11.1 : requestRematch(code, false)
+  Net -down- Server : ↓ 3 [Aoife's presence leaves the channel] : reportDisconnect(code)
+  Timer -down- Server : ↓ 4 [Cian's 60 s countdown ends] : claimTimeout(code)\n⇡ 4.3 [not 60 s yet] : false (try again)
+  Server -- Server : 4.2 : loser.hasExceededGracePeriod()
+  Server -down- Repo : ↓ 2.1.1 : loadGame(code)\n↓ 3.1 : loadGame(), loser.disconnect(), saveGame()\n↓ 4.1 : loadGame(code)\n↓ 6 : saveGame(game, version)\n↓ 9.1.1 : loadGame(code) : rematch = null\n↓ 9.1.3 : saveRematch(game, version, rematch)\n↓ 10.1.1 : loadGame(code) : rematch (REQUESTED)\n↓ 10.1.4 : saveGame(newGame, version, code)\n↓ 11.1.2 : saveRematch(game, version, rematch, closeLobby = true)
+  Net -down- Repo : ↑ 6.1 : game_updated (database trigger on games)\n↑ 9.1.3.1 : game_updated\n↑ 10.1.4.1 : game_updated\n↑ 11.1.2.1 : game_updated
+  Server -down- Game : ↓ 2.1.2 : forfeit(loser)\n↓ 4.4 [60 s passed] : declareWinner(winner, OPPONENT_DISCONNECTED)\n↓ 7.1 : resultFor(winner)\n↓ 8.1 : resultFor(loser)
+  Server -down- Rematch : ↓ 9.1.2 : <<create>> winner.requestRematch()\n⇡ 9.1.2.1 : status = REQUESTED\n↓ 10.1.2 : accept()\n⇡ 10.1.2.1 : isMutual() == true\n↓ 11.1.1 : decline()\n⇡ 11.1.1.1 : status = DECLINED\n↓ 12 [opponent is the AIOpponent] : accept()
+  Server -down- Lobby : ↓ 10.1.3 : reset()
+  Game -- Game : 1 [last ship sunk] : checkWinCondition()\n1.1 : declareWinner(shooter, FLEET_DESTROYED)\n2.1.2.1 : declareWinner(opponent, OPPONENT_FORFEIT)\n5 : finishedAt = now, state = FINISHED
+  Game -down- Result : ↓ 7.1.1 : <<create>> GameResult\n⇡ 7.1.2 : winnerResult\n⇡ 8.1.1 : loserResult
+  Game -down- Lobby : ↑ 10.1.3.1 : <<create>> new Game(same gameType)
+  Result -- Result : 7.1.1.1 : didWin, shotsFired, accuracy, shipsSunk\nfrom the Shot history
 }
+legend bottom
+  Aoife's next getMyState() clears a disconnect (she is back).
+  A lobby nobody answers in is deleted by the pg_cron sweep after 24 h idle.
+endlegend
 @enduml
