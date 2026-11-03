@@ -64,7 +64,7 @@ UIManager "1" *-- "1" TurnBanner : shows turn in >
 UIManager "1" *-- "1" AbilityCard : shows ability in >
 UIManager "1" *-- "1" ResultScreen : ends game with >
 UIManager "1" --> "0..1" Timer : counts down with >
-Server "1" --> "1" NetworkHandler : broadcasts via >
+Server "1" --> "1" NetworkHandler : private messages via >
 Server "1" *-- "1" RequestValidator : validates with >
 Server "1" *-- "1" SessionManager : identifies caller with >
 Server "1" *-- "1" RateLimiter : throttles with >

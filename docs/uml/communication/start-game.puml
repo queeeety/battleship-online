@@ -12,14 +12,14 @@ frame "sd StartGame" {
   actor "Aoife\n(guest)" as Guest
   Host -down- HostUI : ↓ 1 [multiplayer] : enters name "Cian91", selects Create Lobby\n⇡ 1.2 [name length > 16] : showError(INVALID_NAME)\n⇡ 1.4 : showScreen(Lobby), shareLink()\n↓ 4 [single player] : selects Play vs AI, chooses NORMAL difficulty\n⇡ 4.7 : showScreen(Placement)
   Guest -down- GuestUI : ↓ 2 [multiplayer] : enters code "4F7K2M", leaves name blank\n⇡ 2.2 [lobby not found] : showError("Lobby not found")\n⇡ 2.3 [not lobby.isJoinable()] : showError("Lobby is full")\n⇡ 2.4 [lobby.status == FINISHED] : showError("Game has ended")\n⇡ 2.5 [lobby.isJoinable()] : showScreen(Placement)
-  HostUI -down- Net : ↓ 1.3 : subscribe("4F7K2M")\n⇡ 2.1.10.1 : both players seated
-  GuestUI -down- Net : ⇡ 2.1.10.2 : both players seated
+  HostUI -down- Net : ↓ 1.3 : subscribe("4F7K2M")\n⇡ 2.1.10.1 : onBroadcast, onState(getMyState) : both players seated
+  GuestUI -down- Net : ⇡ 2.1.10.2 : onBroadcast, onState(getMyState) : both players seated
   HostUI -down- AI : ↓ 4.2 : <<create>> AIOpponent(NORMAL)
   HostUI -down- Server : ↓ 1.1 : createLobby(name, ORIGINAL)\n⇡ 1.1.2 [name length > 16] : JoinError.INVALID_NAME\n⇡ 1.1.8 : lobby, sessionId
   GuestUI -down- Server : ↓ 2.1 : joinLobby("4F7K2M", "")\n⇡ 2.1.3 [lobby not found or abandoned] : JoinError.CODE_NOT_FOUND\n⇡ 2.1.4 [caller already seated] : lobby, existing seat\n⇡ 2.1.5 [lobby.status == FINISHED] : JoinError.GAME_ALREADY_FINISHED\n⇡ 2.1.6 [not lobby.isJoinable()] : JoinError.LOBBY_FULL\n⇡ 2.1.11 [lobby.isJoinable()] : lobby, sessionId\n↓ 3 [player reloads the page] : restoreSeat()\n⇡ 3.3 : lobby, player\n↓ 3.4 : getMyState(code)\n⇡ 3.4.1 : game
   HostUI -down- Game : ↓ 4.1 : <<create>> Game(gameType)\n⇡ 4.6 : state = PLACEMENT
   AI -- AI : 4.5 : placeFleetRandomly()
-  Net -down- Server : ↑ 2.1.10 [lobby.isJoinable()] : broadcast(game)
+  Net -down- Repo : ↑ 2.1.10 [lobby.isJoinable()] : game_updated (database trigger on games)
   Server -- Server : 1.1.1 : callerSessionId() (anonymous sign-in if new)\n1.1.3 [name blank] : assignRandomName()\n2.1.1 : callerSessionId()\n2.1.7 [lobby.isJoinable()] : assignRandomName() : &#34;Player482&#34;
   Server -down- Lobby : ↓ 1.1.4 *[code already in use] : <<create>> Lobby(gameType)\n↓ 1.1.6 : join("Cian91", sessionId)\n⇡ 1.1.6.2 : hostPlayer : HumanPlayer\n↓ 2.1.8 [lobby.isJoinable()] : join("Player482", sessionId)\n⇡ 2.1.8.3 : guestPlayer : HumanPlayer
   Server -down- Repo : ↓ 1.1.5 *[code already in use] : loadLobby(code)\n⇡ 1.1.5.1 : null (code free)\n↓ 1.1.7 : saveLobby(lobby)\n↓ 2.1.2 : loadLobby("4F7K2M")\n⇡ 2.1.2.1 : lobby\n↓ 2.1.9 [lobby.isJoinable()] : saveLobby(lobby)\n↓ 3.1 : findActiveLobbyCode(sessionId)\n⇡ 3.1.1 : "4F7K2M"\n↓ 3.2 : loadLobby("4F7K2M")\n⇡ 3.2.1 : lobby

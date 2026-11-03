@@ -15,22 +15,27 @@ class Server <<controller>> {
   - sessions : SessionManager
   - limiter : RateLimiter
   - {static} MAX_CODE_TRIES : number = 10
+  - {static} MAX_SAVE_TRIES : number = 3
   + {static} create() : Promise<Server>
   + createLobby(name : unknown, type : unknown) : Promise<Lobby>
   + joinLobby(code : unknown, name : unknown) : Promise<{lobby : Lobby, player : HumanPlayer}>
-  + placeShips(code : string, layout : Board) : boolean
-  + fireShot(code : string, target : Coordinate) : Shot
+  + placeShips(code : unknown, layout : unknown) : Promise<boolean>
+  + fireShot(code : unknown, target : unknown) : Promise<Shot>
   + useAbility(code : string, a : Ability, target : Coordinate) : void
   + chooseAbility(code : string, keep : boolean) : void
   + claimTimeout(code : string) : void
-  + forfeit(code : string) : void
+  + forfeit(code : unknown) : Promise<void>
   + requestRematch(code : string, accept : boolean) : RematchRequest
-  + getMyState(code : string) : Game
+  + getMyState(code : unknown) : Promise<PlayerView>
   + restoreSeat(sessionId? : string) : Promise<{lobby : Lobby, player : HumanPlayer} | null>
   - assignRandomName() : string
   - callerSessionId() : Promise<string>
   - checkRateLimit(sessionId : string, action : string) : Promise<void>
   - validName(raw : unknown) : string
+  - seatedCaller(code : unknown) : Promise<{lobbyCode, lobby, seat, player}>
+  - loadStarted(code : string) : Promise<LoadedGame>
+  - retryIfStale(code : string, fn : () => Promise<boolean>) : Promise<true>
+  - {static} viewFor(lobby : Lobby, game : Game | null, seat : 1 | 2) : PlayerView
 }
 class RequestValidator <<utility>> {
   - codeSchema : ZodSchema
@@ -62,11 +67,34 @@ class GameRepository <<persistence>> {
   + loadLobby(code : string) : Promise<Lobby | null>
   + saveLobby(l : Lobby) : Promise<void>
   + findActiveLobbyCode(sessionId : string) : Promise<string | null>
-  + loadGame(code : string) : Game
-  + saveGame(g : Game) : void
-  + loadFleet(code : string, p : Player) : Board
-  + saveFleet(code : string, p : Player, b : Board) : void
-  + runShotTransaction(code : string, shooter : Player, target : Coordinate) : Shot
+  + loadGame(code : string) : Promise<LoadedGame | null>
+  + saveGame(g : Game, version : string) : Promise<string | null>
+  + loadFleet(code : string, p : Player) : Promise<Board>
+  + saveFleet(code : string, p : Player, b : Board) : Promise<boolean>
+  + runShotTransaction(code : string, shooter : Player, target : Coordinate) : Promise<Shot>
+}
+class LoadedGame <<value>> {
+  + game : Game
+  + version : string
+}
+class PlayerView <<value>> {
+  + code : string
+  + seat : 1 | 2
+  + gameState : GameState | null
+  + yourTurn : boolean
+  + yourBoard : BoardSnapshot
+  + yourShots : ShotView[]
+  + opponentShots : ShotView[]
+  + heldAbility : string | null
+  + offeredAbility : string | null
+  + opponentBoard : BoardSnapshot | null
+  + result : {won, shotsFired, accuracy, shipsSunk} | null
+}
+class ShotView <<value>> {
+  + row : number
+  + col : number
+  + result : ShotResult
+  + sunkShipName : string | null
 }
 class InvalidRequestError <<exception>> {
   + field : string
@@ -75,6 +103,9 @@ class JoinRefusedError <<exception>> {
   + reason : JoinError
 }
 class RateLimitedError <<exception>>
+class NotSeatedError <<exception>>
+class MoveRefusedError <<exception>>
+class StaleGameError <<exception>>
 class Game <<controller>> #F4F4F4;line.dashed;line:999999
 class Lobby <<controller>> #F4F4F4;line.dashed;line:999999
 class NetworkHandler <<boundary>> #F4F4F4;line.dashed;line:999999
@@ -83,7 +114,7 @@ class UIManager <<boundary>> #F4F4F4;line.dashed;line:999999
 
 UIManager ..> Server : calls actions >
 Timer ..> Server : claimTimeout() >
-Server "1" --> "1" NetworkHandler : broadcasts via >
+Server "1" --> "1" NetworkHandler : private messages via >
 Server "1" *-- "1" RequestValidator : validates with >
 Server "1" *-- "1" SessionManager : identifies caller with >
 Server "1" *-- "1" RateLimiter : throttles with >
@@ -93,6 +124,12 @@ Server ..> Game : validates & resolves >
 RequestValidator ..> InvalidRequestError : throws >
 Server ..> JoinRefusedError : throws >
 Server ..> RateLimitedError : throws >
+Server ..> NotSeatedError : throws >
+Server ..> PlayerView : builds >
+PlayerView "1" *-- "0..*" ShotView
+GameRepository ..> LoadedGame : returns >
+GameRepository ..> MoveRefusedError : throws >
+GameRepository ..> StaleGameError : throws >
 GameRepository ..> Lobby : persists >
 GameRepository ..> Game : persists >
 note bottom of Server
@@ -101,6 +138,10 @@ note bottom of Server
   -> SessionManager.verifySeat()
   -> GameRepository load / write,
   so no client can change state directly.
+  Games are saved with save_game(): one
+  transaction, refused if another save
+  landed first. A database trigger on
+  games broadcasts after every write.
 end note
 legend bottom right
   Grey dashed boxes are classes detailed in another figure.
