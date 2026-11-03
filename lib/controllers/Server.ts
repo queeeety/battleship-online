@@ -161,6 +161,14 @@ export class Server
         const seat = lobby.seatOf(sessionId);
         if (seat !== null) return { lobby, player: lobby.getPlayers()[seat - 1] };
 
+        // the host left more than 30 s ago, so the code stops working
+        if (lobby.isHostGone())
+        {
+            lobby.abandon();
+            await this.repo.saveLobby(lobby);
+            throw new JoinRefusedError(JoinError.CODE_NOT_FOUND);
+        }
+
         if (lobby.getStatus() === LobbyStatus.FINISHED) throw new JoinRefusedError(JoinError.GAME_ALREADY_FINISHED);
         if (!lobby.isJoinable()) throw new JoinRefusedError(JoinError.LOBBY_FULL);
 
@@ -188,12 +196,12 @@ export class Server
         });
     }
 
-    /** Not retried, so a double-click can't fire twice. */
+    /** Not retried, so a double-click can't fire twice. An expired turn gets its random shot first. */
     public async fireShot(code: unknown, target: unknown): Promise<Shot>
     {
         const { lobbyCode, player } = await this.seatedCaller(code);
         const square = this.validator.parseCoordinate(target);
-        return this.repo.runShotTransaction(lobbyCode, player, square);
+        return this.repo.runShotTransaction(lobbyCode, player, square, g => Server.fireIfTurnExpired(g));
     }
 
     public useAbility(code: string, a: Ability, target: Coordinate): void {}
@@ -258,7 +266,10 @@ export class Server
         return { lobby, player: lobby.getPlayers()[seat - 1] };
     }
 
-    /** Called when a countdown on screen hits zero. The server decides if time is really up; false means not yet. */
+    /**
+     * Called when a countdown on screen hits zero: the 60 s disconnect or the turn timer.
+     * The server decides if time is really up; false means not yet.
+     */
     public async claimTimeout(code: unknown): Promise<boolean>
     {
         const { lobbyCode, seat } = await this.seatedCaller(code);
@@ -266,18 +277,22 @@ export class Server
 
         await this.retryIfStale(lobbyCode, async () =>
         {
-            const loaded = await this.loadStarted(lobbyCode);
+            claimed = false;
+            const loaded = await this.repo.loadGame(lobbyCode);
+            if (!loaded || loaded.game.getState() === GameState.FINISHED) return true;
             const game = loaded.game;
             const me = game.getPlayers()[seat - 1] as HumanPlayer;
             const them = game.opponentOf(me) as HumanPlayer;
-            claimed = false;
-            if (game.getState() === GameState.FINISHED) return true;
 
             if (them.hasExceededGracePeriod())
             {
                 me.reconnect();
                 game.declareWinner(me, EndReason.OPPONENT_DISCONNECTED);
                 claimed = true;
+            }
+            else
+            {
+                claimed = Server.fireIfTurnExpired(game);
             }
             if (!claimed) return true;
             return await this.repo.saveGame(game, loaded.version) !== null;
@@ -286,6 +301,13 @@ export class Server
     }
 
     public chooseAbility(code: string, keep: boolean): void {}
+
+    /** The waiting host's heartbeat. False once the lobby isn't waiting any more. */
+    public async keepLobbyOpen(code: unknown): Promise<boolean>
+    {
+        const { lobbyCode } = await this.seatedCaller(code);
+        return this.repo.keepLobbyOpen(lobbyCode);
+    }
 
     private assignRandomName(): string
     {
@@ -331,6 +353,15 @@ export class Server
         const seat = lobby && sessionId ? lobby.seatOf(sessionId) : null;
         if (!lobby || seat === null) throw new NotSeatedError();
         return { lobbyCode, lobby, seat, player: lobby.getPlayers()[seat - 1] };
+    }
+
+    // the timer is paused while the player to move is disconnected
+    private static fireIfTurnExpired(game: Game): boolean
+    {
+        const current = game.getCurrentTurn() as HumanPlayer | null;
+        if (!current || !current.isConnected() || !game.isTurnExpired()) return false;
+        game.fireRandomShot(current);
+        return true;
     }
 
     // clears the caller's disconnect and gives back the turn time they were away for
@@ -412,7 +443,7 @@ export class Server
         return {
             ...base,
             gameState: game.getState(),
-            yourTurn: game.getCurrentTurn() === me,
+            yourTurn: !finished && game.getCurrentTurn() === me,
             turnStartedAt: game.getTurnStartedAt()?.toISOString() ?? null,
             doubleShotActive: game.isDoubleShotActive(),
             yourBoard: me.getBoard().toSnapshot(),

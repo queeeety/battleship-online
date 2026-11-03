@@ -410,6 +410,7 @@ describe("Server.forfeit", () =>
         expect(winnerView.result?.won).toBe(true);
         expect(winnerView.opponentBoard?.ships).toHaveLength(5);
         expect(winnerView.lobbyStatus).toBe(LobbyStatus.FINISHED);
+        expect(winnerView.yourTurn).toBe(false);
     });
 
     it("does nothing the second time", async () =>
@@ -523,8 +524,10 @@ describe("Server.claimTimeout", () =>
         await as(first).getMyState(code);
 
         vi.setSystemTime(new Date("2026-11-03T12:01:30Z"));
-        expect(await as(second).claimTimeout(code)).toBe(false);
-        expect((await as(first).getMyState(code)).gameState).toBe(GameState.IN_PROGRESS);
+        await as(second).claimTimeout(code);     // only the turn timer can be claimed now
+        const view = await as(first).getMyState(code);
+        expect(view.gameState).toBe(GameState.IN_PROGRESS);
+        expect(view.endReason).toBeNull();
     });
 
     it("does nothing once the game is over", async () =>
@@ -538,5 +541,100 @@ describe("Server.claimTimeout", () =>
     {
         const { as, code } = await startedBattle();
         await expect(as("stranger").claimTimeout(code)).rejects.toBeInstanceOf(NotSeatedError);
+    });
+});
+
+describe("Server turn timer", () =>
+{
+    afterEach(() => vi.useRealTimers());
+
+    async function timedBattle()
+    {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(new Date("2026-11-03T12:00:00Z"));
+        return startedBattle();                    // Original: 15 s a turn
+    }
+
+    it("fires a random shot for the player whose turn ran out", async () =>
+    {
+        const { as, code, first, second } = await timedBattle();
+        vi.setSystemTime(new Date("2026-11-03T12:00:14Z"));
+        expect(await as(second).claimTimeout(code)).toBe(false);
+
+        vi.setSystemTime(new Date("2026-11-03T12:00:16Z"));
+        expect(await as(second).claimTimeout(code)).toBe(true);
+        expect((await as(first).getMyState(code)).yourShots).toHaveLength(1);
+    });
+
+    it("doesn't run while the player to move is disconnected", async () =>
+    {
+        const { as, code, first, second } = await timedBattle();
+        await as(second).reportDisconnect(code);
+
+        vi.setSystemTime(new Date("2026-11-03T12:00:40Z"));
+        expect(await as(second).claimTimeout(code)).toBe(false);
+        expect((await as(first).getMyState(code)).yourShots).toHaveLength(0);
+    });
+
+    it("fires the expired turn's random shot before anyone else's shot", async () =>
+    {
+        const { as, code, first, second } = await timedBattle();
+        vi.setSystemTime(new Date("2026-11-03T12:00:16Z"));
+
+        // a miss passes the turn, so this shot lands; a hit keeps it, so this shot is refused
+        await as(second).fireShot(code, { row: 9, col: 9 }).catch(e => expect(e).toBeInstanceOf(MoveRefusedError));
+        expect((await as(first).getMyState(code)).yourShots).toHaveLength(1);
+    });
+
+    it("has nothing to claim while the lobby is still waiting", async () =>
+    {
+        const { as } = await battle();
+        const alone = await as("solo").createLobby("Solo", GameType.ORIGINAL);
+        expect(await as("solo").claimTimeout(alone.getCode())).toBe(false);
+    });
+});
+
+describe("Server waiting lobby", () =>
+{
+    afterEach(() => vi.useRealTimers());
+
+    it("closes the lobby once the host has been gone over 30 seconds", async () =>
+    {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(new Date("2026-11-03T12:00:00Z"));
+        const { server, lobbies } = setup("guest-session");
+        const lobby = hostedLobby(lobbies);
+
+        vi.setSystemTime(new Date("2026-11-03T12:00:31Z"));
+        expect(await refusal(server.joinLobby("4F7K2M", "Aoife"))).toBe(JoinError.CODE_NOT_FOUND);
+        expect(lobby.getStatus()).toBe(LobbyStatus.ABANDONED);
+    });
+
+    it("lets a guest in while the host is still checking in", async () =>
+    {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(new Date("2026-11-03T12:00:00Z"));
+        const { server, lobbies } = setup("guest-session");
+        hostedLobby(lobbies);
+
+        vi.setSystemTime(new Date("2026-11-03T12:00:25Z"));
+        const { player } = await server.joinLobby("4F7K2M", "Aoife");
+        expect(player.getName()).toBe("Aoife");
+    });
+
+    it("keeps the lobby open on the host's heartbeat, and stops once a guest joins", async () =>
+    {
+        const { as } = await battle();
+        const alone = await as("solo").createLobby("Solo", GameType.ORIGINAL);
+        expect(await as("solo").keepLobbyOpen(alone.getCode())).toBe(true);
+
+        await as("friend").joinLobby(alone.getCode(), "Friend");
+        expect(await as("solo").keepLobbyOpen(alone.getCode())).toBe(false);
+    });
+
+    it("refuses a heartbeat from someone who isn't seated", async () =>
+    {
+        const { as, code } = await battle();
+        await expect(as("stranger").keepLobbyOpen(code)).rejects.toBeInstanceOf(NotSeatedError);
     });
 });

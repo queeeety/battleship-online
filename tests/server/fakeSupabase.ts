@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
  * An in-memory stand-in for the Supabase admin client, covering the calls GameRepository makes:
- * games / game_secrets reads, the lobby upsert, and save_game() with its version check.
+ * games / game_secrets reads, the lobby upsert, the heartbeat update, and save_game() with its version check.
  * Test-only.
  */
 export function fakeSupabase()
@@ -34,6 +34,21 @@ export function fakeSupabase()
                 };
                 games.set(code, { ...blank, ...games.get(code), ...row, updated_at: nextVersion() });
                 return { error: null };
+            },
+            // update(values).eq(...).eq(...).select() - rows matching every eq are updated
+            update: (values: Record<string, unknown>) =>
+            {
+                const matches: [string, unknown][] = [];
+                const chain = {
+                    eq: (column: string, value: unknown) => { matches.push([column, value]); return chain; },
+                    select: async () =>
+                    {
+                        const hit = [...games.values()].filter(r => matches.every(([c, v]) => r[c] === v));
+                        for (const r of hit) Object.assign(r, values, { updated_at: nextVersion() });
+                        return { data: hit.map(r => ({ code: r.code })), error: null };
+                    }
+                };
+                return chain;
             }
         };
         return query;

@@ -25,6 +25,7 @@ interface LobbyRow
     disconnected_at_p1: string | null;
     disconnected_at_p2: string | null;
     created_at: string;
+    updated_at: string;
 }
 
 interface GameRow
@@ -149,7 +150,7 @@ export class GameRepository
     {
         const { data, error } = await this.client
             .from("games")
-            .select("code, lobby_status, game_type, game_state, player1_id, player1_name, player2_id, player2_name, ready_p1, ready_p2, disconnected_at_p1, disconnected_at_p2, created_at")
+            .select("code, lobby_status, game_type, game_state, player1_id, player1_name, player2_id, player2_name, ready_p1, ready_p2, disconnected_at_p1, disconnected_at_p2, created_at, updated_at")
             .eq("code", code)
             .maybeSingle<LobbyRow>();
 
@@ -167,7 +168,22 @@ export class GameRepository
             GameRepository.fromText(GameRepository.GAME_TYPE, data.game_type),
             GameRepository.fromText(GameRepository.LOBBY_STATUS, data.lobby_status),
             new Date(data.created_at),
-            players);
+            players,
+            new Date(data.updated_at));
+    }
+
+    /** The waiting host's heartbeat: a no-op update, so the trigger moves updated_at on. False once the lobby isn't waiting. */
+    public async keepLobbyOpen(code: string): Promise<boolean>
+    {
+        const { data, error } = await this.client
+            .from("games")
+            .update({ lobby_status: "waiting" })
+            .eq("code", code)
+            .eq("lobby_status", "waiting")
+            .select("code");
+
+        if (error) throw new Error(`Could not keep lobby ${code} open: ${error.message}`);
+        return (data ?? []).length > 0;
     }
 
     /** Upserts only the lobby's columns; game columns are left alone. */
@@ -327,14 +343,19 @@ export class GameRepository
         return (await this.saveGame(loaded.game, loaded.version)) !== null;
     }
 
-    /** Load, apply the rules, save. A double-click or second tab gets StaleGameError. */
-    public async runShotTransaction(code: string, shooter: Player, target: Coordinate): Promise<Shot>
+    /**
+     * Load, apply the rules, save. A double-click or second tab gets StaleGameError.
+     * `beforeShot` may change the game first (e.g. an expired turn's random shot); returns true if it did,
+     * and that change is saved even when this shot is then refused.
+     */
+    public async runShotTransaction(code: string, shooter: Player, target: Coordinate, beforeShot?: (g: Game) => boolean): Promise<Shot>
     {
         const loaded = await this.loadGame(code);
         if (!loaded) throw new Error(`Game ${code} hasn't started`);
         const own = loaded.game.getPlayers().find(q => q.getId() === shooter.getId());
         if (!own) throw new Error(`${shooter.getName()} isn't in game ${code}`);
 
+        const changed = beforeShot?.(loaded.game) ?? false;
         let shot: Shot;
         try
         {
@@ -342,6 +363,7 @@ export class GameRepository
         }
         catch (e)
         {
+            if (changed) await this.saveGame(loaded.game, loaded.version);
             throw new MoveRefusedError(e instanceof Error ? e.message : "Move refused");
         }
         if (await this.saveGame(loaded.game, loaded.version) === null) throw new StaleGameError(code);

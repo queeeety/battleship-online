@@ -4,8 +4,10 @@ import type { PlayerView } from "../controllers/Server";
 import { HumanPlayer } from "../entities/players/HumanPlayer";
 import type { Coordinate } from "../entities/board/Coordinate";
 import type { Ability } from "../abilities/Ability";
-import { getMyState, reportDisconnect } from "../server/actions/battle";
+import { getMyState, keepLobbyOpen, reportDisconnect } from "../server/actions/battle";
 import type { BattleResult } from "../server/actions/battle";
+import { LobbyStatus } from "../enums";
+import { LOBBY_HEARTBEAT_MS } from "../config";
 
 type Channel = RealtimeChannel;
 
@@ -55,8 +57,15 @@ export interface NetworkListener
     onPrivate?(payload: WirePrivatePayload): void;
 }
 
-type FetchState = (code: string) => Promise<BattleResult<PlayerView>>;
-type ReportLeft = (code: string) => Promise<BattleResult<null>>;
+/** The server actions NetworkHandler calls; tests pass fakes. */
+export interface ServerCalls
+{
+    getMyState(code: string): Promise<BattleResult<PlayerView>>;
+    reportDisconnect(code: string): Promise<BattleResult<null>>;
+    keepLobbyOpen(code: string): Promise<BattleResult<boolean>>;
+}
+
+const SERVER_CALLS: ServerCalls = { getMyState, reportDisconnect, keepLobbyOpen };
 
 /**
  * Boundary class for the network.
@@ -69,19 +78,19 @@ export class NetworkHandler
     private privateChannel: Channel | null;
     private client: SupabaseClient;
     private listener: NetworkListener;
-    private fetchState: FetchState;
-    private reportLeft: ReportLeft;
+    private calls: ServerCalls;
     private code: string | null;
+    private heartbeat: ReturnType<typeof setInterval> | null;
 
-    constructor(client: SupabaseClient, listener: NetworkListener = {}, fetchState: FetchState = getMyState, reportLeft: ReportLeft = reportDisconnect)
+    constructor(client: SupabaseClient, listener: NetworkListener = {}, calls: Partial<ServerCalls> = {})
     {
         this.channel = null;
         this.privateChannel = null;
         this.client = client;
         this.listener = listener;
-        this.fetchState = fetchState;
-        this.reportLeft = reportLeft;
+        this.calls = { ...SERVER_CALLS, ...calls };
         this.code = null;
+        this.heartbeat = null;
     }
 
     /** Every broadcast and (re)connect triggers a resync, so a dropped message never leaves the screen stale. */
@@ -106,7 +115,7 @@ export class NetworkHandler
                 for (const left of leftPresences)
                 {
                     if (left.sessionId === me) continue;
-                    void this.reportLeft(code);
+                    void this.calls.reportDisconnect(code);
                     this.onDisconnect(new HumanPlayer(left.name, left.sessionId));
                 }
             })
@@ -122,6 +131,7 @@ export class NetworkHandler
 
     public async unsubscribe(): Promise<void>
     {
+        this.stopHeartbeat();
         for (const ch of [this.channel, this.privateChannel])
         {
             if (ch) await this.client.removeChannel(ch);
@@ -161,9 +171,26 @@ export class NetworkHandler
 
     public async resync(code: string): Promise<void>
     {
-        const result = await this.fetchState(code);
-        if (result.ok) this.listener.onState?.(result.data);
-        else this.listener.onError?.(result.error);
+        const result = await this.calls.getMyState(code);
+        if (!result.ok) return this.listener.onError?.(result.error);
+        this.listener.onState?.(result.data);
+        if (result.data.lobbyStatus === LobbyStatus.WAITING) this.startHeartbeat(code);
+        else this.stopHeartbeat();
+    }
+
+    // the server can't see presence, so a waiting host checks in or the lobby closes after 30 s
+    private startHeartbeat(code: string): void
+    {
+        if (this.heartbeat) return;
+        const beat = () => void this.calls.keepLobbyOpen(code).then(r => { if (r.ok && !r.data) this.stopHeartbeat(); });
+        beat();
+        this.heartbeat = setInterval(beat, LOBBY_HEARTBEAT_MS);
+    }
+
+    private stopHeartbeat(): void
+    {
+        if (this.heartbeat) clearInterval(this.heartbeat);
+        this.heartbeat = null;
     }
 
     private reportPresence(): void

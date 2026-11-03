@@ -48,6 +48,12 @@ export async function claimTimeout(code: string): Promise<BattleResult<boolean>>
     return run(server => server.claimTimeout(code));
 }
 
+/** The waiting host's heartbeat, sent by NetworkHandler. */
+export async function keepLobbyOpen(code: string): Promise<BattleResult<boolean>>
+{
+    return run(server => server.keepLobbyOpen(code));
+}
+
 async function run<T>(fn: (server: Server) => Promise<T>): Promise<BattleResult<T>>
 {
     try
