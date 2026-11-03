@@ -24,6 +24,7 @@ function setup(caller: string | null, opts: { allow?: boolean } = {})
     const repo = {
         loadLobby: vi.fn(async (code: string) => lobbies.get(code) ?? null),
         saveLobby: vi.fn(async (l: Lobby) => { lobbies.set(l.getCode(), l); }),
+        seatGuest: vi.fn(async (l: Lobby) => { lobbies.set(l.getCode(), l); return true; }),
         findActiveLobbyCode: vi.fn(async (sessionId: string) =>
         {
             for (const l of lobbies.values())
@@ -184,6 +185,28 @@ describe("Server.joinLobby", () =>
         expect(lobby.seatOf(player.getSessionId())).toBe(1);
         expect(lobby.getPlayers()).toHaveLength(1);
         expect(repo.saveLobby).not.toHaveBeenCalled();
+    });
+});
+
+describe("Server.joinLobby race", () =>
+{
+    it("seats only one of two guests joining at the same moment", async () =>
+    {
+        const { as } = await battle();
+        const lobby = await as("host2").createLobby("Cian", GameType.ORIGINAL);
+
+        const results = await Promise.allSettled([
+            as("guestA").joinLobby(lobby.getCode(), "A"),
+            as("guestB").joinLobby(lobby.getCode(), "B")
+        ]);
+        const seated = results.filter(r => r.status === "fulfilled");
+        const refused = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+        expect(seated).toHaveLength(1);
+        expect(refused).toHaveLength(1);
+        expect((refused[0].reason as JoinRefusedError).reason).toBe(JoinError.LOBBY_FULL);
+
+        const winner = (seated[0] as PromiseFulfilledResult<{ player: { getSessionId(): string } }>).value.player.getSessionId();
+        expect((await as(winner).getMyState(lobby.getCode())).seat).toBe(2);
     });
 });
 

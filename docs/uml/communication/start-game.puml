@@ -22,7 +22,7 @@ frame "sd StartGame" {
   Net -down- Repo : ↑ 2.1.10 [lobby.isJoinable()] : game_updated (database trigger on games)
   Server -- Server : 1.1.1 : callerSessionId() (anonymous sign-in if new)\n1.1.3 [name blank] : assignRandomName()\n2.1.1 : callerSessionId()\n2.1.7 [lobby.isJoinable()] : assignRandomName() : &#34;Player482&#34;
   Server -down- Lobby : ↓ 1.1.4 *[code already in use] : <<create>> Lobby(gameType)\n↓ 1.1.6 : join("Cian91", sessionId)\n⇡ 1.1.6.2 : hostPlayer : HumanPlayer\n↓ 2.1.8 [lobby.isJoinable()] : join("Player482", sessionId)\n⇡ 2.1.8.3 : guestPlayer : HumanPlayer
-  Server -down- Repo : ↓ 1.1.5 *[code already in use] : loadLobby(code)\n⇡ 1.1.5.1 : null (code free)\n↓ 1.1.7 : saveLobby(lobby)\n↓ 2.1.2 : loadLobby("4F7K2M")\n⇡ 2.1.2.1 : lobby\n↓ 2.1.9 [lobby.isJoinable()] : saveLobby(lobby)\n↓ 3.1 : findActiveLobbyCode(sessionId)\n⇡ 3.1.1 : "4F7K2M"\n↓ 3.2 : loadLobby("4F7K2M")\n⇡ 3.2.1 : lobby
+  Server -down- Repo : ↓ 1.1.5 *[code already in use] : loadLobby(code)\n⇡ 1.1.5.1 : null (code free)\n↓ 1.1.7 : saveLobby(lobby)\n↓ 2.1.2 : loadLobby("4F7K2M")\n⇡ 2.1.2.1 : lobby\n↓ 2.1.9 [lobby.isJoinable()] : seatGuest(lobby), only if seat 2 is still empty\n⇡ 2.1.9.1 [another guest got seat 2 first] : false, so JoinError.LOBBY_FULL\n↓ 3.1 : findActiveLobbyCode(sessionId)\n⇡ 3.1.1 : "4F7K2M"\n↓ 3.2 : loadLobby("4F7K2M")\n⇡ 3.2.1 : lobby
   Lobby -down- Game : ↓ 1.1.4.2 : <<create>> Game(gameType)\n↓ 1.1.6.1 : addPlayer(hostPlayer)\n↓ 2.1.8.1 [lobby.isJoinable()] : addPlayer(guestPlayer)\n⇡ 2.1.8.2 : state = PLACEMENT
   Lobby -- Lobby : 1.1.4.1 : generateCode()
   Game -- Game : 4.3 : addPlayer(humanPlayer)\n4.4 : addPlayer(ai)

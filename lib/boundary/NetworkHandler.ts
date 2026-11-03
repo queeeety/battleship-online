@@ -11,7 +11,7 @@ import { LOBBY_HEARTBEAT_MS } from "../config";
 
 type Channel = RealtimeChannel;
 
-// abilityUsed tells the opponent "[Name] used Radar Sweep", never what it revealed
+// abilityUsed: the name only, never the result
 export type PrivatePayload =
     | { kind: "scanResult"; cells: Coordinate[] }
     | { kind: "abilityOffer"; current: Ability; drawn: Ability }
@@ -60,7 +60,7 @@ export interface NetworkListener
     onPrivate?(payload: WirePrivatePayload): void;
 }
 
-/** The server actions NetworkHandler calls; tests pass fakes. */
+/** Tests pass fakes. */
 export interface ServerCalls
 {
     getMyState(code: string): Promise<BattleResult<PlayerView>>;
@@ -114,7 +114,7 @@ export class NetworkHandler
             .on("presence", { event: "sync" }, () => this.reportPresence())
             .on<{ sessionId: string; name: string }>("presence", { event: "leave" }, ({ leftPresences }) =>
             {
-                // only a leave counts; someone who never tracked presence isn't reported
+                // only a real leave is reported
                 for (const left of leftPresences)
                 {
                     if (left.sessionId === me) continue;
@@ -182,7 +182,7 @@ export class NetworkHandler
         else this.stopHeartbeat();
     }
 
-    // the server can't see presence, so a waiting host checks in or the lobby closes after 30 s
+    // the server can't see presence, so the host checks in
     private startHeartbeat(code: string): void
     {
         if (this.heartbeat) return;

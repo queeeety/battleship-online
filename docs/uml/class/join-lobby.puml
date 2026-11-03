@@ -58,6 +58,7 @@ class SessionManager <<utility>> {
 class GameRepository <<persistence>> {
   + loadLobby(code : String) : Promise<Lobby | null>
   + saveLobby(l : Lobby) : Promise<void>
+  + seatGuest(l : Lobby) : Promise<boolean>
   + findActiveLobbyCode(sessionId : UUID) : Promise<String | null>
 }
 

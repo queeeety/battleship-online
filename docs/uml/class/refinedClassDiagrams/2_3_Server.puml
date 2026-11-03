@@ -71,6 +71,7 @@ class GameRepository <<persistence>> {
   - client : SupabaseClient
   + loadLobby(code : string) : Promise<Lobby | null>
   + saveLobby(l : Lobby) : Promise<void>
+  + seatGuest(l : Lobby) : Promise<boolean>
   + findActiveLobbyCode(sessionId : string) : Promise<string | null>
   + keepLobbyOpen(code : string) : Promise<boolean>
   + loadGame(code : string) : Promise<LoadedGame | null>

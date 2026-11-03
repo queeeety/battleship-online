@@ -67,7 +67,6 @@ interface SavedShot
     sunkShipName?: string | null;
 }
 
-/** Squares each player's scans revealed (game_secrets.scan_log). */
 export interface ScanLog
 {
     p1: { row: number; col: number }[];
@@ -76,7 +75,7 @@ export interface ScanLog
 
 export const EMPTY_SCAN_LOG: ScanLog = { p1: [], p2: [] };
 
-/** A game plus its version, for saveGame's clash check. The rematch offer and scan log are stored next to the game, not in it. */
+/** A game plus its version, for saveGame's clash check. */
 export interface LoadedGame
 {
     game: Game;
@@ -192,7 +191,7 @@ export class GameRepository
             new Date(data.updated_at));
     }
 
-    /** The waiting host's heartbeat: a no-op update, so the trigger moves updated_at on. False once the lobby isn't waiting. */
+    /** No-op update so updated_at moves on; false once not waiting. */
     public async keepLobbyOpen(code: string): Promise<boolean>
     {
         const { data, error } = await this.client
@@ -227,6 +226,29 @@ export class GameRepository
 
         const { error } = await this.client.from("games").upsert(row, { onConflict: "code" });
         if (error) throw new Error(`Could not save lobby ${l.getCode()}: ${error.message}`);
+    }
+
+    /** Only if seat 2 is still empty. */
+    public async seatGuest(l: Lobby): Promise<boolean>
+    {
+        const guest = l.getPlayers()[1];
+        if (!guest) throw new Error(`Lobby ${l.getCode()} has no guest to seat`);
+
+        const { data, error } = await this.client
+            .from("games")
+            .update({
+                player2_id: guest.getSessionId(),
+                player2_name: guest.getName(),
+                lobby_status: GameRepository.LOBBY_STATUS.get(l.getStatus()),
+                game_state: GameRepository.GAME_STATE.get(l.getGame().getState())
+            })
+            .eq("code", l.getCode())
+            .eq("lobby_status", "waiting")
+            .is("player2_id", null)
+            .select("code");
+
+        if (error) throw new Error(`Could not seat the guest in ${l.getCode()}: ${error.message}`);
+        return (data ?? []).length > 0;
     }
 
     /** The waiting or in-progress lobby this session sits in, for restoreSeat. */
@@ -307,10 +329,7 @@ export class GameRepository
         };
     }
 
-    /**
-     * One transaction via save_game(). Null if someone saved first; nothing is then written.
-     * `code` is needed for a fresh rematch Game; scanLog is left as it is unless given.
-     */
+    /** Null if someone saved first; a null scanLog is left as is. */
     public async saveGame(g: Game, version: string, code: string = g.getId(), scanLog: ScanLog | null = null): Promise<string | null>
     {
         const saved = g.toJSON();
@@ -355,7 +374,7 @@ export class GameRepository
         return (data as string | null) ?? null;
     }
 
-    /** Writes a rematch offer or answer, closing the lobby if asked. Null if someone saved first. */
+    /** Null if someone saved first. */
     public async saveRematch(g: Game, version: string, r: RematchRequest, closeLobby: boolean = false): Promise<string | null>
     {
         const { data, error } = await this.client
@@ -390,11 +409,7 @@ export class GameRepository
         return (await this.saveGame(loaded.game, loaded.version)) !== null;
     }
 
-    /**
-     * Load, apply the rules, save. A double-click or second tab gets StaleGameError.
-     * `beforeShot` may change the game first (e.g. an expired turn's random shot); returns true if it did,
-     * and that change is saved even when this shot is then refused.
-     */
+    /** StaleGameError on a clash. A beforeShot change is saved even if the shot is refused. */
     public async runShotTransaction(code: string, shooter: Player, target: Coordinate, beforeShot?: (g: Game) => boolean): Promise<Shot>
     {
         const loaded = await this.loadGame(code);

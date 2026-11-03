@@ -37,40 +37,37 @@ export async function getMyState(code: string): Promise<BattleResult<PlayerView>
     return run(server => server.getMyState(code));
 }
 
-/**
- * `ability` is { name }, plus { line: "row" | "column" } for Line Scan or { ship, orientation } for Reroute.
- * Scan results arrive on the player's private channel and in getMyState's revealedSquares.
- */
+/** ability: { name }, plus line (Line Scan) or ship and orientation (Reroute). */
 export async function useAbility(code: string, ability: unknown, target?: { row: number; col: number }): Promise<BattleResult<null>>
 {
     return run(async server => { await server.useAbility(code, ability, target); return null; });
 }
 
-/** Keep-or-replace answer: true keeps the held ability, false takes the new draw. */
+/** true keeps the held ability, false takes the offer. */
 export async function chooseAbility(code: string, keep: boolean): Promise<BattleResult<null>>
 {
     return run(async server => { await server.chooseAbility(code, keep); return null; });
 }
 
-/** Rematch or Accept sends true; Decline or Home sends false, which closes the lobby. */
+/** true asks or accepts; false declines and closes the lobby. */
 export async function requestRematch(code: string, accept: boolean): Promise<BattleResult<RematchStatus>>
 {
     return run(async server => (await server.requestRematch(code, accept)).getStatus());
 }
 
-/** Called by NetworkHandler when the opponent's presence drops. */
+/** Sent by NetworkHandler. */
 export async function reportDisconnect(code: string): Promise<BattleResult<null>>
 {
     return run(async server => { await server.reportDisconnect(code); return null; });
 }
 
-/** true if time was really up and the server acted; false means ask again in a second. */
+/** false means not yet: ask again in a second. */
 export async function claimTimeout(code: string): Promise<BattleResult<boolean>>
 {
     return run(server => server.claimTimeout(code));
 }
 
-/** The waiting host's heartbeat, sent by NetworkHandler. */
+/** Sent by NetworkHandler. */
 export async function keepLobbyOpen(code: string): Promise<BattleResult<boolean>>
 {
     return run(server => server.keepLobbyOpen(code));

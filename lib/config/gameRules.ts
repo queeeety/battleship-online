@@ -19,10 +19,10 @@ export const TURN_TIME_LIMIT_SECONDS: Readonly<Record<GameType, number>> = {
 // how long before a disconnect counts as a forfeit
 export const DISCONNECT_GRACE_PERIOD_MS = 60000;
 
-// a waiting lobby closes once the host has been gone this long
+// waiting lobby closes once the host is gone this long
 export const HOST_GONE_MS = 30000;
 
-// how often the waiting host's page tells the server it's still there
+// waiting host's check-in interval
 export const LOBBY_HEARTBEAT_MS = 10000;
 
 // no 0, O, 1, I or L so codes can be read out loud without mistakes

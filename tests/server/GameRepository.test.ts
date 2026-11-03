@@ -428,3 +428,22 @@ describe("GameRepository scan log", () =>
         expect((await repo.loadGame("4F7K2M"))!.scanLog.p1).toHaveLength(1);
     });
 });
+
+describe("GameRepository.seatGuest", () =>
+{
+    it("fills seat 2 once, and refuses a second guest", async () =>
+    {
+        const db = fakeSupabase();
+        const repo = new GameRepository(db.client);
+        const first = new Lobby(GameType.ORIGINAL, "4F7K2M");
+        first.join("Cian91", "host-session");
+        await repo.saveLobby(first);
+        const second = (await repo.loadLobby("4F7K2M"))!;
+
+        first.join("Aoife", "guest-a");
+        second.join("Rory", "guest-b");
+        expect(await repo.seatGuest(first)).toBe(true);
+        expect(await repo.seatGuest(second)).toBe(false);
+        expect(db.games.get("4F7K2M")).toMatchObject({ player2_id: "guest-a", lobby_status: "in_progress", game_state: "placement" });
+    });
+});
