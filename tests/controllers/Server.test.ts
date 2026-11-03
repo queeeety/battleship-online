@@ -8,7 +8,7 @@ import { Board } from "../../lib/entities/board";
 import { placeKnownFleet } from "../helpers";
 import { fakeSupabase } from "../server/fakeSupabase";
 import type { RateLimiter } from "../../lib/server/RateLimiter";
-import { EndReason, GameState, GameType, JoinError, LobbyStatus, ShotResult } from "../../lib/enums";
+import { EndReason, GameState, GameType, JoinError, LobbyStatus, RematchStatus, ShotResult } from "../../lib/enums";
 
 /**
  * Builds a Server around fakes: `caller` is whose cookie the request carries (null = first visit),
@@ -636,5 +636,94 @@ describe("Server waiting lobby", () =>
     {
         const { as, code } = await battle();
         await expect(as("stranger").keepLobbyOpen(code)).rejects.toBeInstanceOf(NotSeatedError);
+    });
+});
+
+describe("Server.requestRematch", () =>
+{
+    async function finished()
+    {
+        const setup = await startedBattle();
+        await setup.as(setup.first).forfeit(setup.code);
+        return setup;
+    }
+
+    it("records the offer so the other player sees who asked", async () =>
+    {
+        const { as, code, first, second } = await finished();
+        const r = await as(second).requestRematch(code, true);
+        expect(r.getStatus()).toBe(RematchStatus.REQUESTED);
+
+        const theirView = await as(first).getMyState(code);
+        expect(theirView.rematch).toEqual({ by: theirView.seat === 1 ? 2 : 1, status: RematchStatus.REQUESTED });
+    });
+
+    it("resets the same lobby to placement once both agree", async () =>
+    {
+        const { as, code, first, second } = await finished();
+        await as(second).requestRematch(code, true);
+        const r = await as(first).requestRematch(code, true);
+        expect(r.isMutual()).toBe(true);
+
+        const view = await as(first).getMyState(code);
+        expect(view.code).toBe(code);
+        expect(view.gameState).toBe(GameState.PLACEMENT);
+        expect(view.lobbyStatus).toBe(LobbyStatus.IN_PROGRESS);
+        expect(view.yourShots).toEqual([]);
+        expect(view.yourBoard.ships).toEqual([]);
+        expect(view.winner).toBeNull();
+        expect(view.rematch).toBeNull();
+        expect(view.you.ready).toBe(false);
+    });
+
+    it("lets the new game be played from the start", async () =>
+    {
+        const { as, code, first, second } = await finished();
+        await as(second).requestRematch(code, true);
+        await as(first).requestRematch(code, true);
+        await as("host").placeShips(code, layout());
+        await as("guest").placeShips(code, layout());
+        expect((await as("host").getMyState(code)).gameState).toBe(GameState.IN_PROGRESS);
+    });
+
+    it("doesn't count asking twice as agreeing", async () =>
+    {
+        const { as, code, second } = await finished();
+        await as(second).requestRematch(code, true);
+        const again = await as(second).requestRematch(code, true);
+        expect(again.getStatus()).toBe(RematchStatus.REQUESTED);
+        expect((await as(second).getMyState(code)).gameState).toBe(GameState.FINISHED);
+    });
+
+    it("closes the lobby on a decline, so the code stops working", async () =>
+    {
+        const { as, code, first, second } = await finished();
+        await as(second).requestRematch(code, true);
+        const r = await as(first).requestRematch(code, false);
+        expect(r.getStatus()).toBe(RematchStatus.DECLINED);
+
+        const view = await as(second).getMyState(code);
+        expect(view.lobbyStatus).toBe(LobbyStatus.ABANDONED);
+        expect(view.rematch?.status).toBe(RematchStatus.DECLINED);
+        expect((await as(second).requestRematch(code, true)).getStatus()).toBe(RematchStatus.DECLINED);
+    });
+
+    it("closes the lobby when a player leaves without anyone asking", async () =>
+    {
+        const { as, code, first } = await finished();
+        await as(first).requestRematch(code, false);
+        expect((await as(first).getMyState(code)).lobbyStatus).toBe(LobbyStatus.ABANDONED);
+    });
+
+    it("refuses before the game is over", async () =>
+    {
+        const { as, code, first } = await startedBattle();
+        await expect(as(first).requestRematch(code, true)).rejects.toBeInstanceOf(MoveRefusedError);
+    });
+
+    it("refuses an answer that isn't true or false", async () =>
+    {
+        const { as, code, first } = await finished();
+        await expect(as(first).requestRematch(code, "yes")).rejects.toBeInstanceOf(InvalidRequestError);
     });
 });

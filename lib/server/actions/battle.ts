@@ -2,6 +2,7 @@
 
 import { Server, NotSeatedError, RateLimitedError } from "../../controllers/Server";
 import type { PlayerView, ShotView } from "../../controllers/Server";
+import type { RematchStatus } from "../../enums";
 import { MoveRefusedError, StaleGameError } from "../GameRepository";
 import { InvalidRequestError } from "../RequestValidator";
 
@@ -34,6 +35,12 @@ export async function forfeit(code: string): Promise<BattleResult<null>>
 export async function getMyState(code: string): Promise<BattleResult<PlayerView>>
 {
     return run(server => server.getMyState(code));
+}
+
+/** Rematch or Accept sends true; Decline or Home sends false, which closes the lobby. */
+export async function requestRematch(code: string, accept: boolean): Promise<BattleResult<RematchStatus>>
+{
+    return run(async server => (await server.requestRematch(code, accept)).getStatus());
 }
 
 /** Called by NetworkHandler when the opponent's presence drops. */

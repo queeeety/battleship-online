@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { GameRepository, StaleGameError } from "../../lib/server/GameRepository";
 import { Lobby } from "../../lib/controllers/Lobby";
 import type { Game } from "../../lib/controllers/Game";
-import { GameState, GameType, LobbyStatus, ShotResult } from "../../lib/enums";
+import { EndReason, GameState, GameType, LobbyStatus, RematchStatus, ShotResult } from "../../lib/enums";
 import { HumanPlayer } from "../../lib/entities/players";
 import { startedGame, knownFleetSquares, OPEN_WATER, sinkDestroyer } from "../helpers";
 import { fakeSupabase } from "./fakeSupabase";
@@ -340,5 +340,52 @@ describe("GameRepository.keepLobbyOpen", () =>
         const { client } = fakeClient(row());
         const lobby = (await new GameRepository(client).loadLobby("4F7K2M"))!;
         expect(lobby.getLastSeenAt()).toEqual(new Date("2026-11-02T12:00:10Z"));
+    });
+});
+
+describe("GameRepository rematch", () =>
+{
+    async function finishedInDb()
+    {
+        const db = fakeSupabase();
+        const repo = new GameRepository(db.client);
+        const lobby = new Lobby(GameType.ORIGINAL, "4F7K2M");
+        lobby.join("Cian91", "host-session");
+        lobby.join("Aoife", "guest-session");
+        await repo.saveLobby(lobby);
+        const { game, version } = (await repo.loadGame("4F7K2M"))!;
+        game.declareWinner(game.getPlayers()[0], EndReason.OPPONENT_FORFEIT);
+        await repo.saveGame(game, version);
+        return { db, repo };
+    }
+
+    it("saves an offer and loads it back with who asked", async () =>
+    {
+        const { db, repo } = await finishedInDb();
+        const { game, version } = (await repo.loadGame("4F7K2M"))!;
+        expect(await repo.saveRematch(game, version, game.getPlayers()[1].requestRematch())).not.toBeNull();
+        expect(db.games.get("4F7K2M")).toMatchObject({ rematch_by: 2, rematch_status: "requested" });
+
+        const r = (await repo.loadGame("4F7K2M"))!.rematch!;
+        expect(r.getStatus()).toBe(RematchStatus.REQUESTED);
+        expect(r.getRequestedBy().getId()).toBe("guest-session");
+    });
+
+    it("closes the lobby with a decline when asked to", async () =>
+    {
+        const { db, repo } = await finishedInDb();
+        const { game, version } = (await repo.loadGame("4F7K2M"))!;
+        const r = game.getPlayers()[0].requestRematch();
+        r.decline();
+        await repo.saveRematch(game, version, r, true);
+        expect(db.games.get("4F7K2M")).toMatchObject({ lobby_status: "abandoned", rematch_status: "declined" });
+    });
+
+    it("refuses an offer against an old version", async () =>
+    {
+        const { db, repo } = await finishedInDb();
+        const { game } = (await repo.loadGame("4F7K2M"))!;
+        expect(await repo.saveRematch(game, "old", game.getPlayers()[0].requestRematch())).toBeNull();
+        expect(db.games.get("4F7K2M")!.rematch_status).toBe("none");
     });
 });

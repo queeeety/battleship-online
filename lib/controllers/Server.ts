@@ -1,4 +1,4 @@
-import { EndReason, GameState, JoinError, LobbyStatus } from "../enums";
+import { EndReason, GameState, JoinError, LobbyStatus, RematchStatus } from "../enums";
 import type { GameType, ShotResult } from "../enums";
 import { Lobby } from "./Lobby";
 import type { HumanPlayer } from "../entities/players";
@@ -60,6 +60,7 @@ export interface PlayerView
     winner: 1 | 2 | null;
     endReason: EndReason | null;
     opponentBoard: BoardSnapshot | null;
+    rematch: { by: 1 | 2; status: RematchStatus } | null;
     result: { won: boolean; shotsFired: number; accuracy: number; shipsSunk: number } | null;
 }
 
@@ -218,15 +219,53 @@ export class Server
         });
     }
 
-    public requestRematch(code: string, accept: boolean): RematchRequest { throw new Error("not implemented"); }
+    /**
+     * One player asks (accept = true), the other answers. Both agreeing resets the same lobby to placement;
+     * a decline, or leaving with false, closes the lobby so the code stops working.
+     */
+    public async requestRematch(code: unknown, accept: unknown): Promise<RematchRequest>
+    {
+        const { lobbyCode, lobby, seat } = await this.seatedCaller(code);
+        const yes = this.validator.parseAnswer(accept);
+        let answer: RematchRequest | null = null;
+
+        await this.retryIfStale(lobbyCode, async () =>
+        {
+            const { game, version, rematch } = await this.loadStarted(lobbyCode);
+            if (game.getState() !== GameState.FINISHED) throw new MoveRefusedError("The game isn't over yet");
+            const me = game.getPlayers()[seat - 1];
+            answer = rematch;
+            if (rematch && rematch.getStatus() !== RematchStatus.REQUESTED) return true;
+
+            if (!yes)
+            {
+                answer = rematch ?? me.requestRematch();
+                answer.decline();
+                return await this.repo.saveRematch(game, version, answer, true) !== null;
+            }
+            if (rematch?.getRequestedBy() === me) return true;
+            if (!rematch)
+            {
+                answer = me.requestRematch();
+                return await this.repo.saveRematch(game, version, answer) !== null;
+            }
+
+            rematch.accept();
+            lobby.reset();
+            for (const p of lobby.getPlayers()) p.reconnect();
+            return await this.repo.saveGame(lobby.getGame(), version, lobbyCode) !== null;
+        });
+        return answer!;
+    }
 
     /** Own board in full, opponent's as shots only; their fleet is revealed once finished. Also marks the caller as back. */
     public async getMyState(code: unknown): Promise<PlayerView>
     {
         const { lobbyCode, lobby, seat } = await this.seatedCaller(code);
-        let game = (await this.repo.loadGame(lobbyCode))?.game ?? null;
+        const loaded = await this.repo.loadGame(lobbyCode);
+        let game = loaded?.game ?? null;
         if (game && !(game.getPlayers()[seat - 1] as HumanPlayer).isConnected()) game = await this.markBack(lobbyCode, seat);
-        return Server.viewFor(lobby, game, seat);
+        return Server.viewFor(lobby, game, seat, loaded?.rematch ?? null);
     }
 
     /**
@@ -404,7 +443,7 @@ export class Server
         throw new StaleGameError(code);
     }
 
-    private static viewFor(lobby: Lobby, game: Game | null, seat: 1 | 2): PlayerView
+    private static viewFor(lobby: Lobby, game: Game | null, seat: 1 | 2, rematch: RematchRequest | null = null): PlayerView
     {
         // the game's copy is newer once started (markBack may have just changed it)
         const seated = (game?.getPlayers() as HumanPlayer[] | undefined) ?? lobby.getPlayers();
@@ -426,7 +465,7 @@ export class Server
             return {
                 ...base, gameState: null, yourTurn: false, turnStartedAt: null, doubleShotActive: false,
                 yourBoard: { ships: [], shots: [] }, yourShots: [], opponentShots: [],
-                heldAbility: null, offeredAbility: null, winner: null, endReason: null, opponentBoard: null, result: null
+                heldAbility: null, offeredAbility: null, winner: null, endReason: null, opponentBoard: null, rematch: null, result: null
             };
         }
 
@@ -454,6 +493,10 @@ export class Server
             winner: winner === null ? null : (players.indexOf(winner) + 1) as 1 | 2,
             endReason: game.getEndReason(),
             opponentBoard: finished ? opponent.getBoard().toSnapshot() : null,
+            rematch: rematch && {
+                by: (players.findIndex(p => p.getId() === rematch.getRequestedBy().getId()) + 1) as 1 | 2,
+                status: rematch.getStatus()
+            },
             result: result && {
                 won: result.getDidWin(), shotsFired: result.getShotsFired(),
                 accuracy: result.getAccuracy(), shipsSunk: result.getShipsSunk()
