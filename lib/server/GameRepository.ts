@@ -274,6 +274,11 @@ export class GameRepository
         const shotsBy = (seat: number) => saved.shots
             .filter(s => s.shooter === seat)
             .map(s => ({ row: s.row, col: s.col, result: GameRepository.SHOT_RESULT.get(s.result), firedAt: s.firedAt, sunkShipName: s.sunkShipName }));
+        const awaySince = (seat: number) =>
+        {
+            const p = g.getPlayers()[seat];
+            return p instanceof HumanPlayer ? p.getDisconnectedAt()?.toISOString() ?? null : null;
+        };
 
         const { data, error } = await this.client.rpc("save_game", {
             p_code: g.getId(),
@@ -283,6 +288,8 @@ export class GameRepository
                 game_state: GameRepository.GAME_STATE.get(saved.state),
                 ready_p1: p1.isReady,
                 ready_p2: p2.isReady,
+                disconnected_at_p1: awaySince(0),
+                disconnected_at_p2: awaySince(1),
                 turn: saved.currentTurn === null ? null : saved.currentTurn + 1,
                 turn_started_at: saved.turnStartedAt,
                 double_shot_active: saved.doubleShotActive,

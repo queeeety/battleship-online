@@ -4,7 +4,7 @@ import type { PlayerView } from "../controllers/Server";
 import { HumanPlayer } from "../entities/players/HumanPlayer";
 import type { Coordinate } from "../entities/board/Coordinate";
 import type { Ability } from "../abilities/Ability";
-import { getMyState } from "../server/actions/battle";
+import { getMyState, reportDisconnect } from "../server/actions/battle";
 import type { BattleResult } from "../server/actions/battle";
 
 type Channel = RealtimeChannel;
@@ -56,6 +56,7 @@ export interface NetworkListener
 }
 
 type FetchState = (code: string) => Promise<BattleResult<PlayerView>>;
+type ReportLeft = (code: string) => Promise<BattleResult<null>>;
 
 /**
  * Boundary class for the network.
@@ -69,15 +70,17 @@ export class NetworkHandler
     private client: SupabaseClient;
     private listener: NetworkListener;
     private fetchState: FetchState;
+    private reportLeft: ReportLeft;
     private code: string | null;
 
-    constructor(client: SupabaseClient, listener: NetworkListener = {}, fetchState: FetchState = getMyState)
+    constructor(client: SupabaseClient, listener: NetworkListener = {}, fetchState: FetchState = getMyState, reportLeft: ReportLeft = reportDisconnect)
     {
         this.channel = null;
         this.privateChannel = null;
         this.client = client;
         this.listener = listener;
         this.fetchState = fetchState;
+        this.reportLeft = reportLeft;
         this.code = null;
     }
 
@@ -87,6 +90,8 @@ export class NetworkHandler
         await this.unsubscribe();
         this.code = code;
         await this.client.realtime.setAuth();
+        const { data } = await this.client.auth.getClaims();
+        const me = data?.claims.sub;
 
         this.channel = this.client.channel(`game:${code}`, { config: { private: true } })
             .on("broadcast", { event: "game_updated" }, ({ payload }) =>
@@ -97,12 +102,16 @@ export class NetworkHandler
             .on("presence", { event: "sync" }, () => this.reportPresence())
             .on<{ sessionId: string; name: string }>("presence", { event: "leave" }, ({ leftPresences }) =>
             {
-                for (const left of leftPresences) this.onDisconnect(new HumanPlayer(left.name, left.sessionId));
+                // only a leave counts; someone who never tracked presence isn't reported
+                for (const left of leftPresences)
+                {
+                    if (left.sessionId === me) continue;
+                    void this.reportLeft(code);
+                    this.onDisconnect(new HumanPlayer(left.name, left.sessionId));
+                }
             })
             .subscribe(status => { if (status === "SUBSCRIBED") void this.resync(code); });
 
-        const { data } = await this.client.auth.getClaims();
-        const me = data?.claims.sub;
         if (me)
         {
             this.privateChannel = this.client.channel(`game:${code}:${me}`, { config: { private: true } })

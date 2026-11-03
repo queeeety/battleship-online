@@ -48,7 +48,8 @@ function setup(me: string | null = "me")
     const rt = fakeRealtime(me);
     const listener = { onBroadcast: vi.fn(), onState: vi.fn(), onError: vi.fn(), onPresence: vi.fn(), onDisconnect: vi.fn(), onPrivate: vi.fn() };
     const fetchState = vi.fn().mockResolvedValue({ ok: true, data: view });
-    return { ...rt, listener, fetchState, net: new NetworkHandler(rt.client, listener, fetchState) };
+    const reportLeft = vi.fn().mockResolvedValue({ ok: true, data: null });
+    return { ...rt, listener, fetchState, reportLeft, net: new NetworkHandler(rt.client, listener, fetchState, reportLeft) };
 }
 
 describe("NetworkHandler.subscribe", () =>
@@ -144,6 +145,23 @@ describe("NetworkHandler presence", () =>
         const left = listener.onDisconnect.mock.calls[0][0] as HumanPlayer;
         expect(left.getSessionId()).toBe("them");
         expect(left.getName()).toBe("Aoife");
+    });
+
+    it("tells the server when the opponent leaves, so their 60-second clock starts", async () =>
+    {
+        const { net, emit, reportLeft } = setup();
+        await net.subscribe("ABC234");
+        emit("game:ABC234", "presence:leave", { leftPresences: [{ sessionId: "them", name: "Aoife" }] });
+        expect(reportLeft).toHaveBeenCalledWith("ABC234");
+    });
+
+    it("doesn't report its own player leaving (e.g. another tab closing)", async () =>
+    {
+        const { net, emit, reportLeft, listener } = setup();
+        await net.subscribe("ABC234");
+        emit("game:ABC234", "presence:leave", { leftPresences: [{ sessionId: "me", name: "Cian" }] });
+        expect(reportLeft).not.toHaveBeenCalled();
+        expect(listener.onDisconnect).not.toHaveBeenCalled();
     });
 
     it("refuses to track presence before subscribing", async () =>

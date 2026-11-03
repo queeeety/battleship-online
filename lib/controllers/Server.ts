@@ -1,5 +1,5 @@
-import { GameState, JoinError, LobbyStatus } from "../enums";
-import type { EndReason, GameType, ShotResult } from "../enums";
+import { EndReason, GameState, JoinError, LobbyStatus } from "../enums";
+import type { GameType, ShotResult } from "../enums";
 import { Lobby } from "./Lobby";
 import type { HumanPlayer } from "../entities/players";
 import type { BoardSnapshot, Coordinate } from "../entities/board";
@@ -30,6 +30,15 @@ export interface ShotView
     sunkShipName: string | null;
 }
 
+/** disconnectedAt starts the 60-second countdown on screen. */
+export interface SeatView
+{
+    name: string;
+    ready: boolean;
+    connected: boolean;
+    disconnectedAt: string | null;
+}
+
 /** getMyState's result: only what this player may see. */
 export interface PlayerView
 {
@@ -38,8 +47,8 @@ export interface PlayerView
     lobbyStatus: LobbyStatus;
     gameState: GameState | null;
     seat: 1 | 2;
-    you: { name: string; ready: boolean; connected: boolean };
-    opponent: { name: string; ready: boolean; connected: boolean } | null;
+    you: SeatView;
+    opponent: SeatView | null;
     yourTurn: boolean;
     turnStartedAt: string | null;
     doubleShotActive: boolean;
@@ -203,12 +212,33 @@ export class Server
 
     public requestRematch(code: string, accept: boolean): RematchRequest { throw new Error("not implemented"); }
 
-    /** Own board in full, opponent's as shots only; their fleet is revealed once finished. */
+    /** Own board in full, opponent's as shots only; their fleet is revealed once finished. Also marks the caller as back. */
     public async getMyState(code: unknown): Promise<PlayerView>
     {
-        const { lobby, seat } = await this.seatedCaller(code);
-        const game = (await this.repo.loadGame(lobby.getCode()))?.game ?? null;
+        const { lobbyCode, lobby, seat } = await this.seatedCaller(code);
+        let game = (await this.repo.loadGame(lobbyCode))?.game ?? null;
+        if (game && !(game.getPlayers()[seat - 1] as HumanPlayer).isConnected()) game = await this.markBack(lobbyCode, seat);
         return Server.viewFor(lobby, game, seat);
+    }
+
+    /**
+     * The other client saw this player's presence drop, so their 60-second clock starts.
+     * A false report is undone by that player's next getMyState.
+     */
+    public async reportDisconnect(code: unknown): Promise<void>
+    {
+        const { lobbyCode, seat, player } = await this.seatedCaller(code);
+        await this.checkRateLimit(player.getSessionId(), "reportDisconnect");
+
+        await this.retryIfStale(lobbyCode, async () =>
+        {
+            const loaded = await this.repo.loadGame(lobbyCode);
+            if (!loaded || loaded.game.getState() === GameState.FINISHED) return true;
+            const them = loaded.game.getPlayers()[2 - seat] as HumanPlayer;
+            if (!them.isConnected()) return true; // keep the first time, or the clock restarts
+            them.disconnect();
+            return await this.repo.saveGame(loaded.game, loaded.version) !== null;
+        });
     }
 
     /** Gives a refreshed player their seat back, or null. Matched by cookie, never the browser's value, so seats can't be stolen. */
@@ -228,7 +258,32 @@ export class Server
         return { lobby, player: lobby.getPlayers()[seat - 1] };
     }
 
-    public claimTimeout(code: string): void {}
+    /** Called when a countdown on screen hits zero. The server decides if time is really up; false means not yet. */
+    public async claimTimeout(code: unknown): Promise<boolean>
+    {
+        const { lobbyCode, seat } = await this.seatedCaller(code);
+        let claimed = false;
+
+        await this.retryIfStale(lobbyCode, async () =>
+        {
+            const loaded = await this.loadStarted(lobbyCode);
+            const game = loaded.game;
+            const me = game.getPlayers()[seat - 1] as HumanPlayer;
+            const them = game.opponentOf(me) as HumanPlayer;
+            claimed = false;
+            if (game.getState() === GameState.FINISHED) return true;
+
+            if (them.hasExceededGracePeriod())
+            {
+                me.reconnect();
+                game.declareWinner(me, EndReason.OPPONENT_DISCONNECTED);
+                claimed = true;
+            }
+            if (!claimed) return true;
+            return await this.repo.saveGame(game, loaded.version) !== null;
+        });
+        return claimed;
+    }
 
     public chooseAbility(code: string, keep: boolean): void {}
 
@@ -278,6 +333,29 @@ export class Server
         return { lobbyCode, lobby, seat, player: lobby.getPlayers()[seat - 1] };
     }
 
+    // clears the caller's disconnect and gives back the turn time they were away for
+    private async markBack(code: string, seat: 1 | 2): Promise<Game>
+    {
+        let game: Game | null = null;
+        await this.retryIfStale(code, async () =>
+        {
+            const loaded = await this.loadStarted(code);
+            game = loaded.game;
+            const me = game.getPlayers()[seat - 1] as HumanPlayer;
+            const awaySince = me.getDisconnectedAt();
+            if (me.isConnected() || awaySince === null) return true;
+
+            const turnStart = game.getTurnStartedAt();
+            if (game.getState() === GameState.IN_PROGRESS && game.getCurrentTurn() === me && turnStart)
+            {
+                game.resumeTurnTimer(Date.now() - Math.max(awaySince.getTime(), turnStart.getTime()));
+            }
+            me.reconnect();
+            return await this.repo.saveGame(game, loaded.version) !== null;
+        });
+        return game!;
+    }
+
     private async loadStarted(code: string): Promise<LoadedGame>
     {
         const loaded = await this.repo.loadGame(code);
@@ -297,16 +375,20 @@ export class Server
 
     private static viewFor(lobby: Lobby, game: Game | null, seat: 1 | 2): PlayerView
     {
-        const seated = lobby.getPlayers();
-        const you = seated[seat - 1];
-        const them = seated[2 - seat] ?? null;
+        // the game's copy is newer once started (markBack may have just changed it)
+        const seated = (game?.getPlayers() as HumanPlayer[] | undefined) ?? lobby.getPlayers();
+        const seatView = (p: HumanPlayer): SeatView => ({
+            name: p.getName(), ready: p.getIsReady(), connected: p.isConnected(),
+            disconnectedAt: p.getDisconnectedAt()?.toISOString() ?? null
+        });
+        const them = seated[2 - seat];
         const base = {
             code: lobby.getCode(),
             gameType: lobby.getGameType(),
             lobbyStatus: lobby.getStatus(),
             seat,
-            you: { name: you.getName(), ready: you.getIsReady(), connected: you.isConnected() },
-            opponent: them ? { name: them.getName(), ready: them.getIsReady(), connected: them.isConnected() } : null
+            you: seatView(seated[seat - 1]),
+            opponent: them ? seatView(them) : null
         };
         if (!game)
         {

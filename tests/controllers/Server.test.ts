@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { Server, JoinRefusedError, RateLimitedError, NotSeatedError } from "../../lib/controllers/Server";
 import { Lobby } from "../../lib/controllers/Lobby";
 import type { SessionManager } from "../../lib/server/SessionManager";
@@ -417,5 +417,126 @@ describe("Server.forfeit", () =>
         const { as, code, first } = await startedBattle();
         await as(first).forfeit(code);
         await expect(as(first).forfeit(code)).resolves.toBeUndefined();
+    });
+});
+
+describe("Server disconnects", () =>
+{
+    const away = async () =>
+    {
+        const setup = await startedBattle();
+        await setup.as(setup.second).reportDisconnect(setup.code);
+        return setup;
+    };
+
+    afterEach(() => vi.useRealTimers());
+
+    it("starts the opponent's 60-second clock when their presence drops", async () =>
+    {
+        const { as, code, second } = await away();
+        const view = await as(second).getMyState(code);
+        expect(view.opponent?.connected).toBe(false);
+        expect(view.opponent?.disconnectedAt).not.toBeNull();
+        expect(view.you.connected).toBe(true);
+    });
+
+    it("keeps the first disconnect time when reported again", async () =>
+    {
+        const { as, code, second, db } = await away();
+        const seat = (await as(second).getMyState(code)).seat;
+        const key = `disconnected_at_p${3 - seat}`;
+        const firstTime = db.games.get(code)![key];
+        await as(second).reportDisconnect(code);
+        expect(db.games.get(code)![key]).toBe(firstTime);
+    });
+
+    it("clears the disconnect as soon as the player is back", async () =>
+    {
+        const { as, code, first, second } = await away();
+        const back = await as(first).getMyState(code);
+        expect(back.you.connected).toBe(true);
+        expect(back.you.disconnectedAt).toBeNull();
+        expect((await as(second).getMyState(code)).opponent?.connected).toBe(true);
+    });
+
+    it("pauses the turn timer while the player to move is away", async () =>
+    {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(new Date("2026-11-03T12:00:00Z"));
+        const { as, code, first, second } = await away();
+        const before = Date.parse((await as(second).getMyState(code)).turnStartedAt!);
+
+        vi.setSystemTime(new Date("2026-11-03T12:00:20Z"));
+        const back = await as(first).getMyState(code);
+        expect(Date.parse(back.turnStartedAt!) - before).toBe(20_000);
+    });
+
+    it("does nothing while the lobby is waiting or once the game is over", async () =>
+    {
+        const { as, code, first, second, db } = await startedBattle();
+        await as(first).forfeit(code);
+        await as(second).reportDisconnect(code);
+        expect(db.games.get(code)!.disconnected_at_p1).toBeNull();
+        expect(db.games.get(code)!.disconnected_at_p2).toBeNull();
+
+        const alone = await as("solo").createLobby("Solo", GameType.ORIGINAL);
+        await expect(as("solo").reportDisconnect(alone.getCode())).resolves.toBeUndefined();
+    });
+
+    it("refuses reports past the rate limit", async () =>
+    {
+        const { server, lobbies } = setup("host-session", { allow: false });
+        hostedLobby(lobbies);
+        await expect(server.reportDisconnect("4F7K2M")).rejects.toBeInstanceOf(RateLimitedError);
+    });
+});
+
+describe("Server.claimTimeout", () =>
+{
+    afterEach(() => vi.useRealTimers());
+
+    it("awards the win once the opponent has been gone for 60 seconds", async () =>
+    {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(new Date("2026-11-03T12:00:00Z"));
+        const { as, code, second } = await startedBattle();
+        await as(second).reportDisconnect(code);
+
+        vi.setSystemTime(new Date("2026-11-03T12:00:59Z"));
+        expect(await as(second).claimTimeout(code)).toBe(false);
+        expect((await as(second).getMyState(code)).gameState).toBe(GameState.IN_PROGRESS);
+
+        vi.setSystemTime(new Date("2026-11-03T12:01:01Z"));
+        expect(await as(second).claimTimeout(code)).toBe(true);
+        const view = await as(second).getMyState(code);
+        expect(view.gameState).toBe(GameState.FINISHED);
+        expect(view.endReason).toBe(EndReason.OPPONENT_DISCONNECTED);
+        expect(view.result?.won).toBe(true);
+    });
+
+    it("refuses the claim if the player came back in time", async () =>
+    {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(new Date("2026-11-03T12:00:00Z"));
+        const { as, code, first, second } = await startedBattle();
+        await as(second).reportDisconnect(code);
+        await as(first).getMyState(code);
+
+        vi.setSystemTime(new Date("2026-11-03T12:01:30Z"));
+        expect(await as(second).claimTimeout(code)).toBe(false);
+        expect((await as(first).getMyState(code)).gameState).toBe(GameState.IN_PROGRESS);
+    });
+
+    it("does nothing once the game is over", async () =>
+    {
+        const { as, code, first, second } = await startedBattle();
+        await as(first).forfeit(code);
+        expect(await as(second).claimTimeout(code)).toBe(false);
+    });
+
+    it("refuses someone who isn't seated", async () =>
+    {
+        const { as, code } = await startedBattle();
+        await expect(as("stranger").claimTimeout(code)).rejects.toBeInstanceOf(NotSeatedError);
     });
 });

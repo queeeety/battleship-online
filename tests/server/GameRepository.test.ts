@@ -249,6 +249,21 @@ describe("GameRepository.loadGame / saveGame", () =>
         expect(players[0].isConnected()).toBe(true);
         expect(players[1].getDisconnectedAt()).toEqual(new Date("2026-11-02T12:00:00Z"));
     });
+
+    it("saves a disconnect time and clears it once the player is back", async () =>
+    {
+        const { db, repo } = fakeGameDb();
+        const { game } = startedGame();
+        const guest = game.getPlayers()[1] as HumanPlayer;
+        guest.disconnect(new Date("2026-11-03T12:00:00Z"));
+        await repo.saveGame(game, "v0");
+        expect(db.game.disconnected_at_p1).toBeNull();
+        expect(db.game.disconnected_at_p2).toBe("2026-11-03T12:00:00.000Z");
+
+        guest.reconnect();
+        await repo.saveGame(game, "v1");
+        expect(db.game.disconnected_at_p2).toBeNull();
+    });
 });
 
 describe("GameRepository.runShotTransaction", () =>
