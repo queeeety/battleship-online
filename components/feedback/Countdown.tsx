@@ -5,6 +5,7 @@ import type { ReactElement } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useCountdown } from "@/hooks/useCountdown";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
+import { audio } from "@/lib/audio";
 
 const DEFAULT_FROM_SECONDS = 3;
 
@@ -26,6 +27,16 @@ export function Countdown({ from = DEFAULT_FROM_SECONDS, onComplete }: Countdown
         completed.current = true;
         onComplete();
     }, [hasExpired, onComplete]);
+
+    // remember the last number ticked so re-renders never tick it twice
+    const lastTicked = useRef<number | null>(null);
+    useEffect(() => {
+        if (hasExpired || lastTicked.current === secondsLeft) {
+            return;
+        }
+        lastTicked.current = secondsLeft;
+        audio.play("tick");
+    }, [secondsLeft, hasExpired]);
 
     const label = hasExpired ? "Go!" : String(secondsLeft);
     // transforms are dropped for reduced motion, opacity is safe to keep
