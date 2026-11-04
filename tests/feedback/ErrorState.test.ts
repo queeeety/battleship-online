@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
     errorText,
     errorPresentation,
+    isToastFailure,
     toErrorKind,
     SERVER_FAILURES,
     type ErrorPresentation,
@@ -75,6 +76,15 @@ describe("errorPresentation", () => {
 
     it.each(JOIN_ERRORS)("shows JoinError %s as a screen", (error) => {
         expect(errorPresentation(error)).toBe("screen");
+    });
+
+    // The guard is only trusted by the compiler, so check it matches the table
+    it.each(SERVER_FAILURES)("isToastFailure agrees with the table for %s", (error) => {
+        expect(isToastFailure(error)).toBe(expected[error] === "toast");
+    });
+
+    it.each(JOIN_ERRORS)("isToastFailure is false for JoinError %s", (error) => {
+        expect(isToastFailure(error)).toBe(false);
     });
 });
 

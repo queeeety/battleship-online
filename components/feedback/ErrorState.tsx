@@ -132,6 +132,11 @@ export function errorPresentation(error: ActionFailure): ErrorPresentation {
     return typeof error === "number" ? "screen" : PRESENTATION[error];
 }
 
+/** Same check as errorPresentation, but tells TypeScript the error is a string, so it fits ErrorToast. */
+export function isToastFailure(error: ActionFailure): error is ServerFailure {
+    return errorPresentation(error) === "toast";
+}
+
 // join and server errors block you (red, cross), placement errors are fixable (amber, triangle)
 const STYLE = {
     join: "border-red-600 bg-red-50 text-red-900 dark:bg-red-950 dark:text-red-100",
