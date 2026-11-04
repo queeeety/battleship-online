@@ -122,6 +122,43 @@ export function errorText(k: ErrorStateKind): ErrorText {
     }
 }
 
+// Button labels live apart from ErrorText so errorText's output (and its tests) stay as they were.
+// Toast failures have no button today; they get a label anyway so every failure is covered.
+const JOIN_ACTION: Readonly<Record<JoinError, string>> = {
+    [JoinError.CODE_NOT_FOUND]: "Try again",
+    [JoinError.LOBBY_FULL]: "Back to home",
+    [JoinError.GAME_ALREADY_FINISHED]: "Back to home",
+    [JoinError.INVALID_NAME]: "Edit name"
+};
+
+const PLACEMENT_ACTION: Readonly<Record<PlacementError, string>> = {
+    [PlacementError.OUT_OF_BOUNDS]: "Got it",
+    [PlacementError.OVERLAPS_SHIP]: "Got it",
+    [PlacementError.ALREADY_PLACED]: "Got it",
+    [PlacementError.FLEET_INCOMPLETE]: "Keep placing"
+};
+
+const SERVER_ACTION: Readonly<Record<ServerFailure, string>> = {
+    NOT_SEATED: "Go home",
+    SERVER_ERROR: "Try again",
+    MOVE_REFUSED: "Try again",
+    RATE_LIMITED: "Try again",
+    STALE: "Try again",
+    INVALID_INPUT: "Try again"
+};
+
+/** The button label used when the caller doesn't pass actionLabel. */
+export function defaultActionLabel(k: ErrorStateKind): string {
+    switch (k.kind) {
+        case "join":
+            return JOIN_ACTION[k.error];
+        case "placement":
+            return PLACEMENT_ACTION[k.error];
+        case "server":
+            return SERVER_ACTION[k.error];
+    }
+}
+
 /** Turns result.error into ErrorState props. Numbers from actions are always JoinError. */
 export function toErrorKind(error: ActionFailure): ErrorStateKind {
     return typeof error === "number" ? { kind: "join", error } : { kind: "server", error };
@@ -172,7 +209,7 @@ function ErrorIcon({ kind }: { kind: ErrorStateKind["kind"] }): ReactElement {
 }
 
 export function ErrorState(props: ErrorStateProps): ReactElement {
-    const { actionLabel = "Try again", onAction } = props;
+    const { actionLabel = defaultActionLabel(props), onAction } = props;
     const reduceMotion = useReducedMotion();
     const text = errorText(props);
 
