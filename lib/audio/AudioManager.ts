@@ -1,18 +1,20 @@
 import { AUDIO_ENABLED } from "../config/features";
 import { ShotResult } from "../enums";
 
-export type SoundName = "hit" | "miss" | "sunk" | "tick" | "error";
+export type SoundName = "hit" | "miss" | "sunk" | "tick" | "error" | "turn";
 
-// files go in public/sounds/ when the sound layer ships; none exist yet
+// served from public/sounds/
 const SOUND_FILES: Readonly<Record<SoundName, string>> = {
     hit: "/sounds/hit.mp3",
     miss: "/sounds/miss.mp3",
     sunk: "/sounds/sunk.mp3",
     tick: "/sounds/tick.mp3",
-    error: "/sounds/error.mp3"
+    error: "/sounds/error.mp3",
+    turn: "/sounds/turn.mp3"
 };
 
-const SHOT_SOUNDS: Readonly<Record<ShotResult, SoundName>> = {
+// exported so soundForUpdate picks the same sound as playForShot
+export const SHOT_SOUNDS: Readonly<Record<ShotResult, SoundName>> = {
     [ShotResult.MISS]: "miss",
     [ShotResult.HIT]: "hit",
     [ShotResult.SUNK]: "sunk"
