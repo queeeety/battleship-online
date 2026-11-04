@@ -41,7 +41,13 @@ export interface BoardProps {
   lastShot?: string;
   cellSize?: "sm" | "md" | "lg";
   size?: number;
+  /** Squares an armed ability would cover; valid=false draws them as a target the server would refuse. */
+  highlight?: { keys: string[]; valid: boolean };
+  /** Picking a square for an ability, not firing: squares already shot stay pickable, and the own board takes clicks. */
+  targeting?: boolean;
   onCellClick?: (cell: { x: number; y: number; key: string }) => void;
+  /** The square under the pointer or the keyboard cursor; null when it leaves the board. */
+  onCellHover?: (cell: { x: number; y: number; key: string } | null) => void;
 }
 
 const MARK_LABEL: Record<CellMark, string> = {
@@ -100,17 +106,25 @@ export function Board({
   lastShot,
   cellSize = "md",
   size = BOARD_SIZE,
+  highlight,
+  targeting,
   onCellClick,
+  onCellHover,
 }: BoardProps) {
   const idPrefix = useId();
   const [cursor, setCursor] = useState({ x: 0, y: 0 });
   const lines = Array.from({ length: size }, (_, i) => i);
-  const interactive = variant === "target" && active;
+  const interactive = !!active && (variant === "target" || !!targeting);
+  const highlighted = new Set(highlight?.keys);
 
   // a cell already fired at can't be fired at again, so a repeat shot is never sent
   function fire(x: number, y: number) {
     const key = coordKey(x, y);
-    if (!isShot(marks[key])) onCellClick?.({ x, y, key });
+    if (targeting || !isShot(marks[key])) onCellClick?.({ x, y, key });
+  }
+
+  function hover(cell: { x: number; y: number } | null) {
+    onCellHover?.(cell && { ...cell, key: coordKey(cell.x, cell.y) });
   }
 
   // the grid is one Tab stop (Safari's default Tab skips buttons); arrows, Home/End and PageUp/PageDown
@@ -120,6 +134,7 @@ export function Board({
     if (next) {
       e.preventDefault();
       setCursor(next);
+      hover(next);
     } else if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       fire(cursor.x, cursor.y);
@@ -156,6 +171,9 @@ export function Board({
           tabIndex={interactive ? 0 : undefined}
           aria-activedescendant={interactive ? `${idPrefix}${coordKey(cursor.x, cursor.y)}` : undefined}
           onKeyDown={interactive ? onKeyDown : undefined}
+          onFocus={interactive ? () => hover(cursor) : undefined}
+          onBlur={interactive ? () => hover(null) : undefined}
+          onMouseLeave={interactive ? () => hover(null) : undefined}
         >
           {sweeping && <div className="mb-sweep" aria-hidden />}
           <div className="mb-board-ships">
@@ -172,6 +190,7 @@ export function Board({
                 {lines.map((x) => {
                   const key = coordKey(x, y);
                   const mark = marks[key];
+                  const inHighlight = highlighted.has(key);
                   return (
                     <div
                       key={key}
@@ -181,9 +200,15 @@ export function Board({
                         "mb-cell",
                         mark && `is-${mark}`,
                         interactive && cursor.x === x && cursor.y === y && "is-cursor",
+                        inHighlight && (highlight?.valid ? "is-preview" : "is-preview-invalid"),
                       )}
-                      aria-label={key + (mark ? `, ${MARK_LABEL[mark]}` : "")}
-                      aria-disabled={interactive && isShot(mark) ? true : undefined}
+                      aria-label={
+                        key +
+                        (mark ? `, ${MARK_LABEL[mark]}` : "") +
+                        (inHighlight ? (highlight?.valid ? ", in target area" : ", target not allowed") : "")
+                      }
+                      aria-disabled={interactive && !targeting && isShot(mark) ? true : undefined}
+                      onMouseEnter={interactive ? () => hover({ x, y }) : undefined}
                       onClick={
                         interactive
                           ? () => {

@@ -46,3 +46,25 @@ export const ABILITIES: Record<AbilityId, { name: string; description: string; u
 export function coordKey(x: number, y: number): string {
   return String.fromCharCode(65 + x) + (y + 1);
 }
+
+/** Zero-based x and y from "E5"; null if it isn't a square key. */
+export function parseCoordKey(key: string): { x: number; y: number } | null {
+  const match = /^([A-Z])(\d{1,2})$/.exec(key);
+  if (!match) return null;
+  return { x: match[1].charCodeAt(0) - 65, y: Number(match[2]) - 1 };
+}
+
+function idFromName<Id extends string>(table: Record<Id, { name: string }>, name: string | null): Id | null {
+  if (name === null) return null;
+  return (Object.keys(table) as Id[]).find((id) => table[id].name === name) ?? null;
+}
+
+/** "radar-sweep" from the server's "Radar Sweep"; null for none or an unknown name. */
+export function abilityIdFromName(name: string | null): AbilityId | null {
+  return idFromName(ABILITIES, name);
+}
+
+/** "carrier" from the ship class name "Carrier". */
+export function shipTypeFromName(name: string): ShipType | null {
+  return idFromName(SHIPS, name);
+}

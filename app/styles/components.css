@@ -129,6 +129,10 @@
   .mb-fx-ripple { position: absolute; inset: 0; border: 2px solid var(--miss); border-radius: var(--radius-full); pointer-events: none; }
 
   .mb-scan { position: absolute; z-index: var(--z-board-marks); left: calc(var(--mb-x) * var(--mb-cell)); top: calc(var(--mb-y) * var(--mb-cell)); width: calc(var(--mb-w) * var(--mb-cell)); height: calc(var(--mb-h) * var(--mb-cell)); border: 2px dashed var(--sonar); box-sizing: border-box; pointer-events: none; }
+  /* ability targeting: the squares a scan or a rerouted ship would cover */
+  .mb-cell.is-preview { background: var(--sonar-soft); box-shadow: inset 0 0 0 1px var(--sonar); }
+  .mb-cell.is-preview-invalid { background: repeating-linear-gradient(135deg, var(--hit-soft) 0 4px, transparent 4px 8px); box-shadow: inset 0 0 0 1px var(--hit); }
+  .mb-board.is-active .mb-cell.is-preview-invalid { cursor: not-allowed; }
 
   /* Sonar sweep: a rotating wedge over the target board on your turn */
   .mb-sweep { position: absolute; left: 50%; top: 50%; width: 150%; aspect-ratio: 1; translate: -50% -50%; background: conic-gradient(from 0deg, transparent 0deg 290deg, var(--sweep) 360deg); border-radius: var(--radius-full); animation: mb-sweep var(--mb-sweep-period) linear infinite; pointer-events: none; }
@@ -220,6 +224,7 @@
   .mb-ability-icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: var(--radius-md); background: var(--sonar-soft); color: var(--sonar); flex: none; }
   .mb-ability-name { margin: 0; font-size: 17px; line-height: 24px; font-weight: 600; }
   .mb-ability-desc { margin: 0; color: var(--ink-muted); font-size: 14px; line-height: 20px; }
+  .mb-ability-hint { margin: 0; color: var(--ink-muted); font-size: 13px; line-height: 18px; }
   .mb-ability.is-armed, .mb-ability.is-new { border-color: var(--sonar); box-shadow: inset 0 0 0 1px var(--sonar); }
   .mb-ability.is-armed { background: var(--sonar-soft); }
   .mb-ability.is-armed .mb-label { color: var(--sonar); }

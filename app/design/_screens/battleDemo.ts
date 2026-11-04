@@ -1,9 +1,11 @@
 import type { ShipPlacement } from "@/components/game/Board";
-import { SHIPS, coordKey, type CellMark, type ShipType } from "@/components/game/data";
+import { SHIPS, abilityIdFromName, coordKey, type CellMark, type ShipType } from "@/components/game/data";
 import type { ShotLogEntry } from "@/components/game/ShotLog";
 import { BOARD_SIZE } from "@/lib/config";
 import { CellState, ShotResult } from "@/lib/enums";
 import type { FixturePlacement, GameFixture } from "@/fixtures/game.fixture";
+import type { AbilityRequest } from "@/lib/server/RequestValidator";
+import { rerouteFleet, scanFleet } from "./abilityDemo";
 
 /**
  * A playable battle for the /design showcase, started from the game fixture.
@@ -40,15 +42,27 @@ export interface BattleState {
     readonly sunkNotice: SunkNotice | null;
     readonly winner: Side | null;
     readonly scriptIndex: number;
+    // abilities, by the server's names ("Line Scan"), as in PlayerView
+    readonly heldAbility: string | null;
+    readonly offeredAbility: string | null;
+    // ship squares your scans found, as keys
+    readonly revealed: ReadonlyArray<string>;
+    readonly doubleShotActive: boolean;
 }
 
 export type BattleAction =
     | { readonly type: "start" }
     | { readonly type: "fire"; readonly key: string }
-    | { readonly type: "opponentFire" }
+    // draw: the ability you'd get if this shot sinks one of your ships (picked by the screen, so this stays pure)
+    | { readonly type: "opponentFire"; readonly draw?: string }
     // your turn clock ran out: the screen picks a random open square, like Game.fireRandomShot
     | { readonly type: "timeout"; readonly key: string }
-    | { readonly type: "dismissNotice" };
+    | { readonly type: "dismissNotice" }
+    | { readonly type: "useAbility"; readonly request: AbilityRequest; readonly target?: string }
+    // true keeps the held ability, false takes the offer
+    | { readonly type: "chooseAbility"; readonly keep: boolean }
+    // showcase only: draw as if one of your ships had just sunk
+    | { readonly type: "drawAbility"; readonly name: string };
 
 // demo only: in a real game the server keeps these hidden. Agrees with the fixture's shots
 // (Destroyer sunk at D7-E7, a hit at H3, misses at A1, F6 and J10).
@@ -158,7 +172,12 @@ export function createBattleState(fixture: GameFixture): BattleState {
         log,
         sunkNotice: null,
         winner: null,
-        scriptIndex: 0
+        scriptIndex: 0,
+        // the showcase starts holding one so the card has something to show
+        heldAbility: "Line Scan",
+        offeredAbility: null,
+        revealed: [],
+        doubleShotActive: false
     };
 }
 
@@ -202,7 +221,12 @@ function fire(state: BattleState, key: string): BattleState {
         return state;
     }
     const outcome = resolveShot(ENEMY_FLEET, state.myShots, key);
-    return { ...afterShot(state, "you", outcome, key), myShots: outcome.shots };
+    const next = { ...afterShot(state, "you", outcome, key), myShots: outcome.shots };
+    // Double Shot: a miss doesn't pass the turn, once
+    if (state.doubleShotActive && outcome.result === "miss" && !outcome.fleetGone) {
+        return { ...next, phase: "you", turn: state.turn, doubleShotActive: false };
+    }
+    return next;
 }
 
 // scripted target first; once the script runs out, the first square not yet fired at
@@ -216,13 +240,58 @@ function nextOpponentTarget(state: BattleState): { key: string; scriptIndex: num
     return key ? { key, scriptIndex: OPPONENT_SCRIPT.length } : null;
 }
 
-function opponentFire(state: BattleState): BattleState {
+function opponentFire(state: BattleState, draw?: string): BattleState {
     const target = state.phase === "opponent" ? nextOpponentTarget(state) : null;
     if (!target) {
         return state;
     }
     const outcome = resolveShot(state.ownFleet, state.enemyShots, target.key);
-    return { ...afterShot(state, "opponent", outcome, target.key), enemyShots: outcome.shots, scriptIndex: target.scriptIndex };
+    const next = { ...afterShot(state, "opponent", outcome, target.key), enemyShots: outcome.shots, scriptIndex: target.scriptIndex };
+    // like Game.grantAbility: the ability goes to the player who lost the ship
+    return outcome.result === "sunk" && draw && !outcome.fleetGone ? grant(next, draw) : next;
+}
+
+// one held at a time: an empty slot takes it, otherwise it's offered as keep-or-replace
+function grant(state: BattleState, name: string): BattleState {
+    if (!state.heldAbility) return { ...state, heldAbility: name };
+    return name === state.heldAbility ? state : { ...state, offeredAbility: name };
+}
+
+function abilityEntry(state: BattleState, request: AbilityRequest, coord: string | undefined, note: string): ShotLogEntry {
+    return { turn: state.turn, by: "you", ability: abilityIdFromName(request.name) ?? undefined, coord, note };
+}
+
+// what the useAbility server action does; a refused request changes nothing, like MoveRefusedError
+function applyAbility(state: BattleState, request: AbilityRequest, target: string | undefined): BattleState {
+    if (state.phase !== "you" || state.heldAbility !== request.name) return state;
+    // using it before answering an offer keeps it, as on the server
+    const base = { ...state, offeredAbility: null, heldAbility: null };
+    // the turn's shot is used up: the turn passes, as Game.applyAbility's switchTurn
+    const passTurn = (s: BattleState): BattleState => ({ ...s, phase: "opponent", turn: s.turn + 1 });
+
+    if (request.name === "Double Shot") {
+        if (state.doubleShotActive) return state;
+        return { ...base, doubleShotActive: true, log: [...state.log, abilityEntry(state, request, undefined, "fire again")] };
+    }
+    if (!target) return state;
+    if (request.name === "Reroute") {
+        const ownFleet = rerouteFleet(request, target, state.ownFleet, state.enemyShots);
+        if (!ownFleet) return state;
+        return passTurn({ ...base, ownFleet, log: [...state.log, abilityEntry(state, request, undefined, `${request.ship} moved`)] });
+    }
+    const found = scanFleet(request, target, ENEMY_FLEET, state.myShots);
+    if (!found) return state;
+    const note = `${found.length} contact${found.length === 1 ? "" : "s"}`;
+    return passTurn({
+        ...base,
+        revealed: [...new Set([...state.revealed, ...found])],
+        log: [...state.log, abilityEntry(state, request, target, note)]
+    });
+}
+
+function chooseAbility(state: BattleState, keep: boolean): BattleState {
+    if (!state.offeredAbility) return state;
+    return { ...state, heldAbility: keep ? state.heldAbility : state.offeredAbility, offeredAbility: null };
 }
 
 export function battleReducer(state: BattleState, action: BattleAction): BattleState {
@@ -233,8 +302,14 @@ export function battleReducer(state: BattleState, action: BattleAction): BattleS
         case "timeout":
             return fire(state, action.key);
         case "opponentFire":
-            return opponentFire(state);
+            return opponentFire(state, action.draw);
         case "dismissNotice":
             return { ...state, sunkNotice: null };
+        case "useAbility":
+            return applyAbility(state, action.request, action.target);
+        case "chooseAbility":
+            return chooseAbility(state, action.keep);
+        case "drawAbility":
+            return state.phase === "over" ? state : grant(state, action.name);
     }
 }

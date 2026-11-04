@@ -62,10 +62,21 @@ class TurnBanner <<boundary>> {
 class AbilityCard <<boundary>> {
   - ability : Ability | null
   - armed : boolean
-  + show(a : Ability) : void
+  - offer : {current : Ability, drawn : Ability} | null
+  - lineIsRow : boolean
+  - rerouteShip : Ship | null
+  - rerouteOrientation : Orientation
+  + show(a : Ability | null) : void
   + showKeepOrReplace(current : Ability, drawn : Ability) : void
-  + arm() : void
+  + answerOffer(keep : boolean) : boolean
+  + arm() : "armed" | "fire-now"
   + cancel() : void
+  + targetBoard() : "own" | "target"
+  + rotate() : void
+  + selectShip(b : Board, s : Ship | null) : boolean
+  + previewAt(b : Board, t : Coordinate) : TargetPreview | null
+  + isValidTarget(b : Board, t : Coordinate) : boolean
+  + toRequest() : AbilityRequest
 }
 class ResultScreen <<boundary>> {
   - result : GameResult
