@@ -8,7 +8,7 @@ import { GameResult } from "../entities/game/GameResult";
 import { Shot } from "../entities/game/Shot";
 import type { RematchRequest } from "../entities/game";
 import type { Ability } from "../abilities";
-import { ABILITY_FACTORIES, drawRandomAbility } from "../abilities/registry";
+import { createAbility, drawRandomAbility } from "../abilities/registry";
 import { Reroute } from "../abilities/Reroute";
 import { MAX_PLAYERS, TURN_TIME_LIMIT_SECONDS } from "../config";
 
@@ -343,11 +343,8 @@ export class Game
     private static abilityNamed(name: string | null): Ability | null
     {
         if (name === null) return null;
-        for (const make of ABILITY_FACTORIES)
-        {
-            const ability = make();
-            if (ability.getName() === name) return ability;
-        }
-        throw new Error(`Unknown saved ability "${name}"`);
+        const ability = createAbility(name);
+        if (!ability) throw new Error(`Unknown saved ability "${name}"`);
+        return ability;
     }
 }

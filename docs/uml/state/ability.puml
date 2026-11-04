@@ -60,5 +60,9 @@ note bottom of Lifecycle
   channel and scan_log); the opponent learns only which
   ability was used (abilityUsed notice).
   Reroute cannot land on an already-targeted square.
+  Client side (AbilityCard): Held is shown as the ability card.
+  Arming picks a target before useAbility is sent (Double Shot
+  sends at once); Escape or the turn ending cancels with nothing
+  consumed. Dismissing the ChoicePending prompt counts as keep.
 end note
 @enduml

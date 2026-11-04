@@ -23,3 +23,14 @@ export function drawRandomAbility(exclude: string[] = []): Ability
     if (pool.length === 0) throw new Error("Every ability was excluded, there's nothing left to draw");
     return pool[Math.floor(Math.random() * pool.length)];
 }
+
+// a fresh ability from its name, as saved or sent by the server; null for an unknown name
+export function createAbility(name: string): Ability | null
+{
+    for (const make of ABILITY_FACTORIES)
+    {
+        const ability = make();
+        if (ability.getName() === name) return ability;
+    }
+    return null;
+}

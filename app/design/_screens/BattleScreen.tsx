@@ -3,16 +3,19 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import {
   AbilityCard,
+  AbilityDraw,
   Board,
   Legend,
   SHIPS,
   ShotLog,
+  coordKey,
   TurnIndicator,
   TurnTimer,
 } from "@/components/game";
 import { Countdown } from "@/components/feedback/Countdown";
 import { SunkMessage } from "@/components/feedback/SunkMessage";
 import { Button, Dialog, Toast } from "@/components/ui";
+import { useAbilityTargeting } from "@/hooks/useAbilityTargeting";
 import { useCountdown } from "@/hooks/useCountdown";
 import { TURN_TIME_LIMIT_SECONDS } from "@/lib/config";
 import { GameType } from "@/lib/enums";
@@ -28,6 +31,7 @@ import {
   revealedEnemyShips,
   toPlacement,
 } from "./battleDemo";
+import { boardSnapshot, randomAbilityName, squaresOf } from "./abilityDemo";
 import { SCREEN, ScreenBar } from "./chrome";
 
 const TURN_SECONDS = TURN_TIME_LIMIT_SECONDS[GameType.ORIGINAL];
@@ -61,7 +65,6 @@ function TurnClock({ size, onExpire }: TurnClockProps) {
 // sample battle from fixtures/game.fixture.ts: you fire at a hidden demo fleet, Teddy follows a script
 export function BattleScreen() {
   const [state, dispatch] = useReducer(battleReducer, undefined, () => createBattleState(createGameFixture()));
-  const [armed, setArmed] = useState(false);
   const [forfeitOpen, setForfeitOpen] = useState(false);
   const { phase, myShots, enemyShots, ownFleet, sunkNotice, winner } = state;
 
@@ -79,9 +82,10 @@ export function BattleScreen() {
   // Teddy fires one shot per tick; a hit keeps his turn, so this runs again on the new shot count
   useEffect(() => {
     if (phase !== "opponent") return;
-    const id = setTimeout(() => dispatch({ type: "opponentFire" }), OPPONENT_DELAY_MS);
+    // the draw is only used if this shot sinks one of your ships
+    const id = setTimeout(() => dispatch({ type: "opponentFire", draw: randomAbilityName(state.heldAbility) }), OPPONENT_DELAY_MS);
     return () => clearTimeout(id);
-  }, [phase, enemyShots.length]);
+  }, [phase, enemyShots.length, state.heldAbility]);
 
   useEffect(() => {
     if (!sunkNotice) return;
@@ -94,7 +98,21 @@ export function BattleScreen() {
   // the clock restarts after every resolved shot (tech design), so a hit that keeps the turn resets it too
   const turnKey = `${phase}-${state.turn}-${myShots.length + enemyShots.length}`;
   const turnFor = phase === "opponent" ? "opponent" : "you";
-  const abilityState = yourTurn ? (armed ? "armed" : "ready") : "unavailable";
+  // the same inputs PlayerView gives the real screen; dispatch stands in for the useAbility and chooseAbility actions
+  const ability = useAbilityTargeting({
+    heldAbility: state.heldAbility,
+    offeredAbility: state.offeredAbility,
+    yourTurn,
+    doubleShotActive: state.doubleShotActive,
+    yourBoard: boardSnapshot(ownFleet, enemyShots),
+    yourShots: squaresOf(myShots),
+    revealedSquares: squaresOf(state.revealed),
+    onUse: (request, target) => {
+      dispatch({ type: "useAbility", request, target: target && coordKey(target.col, target.row) });
+      return true;
+    },
+    onChoose: (keep) => dispatch({ type: "chooseAbility", keep }),
+  });
   const enemyAfloat = afloatCount(ENEMY_FLEET, myShots);
   const ownAfloat = afloatCount(ownFleet, enemyShots);
 
@@ -102,6 +120,10 @@ export function BattleScreen() {
     <div className={SCREEN}>
       <ScreenBar>
         <span className="mb-label hidden min-[600px]:inline">Original · Lobby K7Q2XM</span>
+        {/* showcase only: draw as if one of your ships had sunk, to try the keep-or-replace prompt */}
+        <Button size="sm" variant="ghost" onClick={() => dispatch({ type: "drawAbility", name: randomAbilityName(state.heldAbility) })}>
+          Draw an ability
+        </Button>
         <Button size="sm" variant="danger" icon="flag" onClick={() => setForfeitOpen(true)}>
           Forfeit
         </Button>
@@ -117,13 +139,14 @@ export function BattleScreen() {
             variant="target"
             title="Enemy waters"
             meta={`${enemyAfloat} of ${ENEMY_FLEET.length} afloat`}
-            marks={marksFor(ENEMY_FLEET, myShots)}
+            marks={{ ...ability.scanMarks, ...marksFor(ENEMY_FLEET, myShots) }}
             ships={revealedEnemyShips(myShots)}
             active={yourTurn}
             sweeping={yourTurn}
             lastShot={started ? myShots.at(-1) : undefined}
             cellSize="lg"
             onCellClick={(cell) => dispatch({ type: "fire", key: cell.key })}
+            {...ability.targetBoardProps}
           />
         </div>
         <div className="order-3 grid content-start gap-(--space-3) max-[480px]:justify-items-center min-[900px]:order-none">
@@ -132,9 +155,10 @@ export function BattleScreen() {
             title="Your waters"
             meta={`${ownAfloat} of ${ownFleet.length} afloat`}
             marks={marksFor(ownFleet, enemyShots)}
-            ships={ownFleet.map((ship) => toPlacement(ship, enemyShots))}
+            ships={[...ownFleet.map((ship) => toPlacement(ship, enemyShots)), ...ability.ownGhost]}
             lastShot={started ? enemyShots.at(-1) : undefined}
             cellSize="sm"
+            {...ability.ownBoardProps}
           />
           <div className="max-[899px]:hidden">
             <Legend />
@@ -149,13 +173,8 @@ export function BattleScreen() {
               <TurnClock key={turnKey} size="sm" />
             </div>
           </div>
-          <AbilityCard
-            ability="line-scan"
-            state={abilityState}
-            onUse={() => setArmed(true)}
-            onCancel={() => setArmed(false)}
-            compact
-          />
+          <AbilityCard {...ability.card} compact />
+          {ability.hint && <p className="mb-ability-hint" role="status">{ability.hint}</p>}
           <ShotLog opponentLabel={OPPONENT_NAME} entries={state.log.slice(-1)} />
         </section>
 
@@ -166,12 +185,10 @@ export function BattleScreen() {
             {/* both clocks stay mounted (CSS hides one), so only this one auto-fires, or you'd lose two shots */}
             <TurnClock key={turnKey} onExpire={autoFire} />
           </div>
-          <AbilityCard
-            ability="line-scan"
-            state={abilityState}
-            onUse={() => setArmed(true)}
-            onCancel={() => setArmed(false)}
-          />
+          <div className="grid content-start gap-(--space-2)">
+            <AbilityCard {...ability.card} />
+            {ability.hint && <p className="mb-ability-hint" role="status">{ability.hint}</p>}
+          </div>
           <ShotLog opponentLabel={OPPONENT_NAME} maxHeight={120} entries={[...state.log]} />
         </div>
 
@@ -206,6 +223,11 @@ export function BattleScreen() {
           </Toast>
         )}
       </div>
+
+      {/* dismissing keeps what you hold, as the server does when an offer goes unanswered */}
+      <Dialog open={!!ability.offer} title="You drew an ability" onClose={ability.offer?.onKeep}>
+        {ability.offer && <AbilityDraw {...ability.offer} />}
+      </Dialog>
 
       <Dialog
         open={forfeitOpen}

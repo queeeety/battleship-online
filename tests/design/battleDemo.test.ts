@@ -171,4 +171,78 @@ describe("battleDemo", () =>
         const teddys = battleReducer(playing(), { type: "fire", key: "B7" });
         expect(battleReducer(teddys, { type: "timeout", key: "C7" })).toBe(teddys);
     });
+
+    describe("abilities", () =>
+    {
+        const holding = (name: string | null): BattleState => ({ ...playing(), heldAbility: name });
+
+        it("starts holding Line Scan with nothing revealed", () =>
+        {
+            const state = playing();
+            expect(state.heldAbility).toBe("Line Scan");
+            expect(state.offeredAbility).toBeNull();
+            expect(state.revealed).toEqual([]);
+        });
+
+        it("Line Scan reveals the unshot ship squares in the row and passes the turn", () =>
+        {
+            const before = playing();
+            const after = battleReducer(before, { type: "useAbility", request: { name: "Line Scan", line: "row" }, target: "B10" });
+            expect(after.revealed).toEqual(["B10", "C10", "D10", "E10", "F10"]);
+            expect(after.heldAbility).toBeNull();
+            expect(after.phase).toBe("opponent");
+            expect(after.turn).toBe(before.turn + 1);
+            expect(after.log.at(-1)).toMatchObject({ by: "you", ability: "line-scan", coord: "B10", note: "5 contacts" });
+        });
+
+        it("Radar Sweep skips squares already shot and refuses an area off the board", () =>
+        {
+            const state = holding("Radar Sweep");
+            const swept = battleReducer(state, { type: "useAbility", request: { name: "Radar Sweep" }, target: "G1" });
+            expect(swept.revealed).toEqual(["H2"]);
+            expect(battleReducer(state, { type: "useAbility", request: { name: "Radar Sweep" }, target: "I1" })).toBe(state);
+        });
+
+        it("refuses an ability you don't hold, or one used off your turn", () =>
+        {
+            const state = playing();
+            expect(battleReducer(state, { type: "useAbility", request: { name: "Radar Sweep" }, target: "G1" })).toBe(state);
+            const waiting = { ...state, phase: "opponent" as const };
+            expect(battleReducer(waiting, { type: "useAbility", request: { name: "Line Scan", line: "row" }, target: "B10" })).toBe(waiting);
+        });
+
+        it("Reroute moves an undamaged ship but not a damaged one", () =>
+        {
+            const state = holding("Reroute");
+            const moved = battleReducer(state, { type: "useAbility", request: { name: "Reroute", ship: "Destroyer", orientation: "horizontal" }, target: "G4" });
+            expect(moved.ownFleet.find((s) => s.type === "destroyer")).toMatchObject({ x: 6, y: 3, horizontal: true });
+            expect(moved.phase).toBe("opponent");
+            // the Carrier was hit at C1
+            expect(battleReducer(state, { type: "useAbility", request: { name: "Reroute", ship: "Carrier", orientation: "horizontal" }, target: "A7" })).toBe(state);
+        });
+
+        it("Double Shot keeps the turn after one miss, then a miss passes it", () =>
+        {
+            const armed = battleReducer(holding("Double Shot"), { type: "useAbility", request: { name: "Double Shot" } });
+            expect(armed.doubleShotActive).toBe(true);
+            expect(armed.phase).toBe("you");
+            const firstMiss = battleReducer(armed, { type: "fire", key: "J1" });
+            expect(firstMiss.phase).toBe("you");
+            expect(firstMiss.doubleShotActive).toBe(false);
+            expect(battleReducer(firstMiss, { type: "fire", key: "J2" }).phase).toBe("opponent");
+        });
+
+        it("losing a ship draws an ability, offered as keep-or-replace when you hold one", () =>
+        {
+            // Teddy's next scripted shot, A10, sinks your Destroyer
+            const aboutToSink = (held: string | null): BattleState =>
+                ({ ...playing(), phase: "opponent", scriptIndex: 2, enemyShots: [...playing().enemyShots, "A9"], heldAbility: held });
+            expect(battleReducer(aboutToSink(null), { type: "opponentFire", draw: "Reroute" }).heldAbility).toBe("Reroute");
+            const offered = battleReducer(aboutToSink("Line Scan"), { type: "opponentFire", draw: "Reroute" });
+            expect(offered).toMatchObject({ heldAbility: "Line Scan", offeredAbility: "Reroute" });
+
+            expect(battleReducer(offered, { type: "chooseAbility", keep: true })).toMatchObject({ heldAbility: "Line Scan", offeredAbility: null });
+            expect(battleReducer(offered, { type: "chooseAbility", keep: false })).toMatchObject({ heldAbility: "Reroute", offeredAbility: null });
+        });
+    });
 });
