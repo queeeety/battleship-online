@@ -10,7 +10,10 @@ export function TurnIndicator({ turn, turnNumber, opponentName = "Opponent" }: T
   return (
     <div className={`mb-turn is-${turn}`} role="status" aria-live="polite">
       <span className="mb-turn-dot" aria-hidden />
-      <span className="mb-turn-text">{text}</span>
+      {/* keyed on the text so the slide-in replays on each turn change; the live region itself stays mounted */}
+      <span key={text} className="mb-turn-text">
+        {text}
+      </span>
       {turnNumber != null && (
         <span className="mb-label mb-turn-n">Turn {String(turnNumber).padStart(2, "0")}</span>
       )}

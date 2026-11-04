@@ -124,6 +124,9 @@
   .mb-mk-ping { position: absolute; inset: 15%; border: 2px solid var(--ink); border-radius: var(--radius-full); opacity: 0; animation: mb-ping var(--mb-dur-3) var(--mb-ease) 2; pointer-events: none; }
   .mb-cell.is-hit .mb-mk-ping { border-color: var(--hit); }
   @keyframes mb-ping { 0% { transform: scale(.4); opacity: 1; } 100% { transform: scale(1.6); opacity: 0; } }
+  /* Shot effects (components/effects): laid over the newest mark, never blocking clicks */
+  .mb-mk-fx { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
+  .mb-fx-ripple { position: absolute; inset: 0; border: 2px solid var(--miss); border-radius: var(--radius-full); pointer-events: none; }
 
   .mb-scan { position: absolute; z-index: var(--z-board-marks); left: calc(var(--mb-x) * var(--mb-cell)); top: calc(var(--mb-y) * var(--mb-cell)); width: calc(var(--mb-w) * var(--mb-cell)); height: calc(var(--mb-h) * var(--mb-cell)); border: 2px dashed var(--sonar); box-sizing: border-box; pointer-events: none; }
 
@@ -234,7 +237,8 @@
   .mb-draw .mb-ability { background: var(--surface-000); }
 
   /* ShotLog */
-  .mb-log ol { list-style: none; margin: var(--space-2) 0 0; padding: 0; overflow-y: auto; font-family: var(--font-mono); font-size: 13px; line-height: 20px; }
+  /* scrollbar-gutter keeps room for the scrollbar so it never covers the result column */
+  .mb-log ol { list-style: none; margin: var(--space-2) 0 0; padding: 0 var(--space-1) 0 0; overflow-y: auto; scrollbar-gutter: stable; font-family: var(--font-mono); font-size: 13px; line-height: 20px; }
   .mb-log-row { display: grid; grid-template-columns: 24px 48px minmax(0, 1fr) auto; gap: var(--space-2); padding: 2px 0; white-space: nowrap; }
   .mb-log-what { overflow: hidden; text-overflow: ellipsis; }
   .mb-log-n { color: var(--ink-faint); }
@@ -302,9 +306,46 @@
     .mb-lobbycode-link { display: none; }
   }
 
+  /* Battle screen: from 900px both boards share one row and grow with the window.
+     --battle-cell is the enemy board's square; your board is 70% of it, as cell-sm is to cell-lg.
+     18.4 = the two boards' width in squares (10.7 + 10.7 * .7) plus a little slack. */
+  @media (min-width: 900px) {
+    .mb-battle { --battle-cell: clamp(var(--cell-md), calc((100vw - 2 * var(--space-4) - var(--space-6) - var(--space-5)) / 18.4), var(--cell-xl)); }
+    .mb-battle .mb-board.is-cell-lg { --mb-cell: var(--battle-cell); }
+    .mb-battle .mb-board.is-cell-sm { --mb-cell: calc(var(--battle-cell) * .7); }
+  }
+  /* from 1200px the HUD joins the row, so take its width off too; the height cap keeps the enemy board
+     on screen (10.7 squares plus its header, under the top bars, roughly 2 * space-8 + space-5) */
+  @media (min-width: 1200px) {
+    .mb-battle {
+      --hud-width: clamp(280px, 20vw, 360px);
+      --battle-cell: clamp(
+        var(--cell-lg),
+        min(
+          calc((100vw - var(--hud-width) - 4 * var(--space-6) - var(--space-4)) / 18.4),
+          calc((100dvh - 2 * var(--space-8) - var(--space-5)) / 11.2)
+        ),
+        var(--cell-xl)
+      );
+    }
+  }
+
+  /* 3-2-1 before the first turn: a scrim over the battle screen */
+  .mb-countdown-overlay { position: fixed; inset: 0; z-index: var(--z-overlay); display: grid; place-items: center; background: var(--scrim); }
+  .mb-countdown { display: grid; place-items: center; gap: var(--space-2); }
+  .mb-countdown-read { font-family: var(--font-mono); font-weight: 500; font-variant-numeric: tabular-nums; font-size: 96px; line-height: 1; color: var(--ink); }
+
+  /* sunk notice and other battle toasts: bottom centre, above everything */
+  .mb-toast-dock { position: fixed; left: 50%; bottom: var(--space-5); translate: -50% 0; z-index: var(--z-toast); width: max-content; max-width: calc(100% - 2 * var(--space-4)); }
+
+  /* turn change: the new "Your turn" / "Teddy's turn" text slides in, the dot pulses once */
+  .mb-turn-text { animation: mb-turn-in var(--mb-dur-3) var(--mb-ease); }
+  .mb-turn.is-you .mb-turn-dot { animation: mb-pulse var(--mb-dur-3) var(--mb-ease) 2; }
+  @keyframes mb-turn-in { from { opacity: 0; transform: translateX(-6px); } }
+
   @media (prefers-reduced-motion: reduce) {
     .mb-sweep { display: none; }
-    .mb-mk-ping, .mb-pulse { animation: none; }
+    .mb-mk-ping, .mb-pulse, .mb-turn-text, .mb-turn-dot { animation: none; }
     .mb-timer-fill, .mb-btn { transition: none; }
   }
 }

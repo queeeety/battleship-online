@@ -119,6 +119,7 @@
   --radius-full: 999px; /* Presence dots and the ping ring. */
 
   /* size */
+  --cell-xl: 64px; /* Board cell ceiling on big screens (battle screen scales up to this). */
   --cell-lg: 40px; /* Board cell on wide screens. */
   --cell-md: 34px; /* Default board cell. */
   --cell-sm: 28px; /* Board cell on phones. */

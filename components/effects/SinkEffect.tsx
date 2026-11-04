@@ -11,13 +11,13 @@ const SINK = { rotate: [0, -8, 6, -4, 0], scale: [1, 0.85, 0.9, 1] };
 // two blinks instead of movement, so a sink still reads differently from a hit
 const SINK_REDUCED = { opacity: [1, 0.3, 1, 0.3, 1] };
 
-export function SinkEffect({ active, children, className = "", onComplete }: EffectProps): ReactElement {
+export function SinkEffect({ active, children, className = "relative", onComplete }: EffectProps): ReactElement {
     const reduceMotion = useReducedMotion();
     const target = !active ? REST : reduceMotion ? SINK_REDUCED : SINK;
 
     return (
         <motion.div
-            className={`relative ${className}`}
+            className={className}
             animate={target}
             transition={{ duration: reduceMotion ? 0.4 : 0.6 }}
             onAnimationComplete={active ? onComplete : undefined}
