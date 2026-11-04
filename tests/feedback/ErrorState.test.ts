@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+    defaultActionLabel,
     errorText,
     errorPresentation,
     isToastFailure,
@@ -85,6 +86,24 @@ describe("errorPresentation", () => {
 
     it.each(JOIN_ERRORS)("isToastFailure is false for JoinError %s", (error) => {
         expect(isToastFailure(error)).toBe(false);
+    });
+});
+
+describe("defaultActionLabel", () => {
+    it.each(JOIN_ERRORS)("has a label for JoinError %s", (error) => {
+        expect(defaultActionLabel({ kind: "join", error }).trim()).not.toBe("");
+    });
+
+    it.each(PLACEMENT_ERRORS)("has a label for PlacementError %s", (error) => {
+        expect(defaultActionLabel({ kind: "placement", error }).trim()).not.toBe("");
+    });
+
+    it.each(SERVER_FAILURES)("has a label for server failure %s", (error) => {
+        expect(defaultActionLabel({ kind: "server", error }).trim()).not.toBe("");
+    });
+
+    it("sends a player with no seat home", () => {
+        expect(defaultActionLabel({ kind: "server", error: "NOT_SEATED" })).toBe("Go home");
     });
 });
 
