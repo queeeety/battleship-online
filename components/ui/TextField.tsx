@@ -15,13 +15,11 @@ export interface TextFieldProps {
   /** Monospace, uppercase entry for lobby codes. */
   code?: boolean;
   maxLength?: number;
-  id?: string;
   onChange?: (value: string) => void;
 }
 
-export function TextField({ label, hint, error, code, onChange, id, ...rest }: TextFieldProps) {
-  const autoId = useId();
-  const fieldId = id ?? autoId;
+export function TextField({ label, hint, error, code, onChange, ...rest }: TextFieldProps) {
+  const fieldId = useId();
   const msgId = `${fieldId}-msg`;
   const msg = error || hint;
 

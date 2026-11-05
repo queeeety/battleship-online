@@ -1,7 +1,7 @@
 import { cx } from "@/components/ui/cx";
 
 export interface TurnTimerProps {
-  /** Seconds left, from the server; don't count locally. */
+  /** Seconds left; the caller works this out, the timer doesn't count by itself. */
   seconds: number;
   /** Turn limit for the game type: 30 Beginner, 15 Original, 5 Quick Fire. */
   total: number;

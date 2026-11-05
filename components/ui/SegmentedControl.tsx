@@ -6,7 +6,7 @@ import { cx } from "./cx";
 export interface SegmentOption {
   value: string;
   label: string;
-  /** The fact that matters, in mono, e.g. "15 s turns". */
+  /** Small mono line under the label, e.g. "15 s turns". */
   meta?: string;
 }
 
@@ -15,13 +15,11 @@ export interface SegmentedControlProps {
   options: SegmentOption[];
   value: string;
   onChange?: (value: string) => void;
-  name?: string;
 }
 
 // radio inputs underneath, so arrow keys work
-export function SegmentedControl({ label, options, value, onChange, name }: SegmentedControlProps) {
-  const autoName = useId();
-  const groupName = name ?? autoName;
+export function SegmentedControl({ label, options, value, onChange }: SegmentedControlProps) {
+  const groupName = useId();
 
   return (
     <fieldset className="mb-seg">
