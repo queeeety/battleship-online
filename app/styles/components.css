@@ -382,9 +382,13 @@
   .mb-turn.is-you .mb-turn-dot { animation: mb-pulse var(--mb-dur-3) var(--mb-ease) 2; }
   @keyframes mb-turn-in { from { opacity: 0; transform: translateX(-6px); } }
 
+  /* a new screen fades in (opacity only, so fixed toasts and dialogs inside keep their place) */
+  .mb-screen-in { animation: mb-screen-in var(--mb-dur-3) var(--mb-ease); }
+  @keyframes mb-screen-in { from { opacity: 0; } }
+
   @media (prefers-reduced-motion: reduce) {
     .mb-sweep { display: none; }
-    .mb-mk-ping, .mb-pulse, .mb-turn-text, .mb-turn-dot { animation: none; }
+    .mb-mk-ping, .mb-pulse, .mb-turn-text, .mb-turn-dot, .mb-screen-in { animation: none; }
     .mb-timer-fill, .mb-btn { transition: none; }
   }
 }

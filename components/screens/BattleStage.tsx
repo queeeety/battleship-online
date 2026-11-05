@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition, type ReactNode } from "react";
 import { TurnTimer, type ShotLogEntry } from "@/components/game";
 import { MuteToggle } from "@/components/feedback/MuteToggle";
 import { SunkMessage } from "@/components/feedback/SunkMessage";
-import { Toast } from "@/components/ui";
+import { Banner, Toast } from "@/components/ui";
 import { useAbilityTargeting } from "@/hooks/useAbilityTargeting";
 import { useGraceClaim } from "@/hooks/useGraceClaim";
 import { useTurnClock } from "@/hooks/useTurnClock";
@@ -58,6 +58,9 @@ export function BattleStage({
   const target = targetBoardState(view);
   const total = TURN_TIME_LIMIT_SECONDS[view.gameType];
   const live = view.gameState === GameState.IN_PROGRESS;
+  // the game just ended; the screen holds a moment before the result (useEndHold)
+  const won = view.gameState === GameState.FINISHED ? view.result?.won ?? view.winner === view.seat : null;
+  const theirs = opponentKind === "ai" ? "ai" : "opponent";
 
   const [log, setLog] = useState<ShotLogEntry[]>([]);
 
@@ -190,7 +193,8 @@ export function BattleStage({
         lastShot: own.lastShot,
         ...ability.ownBoardProps,
       }}
-      turn={view.yourTurn ? "you" : opponentKind === "ai" ? "ai" : "opponent"}
+      // once it's over, the indicator stays on whoever fired the last shot
+      turn={won !== null ? (won ? "you" : theirs) : view.yourTurn ? "you" : theirs}
       renderClock={(size) => (
         <TurnTimer
           seconds={seconds}
@@ -202,7 +206,15 @@ export function BattleStage({
       )}
       ability={{ card: ability.card, hint: ability.hint }}
       log={log}
-      notice={graceLeft !== null && <AwayBanner name={opponentName} secondsLeft={graceLeft} />}
+      notice={
+        won !== null ? (
+          <Banner tone="info" icon={won ? "check" : "warning"}>
+            {won ? `You sank ${opponentName}'s whole fleet.` : `${opponentName} sank your whole fleet.`}
+          </Banner>
+        ) : (
+          graceLeft !== null && <AwayBanner name={opponentName} secondsLeft={graceLeft} />
+        )
+      }
       toasts={
         <>
           {failure}
