@@ -216,7 +216,8 @@ note bottom of AIOpponent
 end note
 note bottom of GameSnapshot
   AI mode saves the whole Game to localStorage
-  after every action and restores it on reload.
+  after every action. On reload the setup screen
+  offers to continue an unfinished one.
   Players are referred to by index.
   The rematch request isn't saved (multiplayer
   keeps it in the database, Figure 2.3).

@@ -7,6 +7,7 @@ import { ErrorToast } from "@/components/feedback/ErrorToast";
 import { gameTypeLabel, gameTypeName } from "@/components/screens/gameTypes";
 import { JoinView } from "@/components/screens/JoinView";
 import { LobbyView } from "@/components/screens/LobbyView";
+import { ScreenFade } from "@/components/screens/chrome";
 import { screenFor } from "@/components/screens/screenFor";
 import { StatusView } from "@/components/screens/StatusView";
 import { Button } from "@/components/ui";
@@ -18,6 +19,7 @@ import { getMyState, type BattleFailure, type BattleResult } from "@/lib/server/
 import { joinLobby, type LobbyFailure } from "@/lib/server/actions/lobby";
 import type { WirePrivatePayload } from "@/lib/boundary/NetworkHandler";
 import { useGameSounds } from "@/hooks/useGameSounds";
+import { useEndHold } from "@/hooks/useEndHold";
 import { useScreenFocus } from "@/hooks/useScreenFocus";
 import { BattleStage } from "@/components/screens/BattleStage";
 import { PlacementStage } from "./PlacementStage";
@@ -146,7 +148,7 @@ export function GameClient({ code }: { code: string }) {
     return () => clearTimeout(id);
   }, [failed]);
 
-  const screen = screenFor({ view, notSeated, wasSeated });
+  const screen = useEndHold(screenFor({ view, notSeated, wasSeated }), view?.endReason ?? null);
   useScreenFocus(screen);
   // with a view on screen a failure is a toast; without one it takes the screen or the join form
   const toast =
@@ -234,7 +236,7 @@ export function GameClient({ code }: { code: string }) {
 
   return (
     <>
-      {body}
+      <ScreenFade screen={screen}>{body}</ScreenFade>
       {/* the battle stacks it with its own toasts */}
       {toast && screen !== "battle" && <div className="mb-toast-dock">{toast}</div>}
     </>

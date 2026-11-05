@@ -15,6 +15,7 @@ class Board <<entity>> {
   - cells : Cell[][]
   - ships : Ship[]
   + canPlace(s : Ship, start : Coordinate, o : Orientation) : boolean
+  + hasRoomFor(squares : Coordinate[], ignore? : Ship) : boolean
   + placeShip(s : Ship, start : Coordinate, o : Orientation) : boolean
   + removeShip(s : Ship) : void
   + placeFleetRandomly() : void
@@ -107,6 +108,12 @@ Ship <|-- Battleship
 Ship <|-- Cruiser
 Ship <|-- Submarine
 Ship <|-- Destroyer
+note right of Board
+  Ships never touch: canPlace(), moveShip() and
+  Reroute all call hasRoomFor(), which needs every
+  square on the board and no other ship on any
+  square around it, corners included.
+end note
 note bottom of BoardSnapshot
   JSON stored in game_secrets.board_p1 / board_p2.
   Hits aren't stored: fromSnapshot replays the shots.

@@ -65,6 +65,7 @@ enum PlacementError {
   OVERLAPS_SHIP
   ALREADY_PLACED
   FLEET_INCOMPLETE
+  TOO_CLOSE
 }
 enum Screen {
   HOME

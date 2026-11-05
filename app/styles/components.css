@@ -86,6 +86,13 @@
   @media (max-width: 480px) {
     .mb-board.mb-board { --mb-cell: var(--cell-sm); }
     .mb-board.mb-board.is-cell-lg { --mb-cell: clamp(var(--cell-sm), calc((100vw - 2 * var(--space-4)) / 10.7), var(--cell-md)); }
+    .mb-board-centred .mb-board.mb-board { --mb-cell: min(var(--cell-sm), calc((100vw - 2 * var(--space-4)) / 11.4)); }
+    .mb-board-centred .mb-board.mb-board.is-cell-lg { --mb-cell: clamp(24px, calc((100vw - 2 * var(--space-4)) / 11.4), var(--cell-md)); }
+  }
+  /* one column (phones, tablets upright): the grid itself in the middle, with as much room on the
+     right as the row numbers take on the left */
+  @media (max-width: 899px) {
+    .mb-board-centred .mb-board-frame, .mb-board-centred .mb-board-head { padding-right: calc(var(--mb-cell) * .7); }
   }
   .mb-board-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3); padding-left: calc(var(--mb-cell) * .7); }
   .mb-board-title { margin: 0; font-size: 17px; line-height: 24px; font-weight: 600; }
@@ -106,10 +113,11 @@
   .mb-cell { position: relative; display: grid; place-items: center; width: var(--mb-cell, var(--cell-md)); height: var(--mb-cell, var(--cell-md)); padding: 0; border: 0; background: transparent; color: inherit; font: inherit; }
   .mb-board.is-active .mb-cell { cursor: crosshair; touch-action: manipulation; }
   .mb-board.is-active .mb-cell[aria-disabled="true"] { cursor: not-allowed; }
-  /* targeting reticle: on hover, and on the keyboard cursor while the board has focus */
-  .mb-board.is-active .mb-cell:not([aria-disabled="true"]):hover::before,
+  .mb-board.is-active.is-plain .mb-cell { cursor: default; }
+  /* targeting reticle: on hover, and on the keyboard cursor while the board has focus (never on a plain board) */
+  .mb-board.is-active:not(.is-plain) .mb-cell:not([aria-disabled="true"]):hover::before,
   .mb-board-sea:focus-visible .mb-cell.is-cursor::before { content: ""; position: absolute; inset: 3px; border: 2px solid var(--sonar); }
-  .mb-board.is-active .mb-cell:not([aria-disabled="true"]):hover::after,
+  .mb-board.is-active:not(.is-plain) .mb-cell:not([aria-disabled="true"]):hover::after,
   .mb-board-sea:focus-visible .mb-cell.is-cursor::after { content: ""; position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; background: var(--sonar); border-radius: var(--radius-full); }
   .mb-board-sea:focus-visible .mb-cell.is-cursor[aria-disabled="true"]::before { border-style: dashed; border-color: var(--ink-muted); }
   .mb-board-sea:focus-visible .mb-cell.is-cursor[aria-disabled="true"]::after { display: none; }
@@ -131,6 +139,9 @@
   /* ability targeting: the squares a scan or a rerouted ship would cover */
   .mb-cell.is-preview { background: var(--sonar-soft); box-shadow: inset 0 0 0 1px var(--sonar); }
   .mb-cell.is-preview-invalid { background: repeating-linear-gradient(135deg, var(--hit-soft) 0 4px, transparent 4px 8px); box-shadow: inset 0 0 0 1px var(--hit); }
+  /* placing a ship: the free square it needs all round, red where another ship sits */
+  .mb-cell.is-halo { background: var(--sonar-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sonar) 45%, transparent); }
+  .mb-cell.is-halo-blocked { background: var(--danger-soft); box-shadow: inset 0 0 0 2px var(--danger); }
   .mb-board.is-active .mb-cell.is-preview-invalid { cursor: not-allowed; }
 
   /* Sonar sweep: a rotating wedge over the target board on your turn */
@@ -180,6 +191,31 @@
   .mb-fleet.is-placement .mb-pips i.is-placed { background: var(--ship); box-shadow: inset 0 0 0 1px var(--ship-edge); }
   .mb-fleet-state { font-family: var(--font-mono); font-size: 12px; line-height: 16px; color: var(--ink-muted); text-align: right; display: flex; justify-content: flex-end; }
   .mb-fleet-row.is-sunk .mb-fleet-state { color: var(--sunk); }
+
+  /* FleetDeck: the ships still to place, dragged onto the board */
+  .mb-deck ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
+  .mb-deck-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: var(--space-3); box-sizing: content-box; width: 100%; min-height: 30px; padding: 6px var(--space-2); margin: -6px calc(var(--space-2) * -1); border: 0; border-radius: var(--radius-sm); background: none; font: inherit; color: var(--ink); text-align: left; }
+  .mb-deck-ship { --mb-cell: 22px; display: block; }
+  .mb-deck-grab { cursor: grab; touch-action: none; }
+  .mb-deck-grab:hover { background: var(--surface-200); }
+  .mb-deck-grab:focus-visible { outline: 2px solid var(--focus); outline-offset: 0; }
+  .mb-deck-item.is-selected .mb-deck-grab { background: var(--sonar-soft); box-shadow: inset 0 0 0 1px var(--sonar); }
+  .mb-deck-item.is-placed .mb-deck-ship, .mb-deck-item.is-lifted .mb-deck-ship { opacity: .3; }
+  .mb-deck-name { font-size: 14px; line-height: 20px; }
+  .mb-deck-item.is-placed .mb-deck-name { color: var(--ink-muted); }
+  .mb-deck-state { display: flex; justify-content: flex-end; font-family: var(--font-mono); font-size: 12px; line-height: 16px; color: var(--ink-muted); }
+  .mb-deck-hint { margin: var(--space-3) 0 0; font-size: 13px; line-height: 18px; color: var(--ink-muted); }
+  /* phones: just the ships, wrapped, so the whole board stays in view while one is dragged.
+     The names stay for screen readers */
+  @media (max-width: 899px) {
+    .mb-deck ul { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-4); }
+    .mb-deck-row { display: block; width: auto; min-height: 0; padding: 8px; margin: -8px; }
+    .mb-deck-ship { --mb-cell: 26px; }
+    .mb-deck-name, .mb-deck-state { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  }
+  /* the board while placing: placed ships can be grabbed, and a drag never scrolls the page */
+  .mb-placing .mb-board-sea { touch-action: none; user-select: none; }
+  .mb-drag-ship { position: fixed; z-index: var(--z-overlay); pointer-events: none; opacity: .85; }
   .mb-fleet.is-placement .mb-fleet-state .mb-icon { color: var(--sonar); }
 
   /* below 900px the placement list becomes a tray of ship chips above the board: name, a check once placed, pips */
@@ -229,6 +265,11 @@
   .mb-ability.is-unavailable .mb-ability-icon { background: var(--surface-200); color: var(--ink-faint); }
   .mb-ability.is-empty { border-style: dashed; border-color: var(--line-control); }
   .mb-ability.is-compact { padding: var(--space-3); }
+  /* just received: a glow that pulses a few times, then a steady outline until it's used */
+  .mb-ability.is-fresh { border-color: var(--sonar); box-shadow: inset 0 0 0 1px var(--sonar); animation: mb-fresh 1.2s var(--mb-ease) 4; }
+  .mb-ability.is-fresh .mb-label { color: var(--sonar); }
+  @keyframes mb-fresh { 50% { box-shadow: inset 0 0 0 1px var(--sonar), 0 0 0 6px var(--sonar-soft); } }
+  .mb-ability-actions, .mb-ability-inline { display: flex; flex-wrap: wrap; gap: var(--space-2); }
   .mb-ability-head > div { min-width: 0; }
   .mb-ability-inline { margin-left: auto; }
 
@@ -346,9 +387,13 @@
   .mb-turn.is-you .mb-turn-dot { animation: mb-pulse var(--mb-dur-3) var(--mb-ease) 2; }
   @keyframes mb-turn-in { from { opacity: 0; transform: translateX(-6px); } }
 
+  /* a new screen fades in (opacity only, so fixed toasts and dialogs inside keep their place) */
+  .mb-screen-in { animation: mb-screen-in var(--mb-dur-3) var(--mb-ease); }
+  @keyframes mb-screen-in { from { opacity: 0; } }
+
   @media (prefers-reduced-motion: reduce) {
     .mb-sweep { display: none; }
-    .mb-mk-ping, .mb-pulse, .mb-turn-text, .mb-turn-dot { animation: none; }
+    .mb-mk-ping, .mb-pulse, .mb-turn-text, .mb-turn-dot, .mb-screen-in, .mb-ability.is-fresh { animation: none; }
     .mb-timer-fill, .mb-btn { transition: none; }
   }
 }

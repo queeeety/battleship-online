@@ -98,6 +98,7 @@ class Board <<entity>> {
   + scanArea(topLeft : Coordinate, size : int) : List<Coordinate>
   + scanLine(index : int, isRow : boolean) : List<Coordinate>
   + moveShip(s : Ship, start : Coordinate, o : Orientation) : boolean
+  + hasRoomFor(squares : List<Coordinate>, ignore : Ship) : boolean
   + hasBeenTargeted(c : Coordinate) : boolean
 }
 
@@ -166,7 +167,9 @@ end note
 note bottom of Reroute
   validPositions() excludes every square
   the opponent has already fired at, so
-  an old miss can never become a lie.
+  an old miss can never become a lie, and
+  keeps a free square around the other
+  ships (Board.hasRoomFor()).
 end note
 
 @enduml

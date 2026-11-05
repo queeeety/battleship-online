@@ -76,7 +76,7 @@ export function PlacementStage({ code, view, refresh, onFailure }: PlacementStag
           {...shared}
           title="Fleet ready"
           board={{ ships: toShipPlacements(locked) }}
-          fleet={FLEET_ORDER.map((type) => ({ type, placed: true }))}
+          deck={{ ships: FLEET_ORDER.map((type) => ({ type, placed: true })) }}
           ready={{ label: `Waiting for ${opponentName}…`, disabled: true }}
         />
       ) : (

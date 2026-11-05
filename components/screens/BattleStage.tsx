@@ -3,8 +3,9 @@
 import { useEffect, useState, useTransition, type ReactNode } from "react";
 import { TurnTimer, type ShotLogEntry } from "@/components/game";
 import { MuteToggle } from "@/components/feedback/MuteToggle";
+import { abilityIdFromName } from "@/components/game/data";
 import { SunkMessage } from "@/components/feedback/SunkMessage";
-import { Toast } from "@/components/ui";
+import { Banner, Toast } from "@/components/ui";
 import { useAbilityTargeting } from "@/hooks/useAbilityTargeting";
 import { useGraceClaim } from "@/hooks/useGraceClaim";
 import { useTurnClock } from "@/hooks/useTurnClock";
@@ -58,6 +59,9 @@ export function BattleStage({
   const target = targetBoardState(view);
   const total = TURN_TIME_LIMIT_SECONDS[view.gameType];
   const live = view.gameState === GameState.IN_PROGRESS;
+  // the game just ended; the screen holds a moment before the result (useEndHold)
+  const won = view.gameState === GameState.FINISHED ? view.result?.won ?? view.winner === view.seat : null;
+  const theirs = opponentKind === "ai" ? "ai" : "opponent";
 
   const [log, setLog] = useState<ShotLogEntry[]>([]);
 
@@ -79,11 +83,18 @@ export function BattleStage({
   // worked out while rendering, so a new view and its notice show up in the same paint
   const [seen, setSeen] = useState(view);
   const [notice, setNotice] = useState<SunkNotice | null>(null);
+  // an ability just handed to you (one of your ships sank): a toast, and the card glows until used
+  const [gift, setGift] = useState<string | null>(null);
+  const [fresh, setFresh] = useState<string | null>(null);
   if (seen !== view) {
     setSeen(view);
     setLog((l) => [...l, ...newLogEntries(seen, view, l.length)]);
     const sunk = sunkNotice(seen, view);
     if (sunk) setNotice(sunk);
+    if (view.heldAbility && !seen.heldAbility) {
+      setGift(view.heldAbility);
+      setFresh(view.heldAbility);
+    }
   }
 
   useEffect(() => {
@@ -97,6 +108,12 @@ export function BattleStage({
     const id = setTimeout(() => setHeads(null), NOTICE_MS);
     return () => clearTimeout(id);
   }, [heads]);
+
+  useEffect(() => {
+    if (!gift) return;
+    const id = setTimeout(() => setGift(null), NOTICE_MS + 2000);
+    return () => clearTimeout(id);
+  }, [gift]);
 
   // a shot or an ability on its way: the board waits until the next view arrives
   const [pending, setPending] = useState<{ key: string | null; view: PlayerView } | null>(null);
@@ -146,6 +163,8 @@ export function BattleStage({
     },
   });
 
+  if (fresh !== null && (fresh !== view.heldAbility || ability.card.state === "armed")) setFresh(null);
+
   // the server pauses the clock only while the player to move is away
   const opponentAwaySince = view.opponent && !view.opponent.connected ? view.opponent.disconnectedAt : null;
   const pausedAt = view.yourTurn ? null : opponentAwaySince;
@@ -184,13 +203,15 @@ export function BattleStage({
         onCellClick: fire,
         ...ability.targetBoardProps,
       }}
+      ownArea={ability.ownArea}
       own={{
         ...boardProps(own),
         ships: [...own.ships, ...ability.ownGhost],
         lastShot: own.lastShot,
         ...ability.ownBoardProps,
       }}
-      turn={view.yourTurn ? "you" : opponentKind === "ai" ? "ai" : "opponent"}
+      // once it's over, the indicator stays on whoever fired the last shot
+      turn={won !== null ? (won ? "you" : theirs) : view.yourTurn ? "you" : theirs}
       renderClock={(size) => (
         <TurnTimer
           seconds={seconds}
@@ -200,9 +221,17 @@ export function BattleStage({
           size={size}
         />
       )}
-      ability={{ card: ability.card, hint: ability.hint }}
+      ability={{ card: { ...ability.card, fresh: fresh !== null }, hint: ability.hint }}
       log={log}
-      notice={graceLeft !== null && <AwayBanner name={opponentName} secondsLeft={graceLeft} />}
+      notice={
+        won !== null ? (
+          <Banner tone="info" icon={won ? "check" : "warning"}>
+            {won ? `You sank ${opponentName}'s whole fleet.` : `${opponentName} sank your whole fleet.`}
+          </Banner>
+        ) : (
+          graceLeft !== null && <AwayBanner name={opponentName} secondsLeft={graceLeft} />
+        )
+      }
       toasts={
         <>
           {failure}
@@ -219,6 +248,11 @@ export function BattleStage({
                 {heads}
               </Toast>
             )
+          )}
+          {gift && (
+            <Toast icon={abilityIdFromName(gift) ?? "info"} onClose={() => setGift(null)}>
+              You got {gift}! It&apos;s in your ability card, ready for your turn.
+            </Toast>
           )}
         </>
       }

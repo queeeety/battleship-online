@@ -11,8 +11,10 @@ import { gameTypeName, type GameTypeName } from "@/components/screens/gameTypes"
 import { PlacementView } from "@/components/screens/PlacementView";
 import { readyLabel, type Layout } from "@/components/screens/placement";
 import { ResultView } from "@/components/screens/ResultView";
+import { ScreenFade } from "@/components/screens/chrome";
 import { screenFor } from "@/components/screens/screenFor";
 import { useGameSounds } from "@/hooks/useGameSounds";
+import { useEndHold } from "@/hooks/useEndHold";
 import { useScreenFocus } from "@/hooks/useScreenFocus";
 import { useLocalGame } from "@/hooks/useLocalGame";
 import { usePlacement } from "@/hooks/usePlacement";
@@ -52,7 +54,7 @@ export function LocalGameClient() {
   const [failure, setFailure] = useState<BattleFailure | null>(null);
 
   useGameSounds(view);
-  const screen = view ? screenFor({ view, notSeated: false, wasSeated: true }) : "setup";
+  const screen = useEndHold(view ? screenFor({ view, notSeated: false, wasSeated: true }) : "setup", view?.endReason ?? null);
   useScreenFocus(screen);
 
   function leave() {
@@ -60,24 +62,27 @@ export function LocalGameClient() {
     router.push("/");
   }
 
+  let body;
   if (!view) {
-    return (
+    body = (
       <AiSetupView
         difficulty={difficulty}
         onDifficultyChange={setDifficulty}
         gameType={gameType}
         onGameTypeChange={setGameType}
         onStart={() => local.start(Difficulty[difficulty], GameType[gameType])}
+        resume={
+          local.saved && {
+            label: `${local.saved.difficulty === Difficulty.EASY ? "Easy" : "Normal"} · ${gameTypeName(local.saved.gameType)}`,
+            onResume: local.resume,
+          }
+        }
       />
     );
-  }
-
-  if (screen === "placement") {
-    return <LocalPlacement onReady={(layout) => local.ready(layout)} onLeave={leave} />;
-  }
-
-  if (screen === "result") {
-    return (
+  } else if (screen === "placement") {
+    body = <LocalPlacement onReady={(layout) => local.ready(layout)} onLeave={leave} />;
+  } else if (screen === "result") {
+    body = (
       <ResultView
         barLabel={barLabel(view, local.difficulty)}
         summary={resultSummary(view)}
@@ -86,18 +91,20 @@ export function LocalGameClient() {
         own={boardProps(ownBoardState(view))}
       />
     );
+  } else {
+    body = (
+      <BattleStage
+        view={view}
+        actions={local.actions}
+        barLabel={barLabel(view, local.difficulty)}
+        opponentKind="ai"
+        lastPrivate={local.lastPrivate}
+        refresh={() => {}}
+        onFailure={setFailure}
+        failure={failure && isToastFailure(failure) && <ErrorToast error={failure} onClose={() => setFailure(null)} />}
+      />
+    );
   }
 
-  return (
-    <BattleStage
-      view={view}
-      actions={local.actions}
-      barLabel={barLabel(view, local.difficulty)}
-      opponentKind="ai"
-      lastPrivate={local.lastPrivate}
-      refresh={() => {}}
-      onFailure={setFailure}
-      failure={failure && isToastFailure(failure) && <ErrorToast error={failure} onClose={() => setFailure(null)} />}
-    />
-  );
+  return <ScreenFade screen={screen}>{body}</ScreenFade>;
 }

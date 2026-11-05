@@ -21,6 +21,7 @@ export enum PlacementError
     OUT_OF_BOUNDS,
     OVERLAPS_SHIP,
     ALREADY_PLACED,
-    FLEET_INCOMPLETE
+    FLEET_INCOMPLETE,
+    TOO_CLOSE
 }
 

@@ -10,7 +10,7 @@ function view(lobbyStatus: LobbyStatus, gameState: GameState | null): PlayerView
         you: { name: "Tim", ready: false, connected: true, disconnectedAt: null }, opponent: null,
         yourTurn: false, turnStartedAt: null, doubleShotActive: false,
         yourBoard: { ships: [], shots: [] }, yourShots: [], opponentShots: [],
-        heldAbility: null, offeredAbility: null, winner: null, endReason: null, opponentBoard: null,
+        heldAbility: null, offeredAbility: null, winner: null, endReason: null, opponentBoard: null, opponentSunkShips: [],
         revealedSquares: [], rematch: null, result: null
     };
 }

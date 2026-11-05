@@ -6,6 +6,8 @@ import { AIOpponent, HumanPlayer, type Player } from "@/lib/entities/players";
 import { Difficulty, GameState, GameType, LobbyStatus, Orientation } from "@/lib/enums";
 import type { AbilityRequest } from "@/lib/server/RequestValidator";
 import type { Layout } from "./placement";
+// every Game and Player id needs crypto.randomUUID, which plain http over Wi-Fi lacks
+import "@/utils/randomUUIDShim";
 
 // the game against the computer, on lib's Game classes, shaped into a PlayerView for the screens
 
@@ -140,6 +142,9 @@ export function localView(game: Game, scanned: readonly Square[]): PlayerView {
     winner: winner === null ? null : winner === you ? 1 : 2,
     endReason: game.getEndReason(),
     opponentBoard: finished ? enemyBoard.toSnapshot() : null,
+    opponentSunkShips: enemyBoard.toSnapshot().ships.filter((s) =>
+      enemyBoard.getShips().some((ship) => ship.getName() === s.name && ship.isSunk()),
+    ),
     revealedSquares: finished
       ? []
       : scanned.filter((s) => !enemyBoard.hasBeenTargeted(Coordinate.fromRowCol(s.row, s.col))),

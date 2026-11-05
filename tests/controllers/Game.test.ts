@@ -252,11 +252,11 @@ describe("Game abilities", () =>
             .mockImplementationOnce(() => new RadarSweep());
 
         sinkDestroyer(game, first);
-        [0, 1, 2].forEach(x => game.fireShot(first, new Coordinate(x, 3)));   // Submarine
+        [0, 1, 2].forEach(x => game.fireShot(first, new Coordinate(x, 6)));   // Submarine
         expect(second.getHeldAbility()).toBeInstanceOf(RadarSweep);
         expect(second.getOfferedAbility()).toBeInstanceOf(DoubleShot);
 
-        [0, 1, 2].forEach(x => game.fireShot(first, new Coordinate(x, 2)));   // Cruiser
+        [0, 1, 2].forEach(x => game.fireShot(first, new Coordinate(x, 4)));   // Cruiser
         expect(second.getOfferedAbility()).toBeInstanceOf(RadarSweep);
     });
 

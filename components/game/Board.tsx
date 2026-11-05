@@ -43,8 +43,13 @@ export interface BoardProps {
   size?: number;
   /** Squares an armed ability would cover; valid=false draws them as a target the server would refuse. */
   highlight?: { keys: string[]; valid: boolean };
+  /** While placing a ship: the free squares it needs around it; `blocked` ones have a ship on them. */
+  halo?: { clear: string[]; blocked: string[] };
   /** Picking a square for an ability, not firing: squares already shot stay pickable, and the own board takes clicks. */
   targeting?: boolean;
+  /** Draws the targeting reticle, on hover and on the keyboard cursor, and the crosshair pointer. The
+   *  placement board leaves them out: the ship being placed shows where you are. */
+  showCursor?: boolean;
   onCellClick?: (cell: { x: number; y: number; key: string }) => void;
   /** The square under the pointer or the keyboard cursor; null when it leaves the board. */
   onCellHover?: (cell: { x: number; y: number; key: string } | null) => void;
@@ -107,7 +112,9 @@ export function Board({
   cellSize = "md",
   size = BOARD_SIZE,
   highlight,
+  halo,
   targeting,
+  showCursor = true,
   onCellClick,
   onCellHover,
 }: BoardProps) {
@@ -116,6 +123,8 @@ export function Board({
   const lines = Array.from({ length: size }, (_, i) => i);
   const interactive = !!active && (variant === "target" || !!targeting);
   const highlighted = new Set(highlight?.keys);
+  const haloClear = new Set(halo?.clear);
+  const haloBlocked = new Set(halo?.blocked);
 
   // a cell already fired at can't be fired at again, so a repeat shot is never sent
   function fire(x: number, y: number) {
@@ -143,7 +152,7 @@ export function Board({
 
   return (
     <section
-      className={cx("mb-board", `is-${variant}`, `is-cell-${cellSize}`, active && "is-active")}
+      className={cx("mb-board", `is-${variant}`, `is-cell-${cellSize}`, active && "is-active", !showCursor && "is-plain")}
       style={vars({ n: size })}
     >
       {(title || meta) && (
@@ -199,13 +208,16 @@ export function Board({
                       className={cx(
                         "mb-cell",
                         mark && `is-${mark}`,
-                        interactive && cursor.x === x && cursor.y === y && "is-cursor",
+                        interactive && showCursor && cursor.x === x && cursor.y === y && "is-cursor",
                         inHighlight && (highlight?.valid ? "is-preview" : "is-preview-invalid"),
+                        haloClear.has(key) && "is-halo",
+                        haloBlocked.has(key) && "is-halo-blocked",
                       )}
                       aria-label={
                         key +
                         (mark ? `, ${MARK_LABEL[mark]}` : "") +
-                        (inHighlight ? (highlight?.valid ? ", in target area" : ", target not allowed") : "")
+                        (inHighlight ? (highlight?.valid ? ", in target area" : ", target not allowed") : "") +
+                        (haloBlocked.has(key) ? ", too close to another ship" : "")
                       }
                       aria-disabled={interactive && !targeting && isShot(mark) ? true : undefined}
                       onMouseEnter={interactive ? () => hover({ x, y }) : undefined}

@@ -3,6 +3,7 @@ export * from "./Ship";
 export * from "./Board";
 export * from "./Legend";
 export * from "./FleetStatus";
+export * from "./FleetDeck";
 export * from "./TurnIndicator";
 export * from "./TurnTimer";
 export * from "./AbilityCard";

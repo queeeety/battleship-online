@@ -66,6 +66,10 @@ const PLACEMENT_TEXT: Readonly<Record<PlacementError, ErrorText>> = {
     [PlacementError.FLEET_INCOMPLETE]: {
         title: "Fleet not ready",
         detail: "Place every ship before you confirm."
+    },
+    [PlacementError.TOO_CLOSE]: {
+        title: "Ships too close",
+        detail: "Leave at least one free square around every ship, corners included."
     }
 };
 
@@ -135,7 +139,8 @@ const PLACEMENT_ACTION: Readonly<Record<PlacementError, string>> = {
     [PlacementError.OUT_OF_BOUNDS]: "Got it",
     [PlacementError.OVERLAPS_SHIP]: "Got it",
     [PlacementError.ALREADY_PLACED]: "Got it",
-    [PlacementError.FLEET_INCOMPLETE]: "Keep placing"
+    [PlacementError.FLEET_INCOMPLETE]: "Keep placing",
+    [PlacementError.TOO_CLOSE]: "Got it"
 };
 
 const SERVER_ACTION: Readonly<Record<ServerFailure, string>> = {

@@ -19,12 +19,12 @@ describe("LineScan", () =>
     {
         const { game } = startedGame();
         const board = placeKnownFleet();
-        board.receiveShot(new Coordinate(1, 1), new HumanPlayer("Aoife", "s"));
+        board.receiveShot(new Coordinate(1, 2), new HumanPlayer("Aoife", "s"));
         const scan = new LineScan();
 
-        scan.apply(game, board, new Coordinate(5, 1));   // the x is ignored for a row
+        scan.apply(game, board, new Coordinate(5, 2));   // the x is ignored for a row
         // Battleship A2-D2, minus B2 which was hit
-        expect(keys(scan.getRevealed())).toEqual(keys([new Coordinate(0, 1), new Coordinate(2, 1), new Coordinate(3, 1)]));
+        expect(keys(scan.getRevealed())).toEqual(keys([new Coordinate(0, 2), new Coordinate(2, 2), new Coordinate(3, 2)]));
     });
 
     it("a column scan reveals the unshot ship squares in the target's column", () =>
@@ -35,7 +35,7 @@ describe("LineScan", () =>
 
         scan.apply(game, placeKnownFleet(), new Coordinate(2, 9));   // the y is ignored for a column
         // column C crosses the Carrier, Battleship, Cruiser and Submarine
-        expect(keys(scan.getRevealed())).toEqual(keys([0, 1, 2, 3].map(y => new Coordinate(2, y))));
+        expect(keys(scan.getRevealed())).toEqual(keys([0, 2, 4, 6].map(y => new Coordinate(2, y))));
     });
 
     it("lineThrough lists the whole row or column", () =>

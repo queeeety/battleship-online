@@ -62,6 +62,8 @@ export interface PlayerView
     winner: 1 | 2 | null;
     endReason: EndReason | null;
     opponentBoard: BoardSnapshot | null;
+    // the opponent's ships you've sunk, where they lay
+    opponentSunkShips: BoardSnapshot["ships"];
     // your scans' unshot ship squares
     revealedSquares: { row: number; col: number }[];
     rematch: { by: 1 | 2; status: RematchStatus } | null;
@@ -571,7 +573,7 @@ export class Server
             return {
                 ...base, gameState: null, yourTurn: false, turnStartedAt: null, doubleShotActive: false,
                 yourBoard: { ships: [], shots: [] }, yourShots: [], opponentShots: [],
-                heldAbility: null, offeredAbility: null, winner: null, endReason: null, opponentBoard: null,
+                heldAbility: null, offeredAbility: null, winner: null, endReason: null, opponentBoard: null, opponentSunkShips: [],
                 revealedSquares: [], rematch: null, result: null
             };
         }
@@ -585,6 +587,7 @@ export class Server
             .map(s => ({ ...s.getCoordinate().toRowCol(), result: s.getResult(), sunkShipName: s.getSunkShipName() }));
         const winner = game.getWinner();
         const result = finished ? game.resultFor(me) : null;
+        const sunkNames = new Set(opponent.getBoard().getShips().filter(s => s.isSunk()).map(s => s.getName()));
 
         return {
             ...base,
@@ -600,6 +603,7 @@ export class Server
             winner: winner === null ? null : (players.indexOf(winner) + 1) as 1 | 2,
             endReason: game.getEndReason(),
             opponentBoard: finished ? opponent.getBoard().toSnapshot() : null,
+            opponentSunkShips: opponent.getBoard().toSnapshot().ships.filter(s => sunkNames.has(s.name)),
             revealedSquares: finished ? [] : scanned.filter(s => !opponent.getBoard().hasBeenTargeted(Coordinate.fromRowCol(s.row, s.col))),
             rematch: rematch && {
                 by: (players.findIndex(p => p.getId() === rematch.getRequestedBy().getId()) + 1) as 1 | 2,

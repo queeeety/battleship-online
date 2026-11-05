@@ -39,6 +39,17 @@ export function clampStart(type: ShipType, x: number, y: number, heading: Headin
   };
 }
 
+/**
+ * A ship turned about one of its squares (`at`, counted from its start): that square stays put
+ * and the rest swings round it, moved back onto the board if it would hang off the edge.
+ */
+export function turnAbout(type: ShipType, x: number, y: number, heading: Heading, at: number): { x: number; y: number; heading: Heading } {
+  const to: Heading = heading === "horizontal" ? "vertical" : "horizontal";
+  const pivot = heading === "horizontal" ? { x: x + at, y } : { x, y: y + at };
+  const start = to === "horizontal" ? { x: pivot.x - at, y: pivot.y } : { x: pivot.x, y: pivot.y - at };
+  return { ...clampStart(type, start.x, start.y, to), heading: to };
+}
+
 export function isPlaced(layout: Layout, type: ShipType): boolean {
   return layout.some((s) => s.name === SHIPS[type].name);
 }
@@ -50,6 +61,7 @@ export function placementError(layout: Layout, type: ShipType, x: number, y: num
   if (!covered.every((c) => c.isWithinBounds(BOARD_SIZE, BOARD_SIZE))) return PlacementError.OUT_OF_BOUNDS;
   const board = boardOf(layout);
   if (covered.some((c) => board.getCell(c).getShip() !== null)) return PlacementError.OVERLAPS_SHIP;
+  if (!board.hasRoomFor(covered)) return PlacementError.TOO_CLOSE;
   return null;
 }
 
@@ -62,11 +74,33 @@ export function removeShip(layout: Layout, type: ShipType): Layout {
   return layout.filter((s) => s.name !== SHIPS[type].name);
 }
 
-export function shipAt(layout: Layout, x: number, y: number): { type: ShipType; heading: Heading } | null {
+/** The placed ship covering a square, with its start square, if any. */
+export function shipAt(layout: Layout, x: number, y: number): { type: ShipType; heading: Heading; x: number; y: number } | null {
   const ship = boardOf(layout).getCell(new Coordinate(x, y)).getShip();
   if (!ship) return null;
   const placed = layout.find((s) => s.name === ship.getName())!;
-  return { type: shipTypeFromName(placed.name)!, heading: placed.orientation };
+  return { type: shipTypeFromName(placed.name)!, heading: placed.orientation, x: placed.col, y: placed.row };
+}
+
+/** The squares around a ship, corners too, that have to stay free; `blocked` ones have a ship on them. */
+export function haloKeys(layout: Layout, type: ShipType, x: number, y: number, heading: Heading): { clear: string[]; blocked: string[] } {
+  const board = boardOf(layout);
+  const covered = new Set(squareKeys(type, x, y, heading));
+  const seen = new Set<string>();
+  const clear: string[] = [];
+  const blocked: string[] = [];
+  for (const c of squares(type, x, y, heading)) {
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const near = new Coordinate(c.getX() + dx, c.getY() + dy);
+        const key = coordKey(near.getX(), near.getY());
+        if (!near.isWithinBounds(BOARD_SIZE, BOARD_SIZE) || covered.has(key) || seen.has(key)) continue;
+        seen.add(key);
+        (board.getCell(near).getShip() ? blocked : clear).push(key);
+      }
+    }
+  }
+  return { clear, blocked };
 }
 
 export function randomLayout(): Layout {
@@ -101,5 +135,7 @@ export function placementErrorText(error: PlacementError, type: ShipType): strin
       return `${name} is already on the board.`;
     case PlacementError.FLEET_INCOMPLETE:
       return "Place every ship before you confirm.";
+    case PlacementError.TOO_CLOSE:
+      return `${name} needs a free square between it and other ships.`;
   }
 }

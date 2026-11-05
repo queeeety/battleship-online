@@ -110,13 +110,10 @@ export function resultSummary(view: PlayerView): {
   };
 }
 
-// the server hides where a sunk ship lay until the end, so only its last square reads sunk
+// the ships you've sunk are drawn in place; the rest stay hidden
 export function targetBoardState(view: PlayerView): BoardState {
-  const marks: Record<string, CellMark> = {};
-  for (const s of view.yourShots) marks[shotKey(s)] = MARK[s.result];
-  const sunk = view.yourShots.filter((s) => s.result === ShotResult.SUNK).length;
-  const last = view.yourShots.at(-1);
-  return { ships: [], marks, lastShot: last && shotKey(last), afloat: FLEET_SIZE - sunk, total: FLEET_SIZE };
+  const board = fleetBoard(view.opponentSunkShips, view.yourShots);
+  return { ...board, afloat: FLEET_SIZE - board.ships.filter((s) => s.status === "sunk").length, total: FLEET_SIZE };
 }
 
 // a refetch sends every shot again, so new ones are found by square, not by count
@@ -155,11 +152,13 @@ export function abilityLogEntry(
   turn: number,
   target?: { row: number; col: number },
 ): ShotLogEntry {
+  // Radar Sweep is sent with its area's top left but aimed by the middle, so the log shows that
+  const at = target && abilityName === "Radar Sweep" ? { row: target.row + 1, col: target.col + 1 } : target;
   return {
     turn,
     by,
     ability: abilityIdFromName(abilityName) ?? undefined,
-    coord: target && shotKey(target),
+    coord: at && shotKey(at),
     note: "used",
   };
 }

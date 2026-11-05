@@ -48,9 +48,9 @@ describe("RadarSweep", () =>
         const radar = new RadarSweep();
 
         radar.apply(game, board, new Coordinate(0, 0));
-        // rows 1-3 of the known fleet fill columns A-C, minus the square already hit
+        // rows 1 and 3 of the known fleet fill columns A-C, minus the square already hit
         expect(keys(radar.getRevealed())).toEqual(keys(RadarSweep.areaFrom(new Coordinate(0, 0))
-            .filter(c => !c.equals(new Coordinate(0, 0)))));
+            .filter(c => c.getY() !== 1 && !c.equals(new Coordinate(0, 0)))));
     });
 
     it("reveals nothing over open water", () =>
@@ -76,8 +76,8 @@ describe("RadarSweep", () =>
         const radar = new RadarSweep();
         first.receiveAbility(radar);
 
-        game.applyAbility(first, new Coordinate(0, 3));
-        // Submarine A4-C4 and Destroyer A5-B5 in the known fleet
+        game.applyAbility(first, new Coordinate(0, 6));
+        // Submarine A7-C7 and Destroyer A9-B9 in the known fleet
         expect(radar.getRevealed()).toHaveLength(5);
         expect(first.getHeldAbility()).toBeNull();
         expect(game.getCurrentTurn()).toBe(second);

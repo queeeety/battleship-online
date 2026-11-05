@@ -6,6 +6,15 @@ import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { Toast } from "@/components/ui/Toast";
 import { Logo } from "@/components/ui/Logo";
 
+// fades each screen in; keyed on the screen, so it replays only when the screen changes
+export function ScreenFade({ screen, children }: { screen: string; children: ReactNode }) {
+  return (
+    <div key={screen} className="mb-screen-in flex flex-1 flex-col">
+      {children}
+    </div>
+  );
+}
+
 /** Top bar, then main, in one column no wider than the window. */
 export const SCREEN = "grid flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[auto_1fr]";
 

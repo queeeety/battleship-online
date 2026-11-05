@@ -1,18 +1,31 @@
 "use client";
 
-import { useEffect, useMemo, useReducer, useState } from "react";
+import {
+    useEffect,
+    useEffectEvent,
+    useMemo,
+    useReducer,
+    useRef,
+    useState,
+    type HTMLAttributes,
+    type PointerEvent as ReactPointerEvent,
+    type Ref
+} from "react";
 import type { BoardProps, ShipPlacement } from "@/components/game/Board";
 import {
     abilityIdFromName,
     coordKey,
     shipTypeFromName,
     type AbilityId,
-    type CellMark
+    type CellMark,
+    type ShipType
 } from "@/components/game/data";
+import { clampStart, haloKeys, squareKeys, turnAbout, type Heading } from "@/components/screens/placement";
 import { DoubleShot, LineScan, RadarSweep, Reroute } from "@/lib/abilities";
 import { createAbility } from "@/lib/abilities/registry";
 import { AbilityCard, scannedSquares, type AbilityBoard } from "@/lib/boundary/AbilityCard";
 import { Board, Coordinate, type BoardSnapshot } from "@/lib/entities/board";
+import type { Ship } from "@/lib/entities/ships";
 import { Orientation } from "@/lib/enums";
 import type { AbilityRequest } from "@/lib/server/RequestValidator";
 
@@ -46,6 +59,10 @@ export interface AbilityTargeting {
         state: "ready" | "armed" | "unavailable";
         onUse: () => void;
         onCancel: () => void;
+        /** While armed: Rotate switches Line Scan between row and column, or turns the rerouted ship (R does the same). */
+        turn?: { label: string; onTurn: () => void };
+        /** Reroute: sends the move dragged or turned into place. */
+        confirm?: { label: string; onConfirm: () => void };
     };
     /** One line on what to do next, or why the ability can't be used. Show it in a live region. */
     hint: string | null;
@@ -59,6 +76,8 @@ export interface AbilityTargeting {
     ownBoardProps: Partial<BoardProps>;
     /** The rerouted ship's ghost at the hovered square, to add to your own board's ships. */
     ownGhost: ShipPlacement[];
+    /** Spread onto the area around your own board: Reroute's dragging starts here. */
+    ownArea: HTMLAttributes<HTMLDivElement> & { ref: Ref<HTMLDivElement> };
 }
 
 // a board snapshot as a stable string, so a fresh-but-equal prop doesn't rebuild the Board
@@ -69,6 +88,33 @@ function useBoard(snapshot: BoardSnapshot): Board
 }
 
 const keyOf = (c: Coordinate) => coordKey(c.getX(), c.getY());
+
+// Radar Sweep's area is 3×3; it's aimed by its middle square
+const RADAR_SPAN = 3;
+
+// a press that moves less than this is a tap
+const DRAG_THRESHOLD_PX = 6;
+
+type Point = { x: number; y: number };
+
+// Reroute by pointer: a ship picked up from your board, and where it would land
+interface Press
+{
+    name: string;
+    type: ShipType;
+    heading: Heading;
+    /** Its start before this press: where it is now, or its pending move. */
+    from: { x: number; y: number };
+    /** Which square of the ship is under the pointer. */
+    grab: number;
+    down: Point;
+    point: Point;
+    dragging: boolean;
+    at: { x: number; y: number } | null;
+    valid: boolean;
+}
+
+const headingOf = (s: Ship): Heading => s.getOrientation() === Orientation.HORIZONTAL ? "horizontal" : "vertical";
 
 /**
  * Connects the AbilityCard boundary class to the battle screen: the card, the keep-or-replace
@@ -98,6 +144,10 @@ export function useAbilityTargeting(input: AbilityTargetingInput): AbilityTarget
     // the card is a plain object, so changes to it ask for a render by hand
     const [, rerender] = useReducer((n: number) => n + 1, 0);
     const [hover, setHover] = useState<{ board: AbilityBoard; x: number; y: number } | null>(null);
+    // touch screens have no hover: the first tap aims (and shows where it lands), a second tap on
+    // the same square confirms
+    const [aimed, setAimed] = useState<string | null>(null);
+    const lastPointer = useRef("mouse");
     const [busy, setBusy] = useState(false);
     const [scanned, setScanned] = useState<string[]>([]);
     const [scansFrom, setScansFrom] = useState(scanReset);
@@ -107,9 +157,184 @@ export function useAbilityTargeting(input: AbilityTargetingInput): AbilityTarget
         setScanned([]);
     }
 
+    if (!card.isArmed() && aimed !== null) setAimed(null);
+
     const ability = card.getAbility();
     const armed = card.isArmed() && !busy;
     const armedOn: AbilityBoard | null = armed ? card.targetBoard() : null;
+
+    // Reroute by pointer: drag one of your ships to its new spot or tap it to turn it, then confirm
+    const rerouting = armed && ability instanceof Reroute;
+    const [moving, setMoving] = useState<{ name: string; heading: Heading; x: number; y: number } | null>(null);
+    const [press, setPress] = useState<Press | null>(null);
+    const pressRef = useRef<Press | null>(null);
+    const ownArea = useRef<HTMLDivElement>(null);
+    const [refused, setRefused] = useState<string | null>(null);
+    if (!card.isArmed() && (moving !== null || refused !== null))
+    {
+        setMoving(null);
+        setRefused(null);
+    }
+
+    // the Reroute rule (undamaged, a free square all round, nothing fired at under it), checked on
+    // a Reroute of its own so the card's keyboard selection is left alone
+    function canMoveTo(name: string, heading: Heading, x: number, y: number): boolean
+    {
+        const ship = ownBoard.getShips().find(s => s.getName() === name);
+        if (!ship) return false;
+        const rule = new Reroute();
+        rule.selectShip(ship);
+        rule.setOrientation(heading === "horizontal" ? Orientation.HORIZONTAL : Orientation.VERTICAL);
+        return rule.isValidTarget(ownBoard, new Coordinate(x, y));
+    }
+
+    function ownCellAt(p: Point): { x: number; y: number } | null
+    {
+        const rect = ownArea.current?.querySelector(".mb-board-cells")?.getBoundingClientRect();
+        if (!rect) return null;
+        const size = rect.width / ownBoard.getWidth();
+        const x = Math.floor((p.x - rect.left) / size);
+        const y = Math.floor((p.y - rect.top) / size);
+        return x >= 0 && y >= 0 && x < ownBoard.getWidth() && y < ownBoard.getHeight() ? { x, y } : null;
+    }
+
+    // event handlers only: it measures the board and checks the rule
+    function track(next: Press | null)
+    {
+        let placed = next;
+        if (next?.dragging)
+        {
+            const cell = ownCellAt(next.point);
+            const at = cell && clampStart(
+                next.type,
+                cell.x - (next.heading === "horizontal" ? next.grab : 0),
+                cell.y - (next.heading === "vertical" ? next.grab : 0),
+                next.heading
+            );
+            placed = { ...next, at, valid: at !== null && canMoveTo(next.name, next.heading, at.x, at.y) };
+        }
+        pressRef.current = placed;
+        setPress(placed);
+    }
+
+    function grabOwn(e: ReactPointerEvent<HTMLDivElement>)
+    {
+        if (!rerouting || e.button !== 0) return;
+        const down = { x: e.clientX, y: e.clientY };
+        const cell = ownCellAt(down);
+        if (!cell) return;
+        // the pending move is drawn on top, so it's picked up first
+        let picked: { name: string; heading: Heading; from: { x: number; y: number } } | null = null;
+        const movingType = moving && shipTypeFromName(moving.name);
+        if (moving && movingType && squareKeys(movingType, moving.x, moving.y, moving.heading).includes(coordKey(cell.x, cell.y)))
+        {
+            picked = { name: moving.name, heading: moving.heading, from: { x: moving.x, y: moving.y } };
+        }
+        else
+        {
+            const ship = ownBoard.getCell(new Coordinate(cell.x, cell.y)).getShip();
+            if (!ship) return;
+            if (ship.isDamaged())
+            {
+                setRefused(`Your ${ship.getName()} has been hit, so it can't move.`);
+                return;
+            }
+            const start = ship.getStart()!;
+            picked = { name: ship.getName(), heading: headingOf(ship), from: { x: start.getX(), y: start.getY() } };
+        }
+        const type = shipTypeFromName(picked.name);
+        if (!type) return;
+        e.preventDefault();
+        setRefused(null);
+        const grab = picked.heading === "horizontal" ? cell.x - picked.from.x : cell.y - picked.from.y;
+        track({ ...picked, type, grab, down, point: down, dragging: false, at: null, valid: false });
+    }
+
+    const onPressMove = useEffectEvent((e: PointerEvent) =>
+    {
+        const p = pressRef.current;
+        if (!p) return;
+        const point = { x: e.clientX, y: e.clientY };
+        const dragging = p.dragging || Math.hypot(point.x - p.down.x, point.y - p.down.y) > DRAG_THRESHOLD_PX;
+        if (dragging) e.preventDefault();
+        track({ ...p, point, dragging });
+    });
+
+    const onPressUp = useEffectEvent(() =>
+    {
+        const p = pressRef.current;
+        track(null);
+        if (!p) return;
+        if (!p.dragging)
+        {
+            // a tap turns it about the square tapped
+            const next = turnAbout(p.type, p.from.x, p.from.y, p.heading, p.grab);
+            if (canMoveTo(p.name, next.heading, next.x, next.y)) setMoving({ name: p.name, ...next });
+            else setRefused(`No room to turn your ${p.name} there.`);
+            return;
+        }
+        if (p.at && p.valid) setMoving({ name: p.name, heading: p.heading, ...p.at });
+        else if (p.at) setRefused(`Your ${p.name} can't go there: it needs a free square all round, and no square that's been fired at.`);
+        // dropped off the board: no move
+        else setMoving(null);
+    });
+
+    const onPressCancel = useEffectEvent(() => track(null));
+
+    // R turns a ship being dragged; otherwise it's the Rotate button
+    const rotateKey = useEffectEvent(() =>
+    {
+        const p = pressRef.current;
+        if (p?.dragging) track({ ...p, heading: p.heading === "horizontal" ? "vertical" : "horizontal" });
+        else turn();
+    });
+
+    const pressing = press !== null;
+    useEffect(() =>
+    {
+        if (!pressing) return;
+        const move = (e: PointerEvent) => onPressMove(e);
+        const up = () => onPressUp();
+        const cancel = () => onPressCancel();
+        window.addEventListener("pointermove", move, { passive: false });
+        window.addEventListener("pointerup", up);
+        window.addEventListener("pointercancel", cancel);
+        return () =>
+        {
+            window.removeEventListener("pointermove", move);
+            window.removeEventListener("pointerup", up);
+            window.removeEventListener("pointercancel", cancel);
+        };
+    }, [pressing]);
+
+    // Rotate (or R) while a move is pending turns it about its first square
+    function turnMoving(): boolean
+    {
+        const type = moving && shipTypeFromName(moving.name);
+        if (!moving || !type) return false;
+        const next = turnAbout(type, moving.x, moving.y, moving.heading, 0);
+        if (canMoveTo(moving.name, next.heading, next.x, next.y)) setMoving({ name: moving.name, ...next });
+        else setRefused(`No room to turn your ${moving.name} there.`);
+        return true;
+    }
+
+    function confirmMove()
+    {
+        const ship = moving && ownBoard.getShips().find(s => s.getName() === moving.name);
+        if (!moving || !ship || !canMoveTo(moving.name, moving.heading, moving.x, moving.y)) return;
+        // the card builds the request, so it gets the same choices
+        card.selectShip(ownBoard, ship);
+        if ((card.getRerouteOrientation() === Orientation.HORIZONTAL) !== (moving.heading === "horizontal")) card.rotate();
+        setMoving(null);
+        void send(new Coordinate(moving.x, moving.y));
+    }
+
+    useEffect(() =>
+    {
+        const note = (e: PointerEvent) => { lastPointer.current = e.pointerType; };
+        window.addEventListener("pointerdown", note, true);
+        return () => window.removeEventListener("pointerdown", note, true);
+    }, []);
 
     // Escape cancels, R turns Line Scan between row and column or rotates the rerouted ship
     useEffect(() =>
@@ -120,7 +345,7 @@ export function useAbilityTargeting(input: AbilityTargetingInput): AbilityTarget
             const field = e.target as HTMLElement | null;
             if (field?.closest("input, textarea, select, [contenteditable]")) return;
             if (e.key === "Escape") { card.cancel(); rerender(); }
-            else if (e.key === "r" || e.key === "R") { card.rotate(); rerender(); }
+            else if (e.key === "r" || e.key === "R") { rotateKey(); }
         }
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
@@ -170,22 +395,60 @@ export function useAbilityTargeting(input: AbilityTargetingInput): AbilityTarget
     {
         card.cancel();
         setHover(null);
+        setAimed(null);
         rerender();
+    }
+
+    // the square the ability is sent with: Radar Sweep's top left, kept on the board
+    function anchor(t: Coordinate): Coordinate
+    {
+        if (!(card.getAbility() instanceof RadarSweep)) return t;
+        const fit = (n: number, size: number) => Math.min(Math.max(n - 1, 0), size - RADAR_SPAN);
+        return new Coordinate(fit(t.getX(), enemyBoard.getWidth()), fit(t.getY(), enemyBoard.getHeight()));
+    }
+
+    // false on a touch screen's first tap at a square: that tap only aims
+    function confirmed(board: AbilityBoard, cell: Cell): boolean
+    {
+        const key = `${board}:${cell.key}`;
+        if (lastPointer.current !== "touch" || aimed === key) return true;
+        setAimed(key);
+        setHover({ board, x: cell.x, y: cell.y });
+        return false;
     }
 
     function onTargetClick(cell: Cell)
     {
-        const t = new Coordinate(cell.x, cell.y);
-        if (card.isValidTarget(enemyBoard, t)) void send(t);
+        const t = anchor(new Coordinate(cell.x, cell.y));
+        if (!card.isValidTarget(enemyBoard, t) || !confirmed("target", cell)) return;
+        setAimed(null);
+        void send(t);
     }
 
     // Reroute: a click on a valid square moves the selected ship, a click on a ship selects it
     function onOwnClick(cell: Cell)
     {
         const t = new Coordinate(cell.x, cell.y);
-        if (card.getSelectedShip() && card.isValidTarget(ownBoard, t)) { void send(t); return; }
+        if (card.getSelectedShip() && card.isValidTarget(ownBoard, t))
+        {
+            if (!confirmed("own", cell)) return;
+            setAimed(null);
+            void send(t);
+            return;
+        }
         const ship = ownBoard.getCell(t).getShip();
-        if (ship && card.selectShip(ownBoard, ship)) rerender();
+        if (ship && card.selectShip(ownBoard, ship))
+        {
+            setAimed(null);
+            rerender();
+        }
+    }
+
+    function turn()
+    {
+        if (turnMoving()) return;
+        card.rotate();
+        rerender();
     }
 
     function hoverOn(board: AbilityBoard)
@@ -199,7 +462,7 @@ export function useAbilityTargeting(input: AbilityTargetingInput): AbilityTarget
     if (armedOn && hover?.board === armedOn)
     {
         const board = armedOn === "own" ? ownBoard : enemyBoard;
-        const t = new Coordinate(hover.x, hover.y);
+        const t = armedOn === "target" ? anchor(new Coordinate(hover.x, hover.y)) : new Coordinate(hover.x, hover.y);
         const preview = card.previewAt(board, t);
         if (preview) highlight = { keys: preview.squares.map(keyOf), valid: preview.valid };
 
@@ -215,6 +478,18 @@ export function useAbilityTargeting(input: AbilityTargetingInput): AbilityTarget
                 ghost: preview.valid ? "valid" : "invalid"
             }];
         }
+    }
+    let ownHalo: BoardProps["halo"];
+    const shownMove = press?.dragging
+        ? (press.at && { name: press.name, heading: press.heading, ...press.at, valid: press.valid })
+        : moving && { ...moving, valid: true };
+    const shownType = shownMove && shipTypeFromName(shownMove.name);
+    if (rerouting && shownMove && shownType)
+    {
+        ownGhost = [{ type: shownType, x: shownMove.x, y: shownMove.y, orientation: shownMove.heading, ghost: shownMove.valid ? "valid" : "invalid" }];
+        highlight = { keys: squareKeys(shownType, shownMove.x, shownMove.y, shownMove.heading), valid: shownMove.valid };
+        const others = yourBoard.ships.filter(s => s.name !== shownMove.name);
+        ownHalo = haloKeys(others, shownType, shownMove.x, shownMove.y, shownMove.heading);
     }
     // a selected ship with nowhere hovered yet stays outlined so it's clear which one moves
     if (armedOn === "own" && !highlight && card.getSelectedShip())
@@ -249,14 +524,25 @@ export function useAbilityTargeting(input: AbilityTargetingInput): AbilityTarget
         });
     }
 
+    const turnable = armed && (ability instanceof LineScan || (ability instanceof Reroute && (card.getSelectedShip() !== null || moving !== null)));
     return {
         card: {
             ability: abilityIdFromName(ability?.getName() ?? null),
             state: armed ? "armed" : unavailable ? "unavailable" : "ready",
             onUse: use,
-            onCancel: cancel
+            onCancel: cancel,
+            turn: turnable ? { label: "Rotate", onTurn: turn } : undefined,
+            confirm: rerouting && moving ? { label: "Confirm move", onConfirm: confirmMove } : undefined
         },
-        hint: armed ? hintFor(card) : unavailable,
+        hint: !armed
+            ? unavailable
+            : refused ?? (aimed
+                ? "Tap the same square again to confirm."
+                : rerouting && moving
+                    ? `Confirm to move your ${moving.name} there. You can still drag it, or tap it to turn it.`
+                    : rerouting && !card.getSelectedShip()
+                        ? "Drag one of your undamaged ships to a new spot, or tap it to turn it."
+                        : hintFor(card)),
         offer: currentId && drawnId
             ? { current: currentId, drawn: drawnId, onKeep: () => answer(true), onReplace: () => answer(false) }
             : null,
@@ -265,28 +551,38 @@ export function useAbilityTargeting(input: AbilityTargetingInput): AbilityTarget
             ? { active: true, targeting: true, sweeping: false, highlight, onCellClick: onTargetClick, onCellHover: hoverOn("target") }
             : {},
         ownBoardProps: armedOn === "own"
-            ? { active: true, targeting: true, highlight, onCellClick: onOwnClick, onCellHover: hoverOn("own") }
+            ? { active: true, targeting: true, showCursor: false, highlight, halo: ownHalo, onCellClick: onOwnClick, onCellHover: hoverOn("own") }
             : {},
-        ownGhost
+        ownGhost,
+        ownArea: {
+            ref: ownArea,
+            className: rerouting ? "mb-placing" : undefined,
+            onPointerDown: grabOwn,
+            // pointer taps are handled above; the board's own click only answers the keyboard
+            onClickCapture: (e) =>
+            {
+                if (rerouting && e.detail > 0) e.stopPropagation();
+            }
+        }
     };
 }
 
 function hintFor(card: AbilityCard): string
 {
     const a = card.getAbility();
-    if (a instanceof RadarSweep) return "Pick the top-left square of a 3×3 area to scan. Esc cancels.";
+    if (a instanceof RadarSweep) return "Pick the middle of the 3×3 area to scan.";
     if (a instanceof LineScan)
     {
         return card.isLineRow()
-            ? "Pick a square to scan its row. R switches to a column. Esc cancels."
-            : "Pick a square to scan its column. R switches to a row. Esc cancels.";
+            ? "Pick a square to scan its whole row. Rotate to scan a column."
+            : "Pick a square to scan its whole column. Rotate to scan a row.";
     }
     if (a instanceof Reroute)
     {
         const ship = card.getSelectedShip();
         return ship
-            ? `Pick where your ${ship.getName()} starts (its top or left end). R rotates. Esc cancels.`
-            : "Pick one of your undamaged ships to move. Esc cancels.";
+            ? `Pick where your ${ship.getName()} starts (its top or left end). Rotate to turn it.`
+            : "Pick one of your undamaged ships to move.";
     }
-    return "Esc cancels.";
+    return "";
 }

@@ -56,7 +56,8 @@ describe("errorText", () => {
             { title: "Ship is off the board", detail: "Move or rotate it so it fits inside the grid." },
             { title: "Ships overlap", detail: "Ships can't share a cell. Move it to an empty spot." },
             { title: "Ship already placed", detail: "Pick a ship that isn't on the board yet." },
-            { title: "Fleet not ready", detail: "Place every ship before you confirm." }
+            { title: "Fleet not ready", detail: "Place every ship before you confirm." },
+            { title: "Ships too close", detail: "Leave at least one free square around every ship, corners included." }
         ]);
     });
 });

@@ -31,7 +31,7 @@ describe("Board placement", () =>
         const b = new Board();
         b.placeShip(new Carrier(), new Coordinate(0, 0), Orientation.HORIZONTAL);
         expect(b.placeShip(new Destroyer(), new Coordinate(4, 0), Orientation.VERTICAL)).toBe(false);
-        expect(b.placeShip(new Destroyer(), new Coordinate(5, 0), Orientation.VERTICAL)).toBe(true);
+        expect(b.placeShip(new Destroyer(), new Coordinate(6, 0), Orientation.VERTICAL)).toBe(true);
     });
 
     it("rejects placing the same ship twice", () =>
@@ -42,11 +42,15 @@ describe("Board placement", () =>
         expect(b.placeShip(ship, new Coordinate(0, 5), Orientation.HORIZONTAL)).toBe(false);
     });
 
-    it("allows ships to touch", () =>
+    it("keeps a free square around every ship, corners included", () =>
     {
         const b = new Board();
         b.placeShip(new Destroyer(), new Coordinate(0, 0), Orientation.HORIZONTAL);
-        expect(b.placeShip(new Submarine(), new Coordinate(0, 1), Orientation.HORIZONTAL)).toBe(true);
+        expect(b.canPlace(new Submarine(), new Coordinate(0, 1), Orientation.HORIZONTAL)).toBe(false);
+        expect(b.canPlace(new Submarine(), new Coordinate(2, 0), Orientation.HORIZONTAL)).toBe(false);
+        expect(b.canPlace(new Submarine(), new Coordinate(2, 1), Orientation.HORIZONTAL)).toBe(false);
+        expect(b.canPlace(new Submarine(), new Coordinate(3, 0), Orientation.HORIZONTAL)).toBe(true);
+        expect(b.placeShip(new Submarine(), new Coordinate(0, 2), Orientation.HORIZONTAL)).toBe(true);
     });
 
     it("removeShip frees its squares for another ship", () =>
@@ -68,7 +72,7 @@ describe("Board placement", () =>
         expect(placeKnownFleet().isFleetComplete()).toBe(true);
     });
 
-    it("random fleets are always complete and never overlap (200 runs)", () =>
+    it("random fleets are always complete and never overlap or touch (200 runs)", () =>
     {
         for (let run = 0; run < 200; run++)
         {
@@ -79,6 +83,7 @@ describe("Board placement", () =>
             expect(squares).toHaveLength(17);
             expect(new Set(squares.map(c => c.key())).size).toBe(17);
             expect(squares.every(c => c.isWithinBounds(10, 10))).toBe(true);
+            expect(b.getShips().every(s => b.hasRoomFor(s.getCoordinates(), s))).toBe(true);
         }
     });
 });
@@ -101,8 +106,8 @@ describe("Board shots", () =>
     it("the last square of a ship is SUNK with its name", () =>
     {
         const b = placeKnownFleet();
-        b.receiveShot(new Coordinate(0, 4), shooter);
-        const shot = b.receiveShot(new Coordinate(1, 4), shooter);
+        b.receiveShot(new Coordinate(0, 8), shooter);
+        const shot = b.receiveShot(new Coordinate(1, 8), shooter);
         expect(shot.getResult()).toBe(ShotResult.SUNK);
         expect(shot.getSunkShipName()).toBe("Destroyer");
         expect(shot.isHit()).toBe(true);
@@ -144,14 +149,14 @@ describe("Board scans and moves", () =>
         const b = placeKnownFleet();
         b.receiveShot(new Coordinate(0, 0), shooter);
         const found = b.scanArea(new Coordinate(0, 0), 3).map(c => c.key());
-        expect(found.sort()).toEqual(["0,1", "0,2", "1,0", "1,1", "1,2", "2,0", "2,1", "2,2"].sort());
+        expect(found.sort()).toEqual(["1,0", "2,0", "0,2", "1,2", "2,2"].sort());
         expect(b.scanArea(new Coordinate(8, 8), 3)).toEqual([]);
     });
 
     it("scanLine returns unshot ship squares in a row or column", () =>
     {
         const b = placeKnownFleet();
-        expect(b.scanLine(4, true).map(c => c.key())).toEqual(["0,4", "1,4"]);
+        expect(b.scanLine(8, true).map(c => c.key())).toEqual(["0,8", "1,8"]);
         expect(b.scanLine(4, false).map(c => c.key())).toEqual(["4,0"]);
         expect(b.scanLine(9, true)).toEqual([]);
     });
@@ -161,7 +166,7 @@ describe("Board scans and moves", () =>
         const b = placeKnownFleet();
         const destroyer = b.getShips().find(s => s.getName() === "Destroyer")!;
         expect(b.moveShip(destroyer, new Coordinate(8, 8), Orientation.VERTICAL)).toBe(true);
-        expect(b.getCell(new Coordinate(0, 4)).getShip()).toBeNull();
+        expect(b.getCell(new Coordinate(0, 8)).getShip()).toBeNull();
         expect(b.getCell(new Coordinate(8, 9)).getShip()).toBe(destroyer);
     });
 
@@ -171,14 +176,14 @@ describe("Board scans and moves", () =>
         b.receiveShot(new Coordinate(8, 9), shooter);
         const destroyer = b.getShips().find(s => s.getName() === "Destroyer")!;
         expect(b.moveShip(destroyer, new Coordinate(8, 8), Orientation.VERTICAL)).toBe(false);
-        expect(b.getCell(new Coordinate(0, 4)).getShip()).toBe(destroyer);
-        expect(destroyer.getStart()!.key()).toBe("0,4");
+        expect(b.getCell(new Coordinate(0, 8)).getShip()).toBe(destroyer);
+        expect(destroyer.getStart()!.key()).toBe("0,8");
     });
 
     it("moveShip rejects a damaged ship", () =>
     {
         const b = placeKnownFleet();
-        b.receiveShot(new Coordinate(0, 4), shooter);
+        b.receiveShot(new Coordinate(0, 8), shooter);
         const destroyer = b.getShips().find(s => s.getName() === "Destroyer")!;
         expect(b.moveShip(destroyer, new Coordinate(8, 8), Orientation.VERTICAL)).toBe(false);
     });
@@ -187,8 +192,16 @@ describe("Board scans and moves", () =>
     {
         const b = placeKnownFleet();
         const destroyer = b.getShips().find(s => s.getName() === "Destroyer")!;
-        expect(b.moveShip(destroyer, new Coordinate(1, 4), Orientation.HORIZONTAL)).toBe(true);
-        expect(destroyer.getCoordinates().map(c => c.key())).toEqual(["1,4", "2,4"]);
+        expect(b.moveShip(destroyer, new Coordinate(1, 8), Orientation.HORIZONTAL)).toBe(true);
+        expect(destroyer.getCoordinates().map(c => c.key())).toEqual(["1,8", "2,8"]);
+    });
+
+    it("moveShip keeps the free square around other ships", () =>
+    {
+        const b = placeKnownFleet();
+        const destroyer = b.getShips().find(s => s.getName() === "Destroyer")!;
+        expect(b.moveShip(destroyer, new Coordinate(0, 7), Orientation.HORIZONTAL)).toBe(false);
+        expect(destroyer.getStart()!.key()).toBe("0,8");
     });
 });
 
@@ -197,8 +210,8 @@ describe("Board snapshot", () =>
     it("round-trips ships, hits, misses and sunk ships", () =>
     {
         const b = placeKnownFleet();
-        b.receiveShot(new Coordinate(0, 4), shooter);
-        b.receiveShot(new Coordinate(1, 4), shooter);
+        b.receiveShot(new Coordinate(0, 8), shooter);
+        b.receiveShot(new Coordinate(1, 8), shooter);
         b.receiveShot(new Coordinate(0, 0), shooter);
         b.receiveShot(OPEN_WATER, shooter);
 
@@ -214,14 +227,16 @@ describe("Board snapshot", () =>
     it("stores coordinates as zero-based {row, col}", () =>
     {
         const snapshot = placeKnownFleet().toSnapshot();
-        expect(snapshot.ships[1]).toEqual({ name: "Battleship", row: 1, col: 0, orientation: "horizontal" });
+        expect(snapshot.ships[1]).toEqual({ name: "Battleship", row: 2, col: 0, orientation: "horizontal" });
     });
 
-    it("rejects a snapshot with overlapping or duplicate ships", () =>
+    it("rejects a snapshot with overlapping, touching or duplicate ships", () =>
     {
         const snapshot = placeKnownFleet().toSnapshot();
         expect(() => Board.fromSnapshot({ ...snapshot, ships: [...snapshot.ships, snapshot.ships[0]] })).toThrow();
         const overlapping = { ...snapshot, ships: snapshot.ships.map(s => ({ ...s, row: 0 })) };
         expect(() => Board.fromSnapshot(overlapping)).toThrow();
+        const touching = { ...snapshot, ships: snapshot.ships.map((s, i) => ({ ...s, row: i })) };
+        expect(() => Board.fromSnapshot(touching)).toThrow();
     });
 });

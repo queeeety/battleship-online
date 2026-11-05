@@ -5,6 +5,7 @@ import type { ShipPlacement } from "@/components/game";
 import { PlacementView } from "@/components/screens/PlacementView";
 import {
   FLEET_ORDER,
+  haloKeys,
   isPlaced,
   placementError,
   placementErrorText,
@@ -32,8 +33,9 @@ const FULL: Layout = [
   { name: "Submarine", row: 9, col: 5, orientation: "horizontal" },
 ];
 
-// the error sample: the cruiser hangs over the destroyer, so it shows as an invalid ghost
-const GHOST = { type: "cruiser", x: 3, y: 4, orientation: "horizontal" } as const;
+// the error sample: the cruiser dragged in corner to corner with the destroyer, so one square of
+// its halo is red
+const GHOST = { type: "cruiser", x: 1, y: 5, orientation: "horizontal" } as const;
 const GHOST_ERROR = placementError(PLACED, GHOST.type, GHOST.x, GHOST.y, GHOST.orientation);
 
 const OPPONENT = { name: "Teddy", ready: true };
@@ -64,7 +66,7 @@ export function PlacementScreen() {
       <PlacementView
         title="Fleet ready"
         board={{ ships: toShipPlacements(locked) }}
-        fleet={FLEET_ORDER.map((type) => ({ type, placed: true }))}
+        deck={{ ships: FLEET_ORDER.map((type) => ({ type, placed: true })) }}
         ready={{ label: "Waiting for Teddy…", disabled: true }}
         opponent={{ ...OPPONENT, ready: false }}
       />
@@ -76,9 +78,9 @@ export function PlacementScreen() {
         board={{
           ships: [...toShipPlacements(PLACED), ghost],
           highlight: { keys: squareKeys(GHOST.type, GHOST.x, GHOST.y, GHOST.orientation), valid: false },
+          halo: haloKeys(PLACED, GHOST.type, GHOST.x, GHOST.y, GHOST.orientation),
         }}
-        fleet={FLEET_ORDER.map((type) => ({ type, placed: isPlaced(PLACED, type) }))}
-        selected={GHOST.type}
+        deck={{ ships: FLEET_ORDER.map((type) => ({ type, placed: isPlaced(PLACED, type) })), lifted: GHOST.type }}
         error={GHOST_ERROR === null ? null : placementErrorText(GHOST_ERROR, GHOST.type)}
         ready={{ label: readyLabel(2), disabled: true }}
         opponent={OPPONENT}
@@ -104,7 +106,7 @@ export function PlacementScreen() {
           onChange={setStage}
           options={[
             { value: "editing", label: "Editing" },
-            { value: "error", label: "Overlap error" },
+            { value: "error", label: "Too close" },
             { value: "locked", label: "Fleet ready" },
           ]}
         />

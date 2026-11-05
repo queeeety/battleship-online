@@ -75,7 +75,8 @@ note bottom of Game
   and Ship classes run in the browser, so
   the rules are identical to multiplayer.
   Saved to localStorage with toJSON() after
-  every action and restored with fromJSON().
+  every action and restored with fromJSON()
+  when the player picks Continue on setup.
 end note
 
 note right of AIOpponent

@@ -98,6 +98,9 @@ export default function DesignPage() {
           <Link className="text-sonar underline" href="/design/result">
             Result screen
           </Link>
+          <Link className="text-sonar underline" href="/design/playground">
+            Abilities playground
+          </Link>
         </nav>
 
         <Section title="Logo">
