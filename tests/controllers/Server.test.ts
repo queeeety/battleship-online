@@ -395,6 +395,18 @@ describe("Server.getMyState", () =>
         expect(view.result).toBeNull();
     });
 
+    it("shows where an opponent's ship lay once you sink it, and no other", async () =>
+    {
+        const { as, code, first } = await startedBattle();
+        await as(first).fireShot(code, { row: 4, col: 0 });
+        expect((await as(first).getMyState(code)).opponentSunkShips).toEqual([]);
+
+        await as(first).fireShot(code, { row: 4, col: 1 });
+        expect((await as(first).getMyState(code)).opponentSunkShips).toEqual([
+            { name: "Destroyer", row: 4, col: 0, orientation: "horizontal" }
+        ]);
+    });
+
     it("shows the opponent's shots at you and yours at them", async () =>
     {
         const { as, code, first, second } = await startedBattle();

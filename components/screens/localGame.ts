@@ -140,6 +140,9 @@ export function localView(game: Game, scanned: readonly Square[]): PlayerView {
     winner: winner === null ? null : winner === you ? 1 : 2,
     endReason: game.getEndReason(),
     opponentBoard: finished ? enemyBoard.toSnapshot() : null,
+    opponentSunkShips: enemyBoard.toSnapshot().ships.filter((s) =>
+      enemyBoard.getShips().some((ship) => ship.getName() === s.name && ship.isSunk()),
+    ),
     revealedSquares: finished
       ? []
       : scanned.filter((s) => !enemyBoard.hasBeenTargeted(Coordinate.fromRowCol(s.row, s.col))),

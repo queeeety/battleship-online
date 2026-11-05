@@ -21,7 +21,7 @@ export function makeView(overrides: Partial<PlayerView> = {}): PlayerView
             shots: []
         },
         yourShots: [], opponentShots: [],
-        heldAbility: null, offeredAbility: null, winner: null, endReason: null, opponentBoard: null,
+        heldAbility: null, offeredAbility: null, winner: null, endReason: null, opponentBoard: null, opponentSunkShips: [],
         revealedSquares: [], rematch: null, result: null,
         ...overrides
     };
