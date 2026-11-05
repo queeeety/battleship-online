@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { FormEvent } from "react";
-import { Button, SegmentedControl } from "@/components/ui";
+import { Banner, Button, SegmentedControl } from "@/components/ui";
 import { SCREEN, ScreenBar } from "./chrome";
 import { GAME_TYPE_OPTIONS, type GameTypeName } from "./gameTypes";
 
@@ -20,9 +20,11 @@ export interface AiSetupViewProps {
   gameType: GameTypeName;
   onGameTypeChange: (type: GameTypeName) => void;
   onStart: () => void;
+  /** An unfinished game to go back to, e.g. "Normal · Original". */
+  resume?: { label: string; onResume: () => void } | null;
 }
 
-export function AiSetupView({ difficulty, onDifficultyChange, gameType, onGameTypeChange, onStart }: AiSetupViewProps) {
+export function AiSetupView({ difficulty, onDifficultyChange, gameType, onGameTypeChange, onStart, resume }: AiSetupViewProps) {
   function submit(e: FormEvent) {
     e.preventDefault();
     onStart();
@@ -33,6 +35,19 @@ export function AiSetupView({ difficulty, onDifficultyChange, gameType, onGameTy
       <ScreenBar homeHref="/" />
       <main className="mx-auto grid w-full max-w-[880px] content-start px-(--space-4) pt-(--space-5) pb-(--space-6) min-[900px]:px-(--space-6)">
         <form className="grid w-full max-w-md content-start gap-(--space-4) justify-self-center" onSubmit={submit}>
+          {resume && (
+            <Banner
+              tone="info"
+              icon="ai"
+              action={
+                <Button size="sm" onClick={resume.onResume}>
+                  Continue
+                </Button>
+              }
+            >
+              You have an unfinished game ({resume.label}).
+            </Banner>
+          )}
           <div className="grid gap-(--space-1)">
             <span className="mb-label">Solo</span>
             <h1 className="text-display">Play the computer.</h1>

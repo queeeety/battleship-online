@@ -71,6 +71,12 @@ export function LocalGameClient() {
         gameType={gameType}
         onGameTypeChange={setGameType}
         onStart={() => local.start(Difficulty[difficulty], GameType[gameType])}
+        resume={
+          local.saved && {
+            label: `${local.saved.difficulty === Difficulty.EASY ? "Easy" : "Normal"} · ${gameTypeName(local.saved.gameType)}`,
+            onResume: local.resume,
+          }
+        }
       />
     );
   } else if (screen === "placement") {

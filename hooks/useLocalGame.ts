@@ -21,7 +21,6 @@ import type { PlayerView } from "@/lib/controllers/Server";
 import { Coordinate } from "@/lib/entities/board";
 import { Difficulty, GameState, GameType } from "@/lib/enums";
 import type { BattleResult } from "@/lib/server/actions/battle";
-import "@/utils/randomUUIDShim";
 
 type Square = { row: number; col: number };
 
@@ -37,16 +36,30 @@ interface Saved {
     savedAt?: number;
 }
 
+interface Restored {
+    game: Game;
+    difficulty: Difficulty;
+    scanned: Square[];
+    savedAt: number;
+}
+
 // the save is a convenience: a private window or blocked storage just means no resume
-function load(): { game: Game; difficulty: Difficulty; scanned: Square[]; view: PlayerView } | null {
+function load(): Restored | null {
     try {
         const raw = localStorage.getItem(SAVE_KEY);
         if (!raw) return null;
         const saved = JSON.parse(raw) as Saved;
         const game = Game.fromJSON(saved.game);
+        // a finished game has nothing left to continue
+        if (game.getState() === GameState.FINISHED) {
+            forget();
+            return null;
+        }
         const scanned = saved.scanned ?? [];
-        resumeAfterAway(game, saved.savedAt ?? 0);
-        return { game, difficulty: saved.difficulty, scanned, view: localView(game, scanned) };
+        // a save that can't be shown throws here, before the setup screen offers it
+        localView(game, scanned);
+        // without a time the whole turn is given back
+        return { game, difficulty: saved.difficulty, scanned, savedAt: saved.savedAt ?? 0 };
     } catch {
         // a save that can't be shown would break /play every time
         forget();
@@ -74,6 +87,9 @@ const REFUSED: BattleResult<null> = { ok: false, error: "MOVE_REFUSED" };
 export interface LocalGame {
     view: PlayerView | null;
     difficulty: Difficulty | null;
+    /** An unfinished game from the save that the setup screen can offer to continue. */
+    saved: { difficulty: Difficulty; gameType: GameType } | null;
+    resume: () => void;
     start: (difficulty: Difficulty, gameType: GameType) => void;
     /** False if the layout isn't a full fleet. */
     ready: (layout: Layout) => boolean;
@@ -86,13 +102,14 @@ export interface LocalGame {
 
 /** A game against the computer, saved to localStorage after every move. Client only. */
 export function useLocalGame(): LocalGame {
-    const [restored] = useState(load);
-    const game = useRef<Game | null>(restored?.game ?? null);
-    const scanned = useRef<Square[]>(restored?.scanned ?? []);
-    const [difficulty, setDifficulty] = useState<Difficulty | null>(restored?.difficulty ?? null);
-    const [view, setView] = useState<PlayerView | null>(restored?.view ?? null);
+    // a saved game isn't jumped into: the setup screen offers to continue it
+    const [offer, setOffer] = useState<Restored | null>(load);
+    const game = useRef<Game | null>(null);
+    const scanned = useRef<Square[]>([]);
+    const [difficulty, setDifficulty] = useState<Difficulty | null>(null);
+    const [view, setView] = useState<PlayerView | null>(null);
     const [lastPrivate, setLastPrivate] = useState<{ payload: WirePrivatePayload } | null>(null);
-    const settings = useRef<Difficulty | null>(restored?.difficulty ?? null);
+    const settings = useRef<Difficulty | null>(null);
 
     const commit = useCallback(() => {
         const current = game.current;
@@ -182,12 +199,26 @@ export function useLocalGame(): LocalGame {
         scanned.current = [];
         settings.current = level;
         setDifficulty(level);
+        setOffer(null);
+        commit();
+    }
+
+    function resume() {
+        if (!offer) return;
+        resumeAfterAway(offer.game, offer.savedAt);
+        game.current = offer.game;
+        scanned.current = offer.scanned;
+        settings.current = offer.difficulty;
+        setDifficulty(offer.difficulty);
+        setOffer(null);
         commit();
     }
 
     return {
         view,
         difficulty,
+        saved: offer && { difficulty: offer.difficulty, gameType: offer.game.getGameType() },
+        resume,
         start,
         ready: (layout) => {
             const current = game.current;
@@ -208,6 +239,7 @@ export function useLocalGame(): LocalGame {
         },
         quit: () => {
             forget();
+            setOffer(null);
             game.current = null;
             scanned.current = [];
             settings.current = null;
