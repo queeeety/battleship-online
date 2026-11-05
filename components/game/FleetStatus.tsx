@@ -14,21 +14,20 @@ export interface FleetEntry {
 export interface FleetStatusProps {
   /** battle: hits and sunk. placement: placed or not; one may be selected. */
   mode?: "battle" | "placement";
-  title?: string;
   fleet: FleetEntry[];
   selected?: ShipType;
   /** Placement only: the rows become buttons. */
   onSelect?: (type: ShipType) => void;
 }
 
-export function FleetStatus({ mode = "battle", title, fleet, selected, onSelect }: FleetStatusProps) {
+export function FleetStatus({ mode = "battle", fleet, selected, onSelect }: FleetStatusProps) {
   const afloat = fleet.filter((f) => !f.sunk).length;
   const placed = fleet.filter((f) => f.placed).length;
 
   return (
     <div className={cx("mb-fleet", `is-${mode}`)}>
       <div className="mb-fleet-head">
-        <span className="mb-label">{title ?? (mode === "placement" ? "Fleet" : "Fleet status")}</span>
+        <span className="mb-label">{mode === "placement" ? "Fleet" : "Fleet status"}</span>
         <span className="mb-label">
           {mode === "placement" ? `${placed} / ${fleet.length} placed` : `${afloat} / ${fleet.length} afloat`}
         </span>

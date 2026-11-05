@@ -8,7 +8,6 @@ export interface ResultSummaryProps {
   /** 0 to 1. */
   accuracy: number;
   shipsSunk: number;
-  turns?: number;
 }
 
 // [winner's text, loser's text]
@@ -18,13 +17,12 @@ const REASON: Record<EndReasonName, [string, string]> = {
   OPPONENT_DISCONNECTED: ["Your opponent disconnected.", "You were disconnected for too long."],
 };
 
-export function ResultSummary({ didWin, reason, shotsFired, accuracy, shipsSunk, turns }: ResultSummaryProps) {
+export function ResultSummary({ didWin, reason, shotsFired, accuracy, shipsSunk }: ResultSummaryProps) {
   const stats: Array<[string, string]> = [
     ["Shots fired", String(shotsFired)],
     ["Accuracy", `${Math.round(accuracy * 100)}%`],
     ["Ships sunk", `${shipsSunk} / ${FLEET_SIZE}`],
   ];
-  if (turns != null) stats.push(["Turns", String(turns)]);
 
   return (
     <section className={`mb-result ${didWin ? "is-win" : "is-loss"}`}>

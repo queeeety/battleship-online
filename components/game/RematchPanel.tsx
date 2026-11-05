@@ -12,6 +12,8 @@ export interface RematchPanelProps {
   onAccept?: () => void;
   onDecline?: () => void;
   onHome?: () => void;
+  /** Rematch, Accept and Decline can't be pressed, e.g. while an answer is on its way. Home always can. */
+  disabled?: boolean;
 }
 
 export function RematchPanel({
@@ -21,6 +23,7 @@ export function RematchPanel({
   onAccept,
   onDecline,
   onHome,
+  disabled,
 }: RematchPanelProps) {
   const home = (
     <Button variant="ghost" icon="arrow-left" onClick={onHome}>
@@ -45,8 +48,10 @@ export function RematchPanel({
       actions = (
         <>
           {home}
-          <Button onClick={onDecline}>Decline</Button>
-          <Button variant="primary" onClick={onAccept}>
+          <Button disabled={disabled} onClick={onDecline}>
+            Decline
+          </Button>
+          <Button variant="primary" disabled={disabled} onClick={onAccept}>
             Accept
           </Button>
         </>
@@ -72,7 +77,7 @@ export function RematchPanel({
       actions = (
         <>
           {home}
-          <Button variant="primary" icon="rotate" onClick={onRequest}>
+          <Button variant="primary" icon="rotate" disabled={disabled} onClick={onRequest}>
             Rematch
           </Button>
         </>

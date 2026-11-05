@@ -3,21 +3,18 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
-  Board,
   coordKey,
-  RematchPanel,
-  ResultSummary,
   SHIPS,
   type CellMark,
   type RematchState,
   type ShipPlacement,
   type ShipType,
 } from "@/components/game";
-import { Button, SegmentedControl } from "@/components/ui";
-import { SampleStates, SCREEN, ScreenBar, ShowcaseStrip } from "./chrome";
+import { Button } from "@/components/ui";
+import { ResultView } from "@/components/screens/ResultView";
+import { SampleStates, ShowcaseStrip } from "./chrome";
 
 type Outcome = "victory" | "defeat";
-type BoardView = "enemy" | "own";
 
 const ENEMY_SHIPS: ShipPlacement[] = [
   { type: "carrier", x: 1, y: 8, orientation: "horizontal" },
@@ -71,7 +68,6 @@ export function ResultScreen() {
   const router = useRouter();
   const [outcome, setOutcome] = useState<Outcome>("victory");
   const [rematch, setRematch] = useState<RematchState>("none");
-  const [boardView, setBoardView] = useState<BoardView>("enemy");
   const sample = SAMPLES[outcome];
   const hits = Object.values(sample.marks).filter((m) => m === "hit" || m === "sunk").length;
   const afloat = ENEMY_SHIPS.length - sample.ships.length;
@@ -104,60 +100,26 @@ export function ResultScreen() {
           </span>
         </Button>
       </ShowcaseStrip>
-      <div className={SCREEN}>
-        <ScreenBar>
-          <span className="mb-label hidden min-[600px]:inline">Original · Lobby K7Q2XM</span>
-        </ScreenBar>
-        {/* everything centred: the summary on top, the two final boards under it */}
-        <main className="grid content-start justify-items-center gap-(--space-6) px-(--space-4) pt-(--space-5) pb-(--space-6) min-[900px]:px-(--space-6)">
-          <div className="grid w-full max-w-[460px] gap-(--space-4)">
-            <ResultSummary
-              didWin={outcome === "victory"}
-              reason={sample.reason}
-              shotsFired={sample.shots}
-              accuracy={hits / sample.shots}
-              shipsSunk={sample.ships.length}
-            />
-            <RematchPanel
-              status={rematch}
-              opponentName="Teddy"
-              onRequest={() => setRematch("requested-by-you")}
-              onAccept={() => setRematch("accepted")}
-              onDecline={() => setRematch("declined")}
-              onHome={() => router.push("/design/home")}
-            />
-          </div>
-          <section className="grid w-fit max-w-full gap-(--space-3)" aria-label="Final boards">
-            <span className="mb-label max-[899px]:hidden">Final boards</span>
-            {/* phones: one board at a time */}
-            <div className="min-[900px]:hidden">
-              <SegmentedControl
-                label="Final boards"
-                value={boardView}
-                onChange={(v) => setBoardView(v as BoardView)}
-                options={[
-                  { value: "enemy", label: "Enemy waters" },
-                  { value: "own", label: "Your waters" },
-                ]}
-              />
-            </div>
-            <div className="flex flex-wrap items-start justify-center gap-(--space-6)">
-              <div className={boardView === "enemy" ? undefined : "max-[899px]:hidden"}>
-                <Board
-                  variant="target"
-                  title="Enemy waters"
-                  meta={`${afloat} of 5 afloat`}
-                  marks={sample.marks}
-                  ships={sample.ships}
-                />
-              </div>
-              <div className={boardView === "own" ? undefined : "max-[899px]:hidden"}>
-                <Board variant="own" title="Your waters" meta="4 of 5 afloat" marks={OWN_MARKS} ships={OWN_SHIPS} />
-              </div>
-            </div>
-          </section>
-        </main>
-      </div>
+      <ResultView
+        barLabel="Original · Lobby K7Q2XM"
+        summary={{
+          didWin: outcome === "victory",
+          reason: sample.reason,
+          shotsFired: sample.shots,
+          accuracy: hits / sample.shots,
+          shipsSunk: sample.ships.length,
+        }}
+        rematch={{
+          status: rematch,
+          opponentName: "Teddy",
+          onRequest: () => setRematch("requested-by-you"),
+          onAccept: () => setRematch("accepted"),
+          onDecline: () => setRematch("declined"),
+          onHome: () => router.push("/design/home"),
+        }}
+        enemy={{ meta: `${afloat} of 5 afloat`, marks: sample.marks, ships: sample.ships }}
+        own={{ meta: "4 of 5 afloat", marks: OWN_MARKS, ships: OWN_SHIPS }}
+      />
     </>
   );
 }

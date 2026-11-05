@@ -7,11 +7,8 @@ export interface ShipProps {
   orientation?: "horizontal" | "vertical";
   /** Damage shows as hit marks on the board; only sunk recolours the ship. */
   status?: "intact" | "damaged" | "sunk";
-  /** Placement ghost while dragging: valid or invalid position. */
+  /** Outline of a ship being placed or rerouted, at a valid or invalid spot. */
   ghost?: "valid" | "invalid";
-  /** Cell size in px; defaults to the board's --mb-cell. */
-  cell?: number;
-  selected?: boolean;
 }
 
 // drawn horizontally on a 100-unit-per-cell grid, W units long
@@ -60,13 +57,10 @@ function deck(type: ShipType, W: number): ReactNode {
   }
 }
 
-export function Ship({ type, orientation = "horizontal", status = "intact", ghost, cell, selected }: ShipProps) {
+export function Ship({ type, orientation = "horizontal", status = "intact", ghost }: ShipProps) {
   const { name, length } = SHIPS[type];
   const W = length * 100;
   const vertical = orientation === "vertical";
-  const style: CSSProperties = cell
-    ? { width: (vertical ? 1 : length) * cell, height: (vertical ? length : 1) * cell }
-    : ({ "--mb-len": length } as CSSProperties);
 
   return (
     <svg
@@ -75,10 +69,9 @@ export function Ship({ type, orientation = "horizontal", status = "intact", ghos
         `is-${status}`,
         ghost && `is-ghost-${ghost}`,
         vertical ? "is-v" : "is-h",
-        selected && "is-selected",
       )}
       viewBox={vertical ? `0 0 100 ${W}` : `0 0 ${W} 100`}
-      style={style}
+      style={{ "--mb-len": length } as CSSProperties}
       role="img"
       aria-label={name + (status === "sunk" ? ", sunk" : status === "damaged" ? ", damaged" : "")}
     >

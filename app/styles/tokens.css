@@ -1,6 +1,4 @@
-/* MyBattleship design tokens (atomic design elements).
-   Dark is the primary theme: it applies by default and under data-theme="dark".
-   data-theme="light" on <html> switches to the daylight variant.*/
+/* Dark is the default theme; data-theme="light" on <html> switches to light. */
 
 :root,
 :root[data-theme="dark"] {
@@ -47,7 +45,6 @@
   --sunk: #c4622d;
   /* Fill under the cells of a sunk ship. */
   --sunk-soft: #c4622d33;
-  /* Miss dot. */
   --miss: #6b817b;
   /* Own-fleet silhouette fill. */
   --ship: #2e4541;
@@ -61,7 +58,6 @@
   --on-danger: #1a0a06;
   /* Overlay behind dialogs. */
   --scrim: #000000a6;
-  /* Keyboard focus ring. */
   --focus: var(--sonar);
 
   /* shadow */
@@ -112,8 +108,7 @@
   --space-8: 64px; /* Large vertical rhythm on wide screens. */
 
   /* radius */
-  --radius-0: 0; /* Board, cells, readouts. */
-  --radius-sm: 2px; /* Chips, pips, segmented items, tooltips. */
+  --radius-sm: 2px; /* Chips, pips, segmented items. */
   --radius-md: 4px; /* Buttons, inputs, ability cards, panels. */
   --radius-lg: 8px; /* Dialogs and toasts. */
   --radius-full: 999px; /* Presence dots and the ping ring. */
@@ -128,9 +123,8 @@
   --hud-width: 280px; /* Battle side panel on desktop. */
 
   /* z-index */
-  --z-board-ships: 1; /* Ship silhouettes. */
+  --z-board-ships: 1;
   --z-board-marks: 2; /* Hit/miss marks and the click layer. */
-  --z-banner: 20; /* Connection banner. */
   --z-overlay: 40; /* Dialog scrim and dialogs. */
-  --z-toast: 50; /* Toasts. */
+  --z-toast: 50;
 }

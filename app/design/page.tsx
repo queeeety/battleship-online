@@ -68,7 +68,6 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-// reference page for the ported components
 export default function DesignPage() {
   return (
     <div className="flex flex-1 flex-col">
