@@ -115,6 +115,7 @@ class PlayerView <<value>> {
   + heldAbility : string | null
   + offeredAbility : string | null
   + opponentBoard : BoardSnapshot | null
+  + opponentSunkShips : {name, row, col, orientation}[]
   + revealedSquares : {row, col}[]
   + rematch : {by : 1 | 2, status : RematchStatus} | null
   + result : {won, shotsFired, accuracy, shipsSunk} | null

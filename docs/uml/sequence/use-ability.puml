@@ -53,9 +53,10 @@ group Grant (inside 5.3 Fire Shot, when one of the owner's Ships is sunk)
 end
 
 group Use (on the holder's own turn, before firing)
-  Owner -> UI : selects Radar Sweep, targets area E4-G6
+  Owner -> UI : selects Radar Sweep, aims at F5 (area E4-G6)
   activate UI
   UI -> Server : useAbility(code, {name: "Radar Sweep"}, E4)
+  note right of UI : Radar Sweep is aimed by its middle;\nthe request carries the area's top left
   activate Server
   Server -> Repo : loadGame(code) : game, version, scanLog
   Server -> Server : fireIfTurnExpired(game)
@@ -88,7 +89,7 @@ group Use (on the holder's own turn, before firing)
     else ability is Reroute
       Ability -> OwnBoard : validPositions(ownBoard, ship)
       Ability -> OwnBoard : moveShip(ship, start, orientation)
-      note right of OwnBoard : Destination excludes every square\nthe opponent has already fired at
+      note right of OwnBoard : Destination excludes every square\nthe opponent has already fired at,\nand keeps a free square around\nthe other ships
     else ability is DoubleShot
       Ability -> Game : doubleShotActive = true
     end

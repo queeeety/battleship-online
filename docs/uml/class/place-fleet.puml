@@ -28,6 +28,7 @@ enum PlacementError {
   OVERLAPS_SHIP
   ALREADY_PLACED
   FLEET_INCOMPLETE
+  TOO_CLOSE
 }
 
 class UIManager <<boundary>> {
@@ -61,6 +62,7 @@ class Board <<entity>> {
   - height : int = 10
   - ships : List<Ship>
   + canPlace(s : Ship, start : Coordinate, o : Orientation) : boolean
+  + hasRoomFor(squares : List<Coordinate>, ignore : Ship) : boolean
   + placeShip(s : Ship, start : Coordinate, o : Orientation) : boolean
   + removeShip(s : Ship) : void
   + placeFleetRandomly() : void
@@ -139,6 +141,9 @@ note bottom of Board
   instant feedback, then Server.placeShips()
   calls the same method again: the client is
   never trusted with the layout (brief, 3.2.1).
+  Ships can't touch: hasRoomFor() needs a free
+  square all round, corners included, or the
+  placement is refused with TOO_CLOSE.
 end note
 
 note right of AIOpponent

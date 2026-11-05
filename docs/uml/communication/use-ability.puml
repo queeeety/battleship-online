@@ -11,7 +11,7 @@ frame "sd UseAbility" {
   rectangle "ability : Ability" as Ability
   rectangle "ownBoard : Board" as OwnBoard
   rectangle "oppBoard : Board" as OppBoard
-  Owner -down- UI : ⇡ 3.1.1 : "Keep current or take drawn?"\n↓ 4 : selects Keep (or no choice in 10 s)\n↓ 5 : selects Radar Sweep, targets area E4-G6\n⇡ 5.3 [not ability.isValidTarget(oppBoard, E4)] : choose another target (UC4 4b)\n⇡ 5.2 : green scan markers on F5, F6 (revealedSquares, until shot)
+  Owner -down- UI : ⇡ 3.1.1 : "Keep current or take drawn?"\n↓ 4 : selects Keep (or no choice in 10 s)\n↓ 5 : selects Radar Sweep, aims at F5 (area E4-G6)\n⇡ 5.3 [not ability.isValidTarget(oppBoard, E4)] : choose another target (UC4 4b)\n⇡ 5.2 : green scan markers on F5, F6 (revealedSquares, until shot)
   UI -down- Net : ⇡ 3.1 : promptKeepOrReplace(current, drawn)\n⇡ 5.1.9.1 : showScanResult([F5, F6])
   OppUI -down- Net : ⇡ 2.1 : SUNK result: "[Name] was granted an ability"\n⇡ 5.1.10.1 : &#34;[Name] used Radar Sweep&#34;
   UI -down- Server : ↓ 4.1 : chooseAbility(code, true)\n↓ 5.1 : useAbility(code, {name: "Radar Sweep"}, E4)\n⇡ 5.1.6 [not ability.isValidTarget(oppBoard, E4)] : MOVE_REFUSED, ability kept\n⇡ 5.1.11 [saved] : ok\n⇡ 5.1.12 [another save landed first] : STALE

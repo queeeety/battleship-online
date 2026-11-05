@@ -131,6 +131,7 @@ package "Entities" {
     - height : int = 10
     - ships : List<Ship>
     + canPlace(s : Ship, start : Coordinate, o : Orientation) : boolean
+    + hasRoomFor(squares : List<Coordinate>, ignore : Ship) : boolean
     + placeShip(s : Ship, start : Coordinate, o : Orientation) : boolean
     + removeShip(s : Ship) : void
     + placeFleetRandomly() : void
@@ -314,6 +315,7 @@ package "Enumerations" {
     OVERLAPS_SHIP
     ALREADY_PLACED
     FLEET_INCOMPLETE
+    TOO_CLOSE
   }
   enum Screen {
     HOME
