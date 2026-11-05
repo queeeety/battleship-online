@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
     FLEET_ORDER,
     clampStart,
+    haloKeys,
+    turnAbout,
     isComplete,
     placeShip,
     placementError,
@@ -60,9 +62,45 @@ describe("placement", () =>
 
     it("finds the ship on a square and takes it off again", () =>
     {
-        expect(shipAt(carrierAtB2, 4, 1)).toEqual({ type: "carrier", heading: "horizontal" });
+        expect(shipAt(carrierAtB2, 4, 1)).toEqual({ type: "carrier", heading: "horizontal", x: 1, y: 1 });
         expect(shipAt(carrierAtB2, 4, 2)).toBeNull();
         expect(removeShip(carrierAtB2, "carrier")).toEqual([]);
+    });
+
+    it("turns a ship about the square clicked", () =>
+    {
+        // a cruiser on C6-E6, turned about its middle square D6, stands on D5-D7
+        expect(turnAbout("cruiser", 2, 5, "horizontal", 1)).toEqual({ x: 3, y: 4, heading: "vertical" });
+        // and back again
+        expect(turnAbout("cruiser", 3, 4, "vertical", 1)).toEqual({ x: 2, y: 5, heading: "horizontal" });
+        // about its first square, it swings down from there
+        expect(turnAbout("cruiser", 2, 5, "horizontal", 0)).toEqual({ x: 2, y: 5, heading: "vertical" });
+    });
+
+    it("keeps a turned ship on the board", () =>
+    {
+        // a carrier on B1-F1 turned about D1 would stick out above the top row, so it starts at D1
+        expect(turnAbout("carrier", 1, 0, "horizontal", 2)).toEqual({ x: 3, y: 0, heading: "vertical" });
+    });
+
+    it("rings a ship with the free squares it needs, corners included, clipped to the board", () =>
+    {
+        // a destroyer in the top-left corner: C1, A2, B2 and C2 around it
+        const corner = haloKeys([], "destroyer", 0, 0, "horizontal");
+        expect(corner.clear.sort()).toEqual(["A2", "B2", "C1", "C2"]);
+        expect(corner.blocked).toEqual([]);
+        // a cruiser in open water has 12 squares around it
+        expect(haloKeys([], "cruiser", 4, 4, "horizontal").clear).toHaveLength(12);
+    });
+
+    it("marks the halo squares that another ship is on", () =>
+    {
+        // the carrier sits on B2-F2; a cruiser on B3-D3 has it all along one side
+        const { clear, blocked } = haloKeys(carrierAtB2, "cruiser", 1, 2, "horizontal");
+        expect(blocked.sort()).toEqual(["B2", "C2", "D2", "E2"]);
+        expect(clear).toContain("A2");
+        // corner to corner with the carrier's last square
+        expect(haloKeys(carrierAtB2, "cruiser", 6, 2, "horizontal").blocked).toEqual(["F2"]);
     });
 
     it("keys the covered squares and skips any off the board", () =>
