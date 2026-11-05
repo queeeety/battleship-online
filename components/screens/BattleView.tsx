@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { HTMLAttributes, ReactNode, Ref } from "react";
 import { AbilityCard, AbilityDraw, Board, Legend, ShotLog, TurnIndicator, type ShotLogEntry } from "@/components/game";
 import type { AbilityCardProps } from "@/components/game/AbilityCard";
 import type { AbilityDrawProps } from "@/components/game/AbilityDraw";
@@ -18,6 +18,8 @@ export interface BattleViewProps {
   target: Partial<BoardProps>;
   /** Your waters. */
   own: Partial<BoardProps>;
+  /** Spread onto the area around your board, e.g. Reroute's dragging. */
+  ownArea?: HTMLAttributes<HTMLDivElement> & { ref?: Ref<HTMLDivElement> };
   turn: "you" | "opponent" | "ai";
   turnNumber?: number;
   /** The turn timer at either size; called twice, so the caller decides which copy acts on expiry. */
@@ -41,6 +43,7 @@ export function BattleView({
   opponentName,
   target,
   own,
+  ownArea,
   turn,
   turnNumber,
   renderClock,
@@ -72,7 +75,9 @@ export function BattleView({
           <Board variant="target" title="Enemy waters" cellSize="lg" {...target} />
         </div>
         <div className="mb-board-centred order-3 grid content-start gap-(--space-3) max-[899px]:justify-items-center min-[900px]:order-none">
-          <Board variant="own" title="Your waters" cellSize="sm" {...own} />
+          <div {...ownArea}>
+            <Board variant="own" title="Your waters" cellSize="sm" {...own} />
+          </div>
           <div className="max-[899px]:hidden">
             <Legend />
           </div>

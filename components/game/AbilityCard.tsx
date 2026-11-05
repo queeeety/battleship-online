@@ -15,13 +15,15 @@ export interface AbilityCardProps {
   onCancel?: () => void;
   /** While armed, e.g. Line Scan's row or column, or turning the rerouted ship. */
   turn?: { label: string; onTurn: () => void };
+  /** While armed, e.g. Reroute's move once it's been placed. */
+  confirm?: { label: string; onConfirm: () => void };
   /** Just received: the card glows and says so until it's used. */
   fresh?: boolean;
   /** No description. The Use/Cancel button moves into the head row, and only shows when onUse or onCancel is given. */
   compact?: boolean;
 }
 
-export function AbilityCard({ ability, state = "ready", onUse, onCancel, turn, fresh, compact }: AbilityCardProps) {
+export function AbilityCard({ ability, state = "ready", onUse, onCancel, turn, confirm, fresh, compact }: AbilityCardProps) {
   if (!ability) {
     return (
       <div className="mb-ability is-empty">
@@ -35,6 +37,11 @@ export function AbilityCard({ ability, state = "ready", onUse, onCancel, turn, f
   const action =
     state === "armed" ? (
       <>
+        {confirm && (
+          <Button size="sm" variant="primary" icon="check" onClick={confirm.onConfirm}>
+            {confirm.label}
+          </Button>
+        )}
         {turn && (
           <Button size="sm" icon="rotate" onClick={turn.onTurn}>
             {turn.label}

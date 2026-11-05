@@ -203,6 +203,7 @@ export function BattleStage({
         onCellClick: fire,
         ...ability.targetBoardProps,
       }}
+      ownArea={ability.ownArea}
       own={{
         ...boardProps(own),
         ships: [...own.ships, ...ability.ownGhost],
