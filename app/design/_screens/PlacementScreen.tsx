@@ -1,99 +1,115 @@
 "use client";
 
 import { useState } from "react";
-import { Board, FleetStatus, PlayerChip, SHIPS, type ShipPlacement, type ShipType } from "@/components/game";
-import { Banner, Button, Icon } from "@/components/ui";
-import { SCREEN, ScreenBar } from "./chrome";
+import type { ShipPlacement } from "@/components/game";
+import { PlacementView } from "@/components/screens/PlacementView";
+import {
+  FLEET_ORDER,
+  isPlaced,
+  placementError,
+  placementErrorText,
+  readyLabel,
+  squareKeys,
+  toShipPlacements,
+  type Layout,
+} from "@/components/screens/placement";
+import { usePlacement } from "@/hooks/usePlacement";
+import { SampleStates, ShowcaseStrip } from "./chrome";
 
-const PLACED: ShipPlacement[] = [
-  { type: "carrier", x: 1, y: 1, orientation: "horizontal" },
-  { type: "battleship", x: 8, y: 2, orientation: "vertical" },
-  { type: "destroyer", x: 4, y: 4, orientation: "horizontal" },
+type Stage = "editing" | "error" | "locked";
+
+// three ships already down, so the sample opens part-way through
+const PLACED: Layout = [
+  { name: "Carrier", row: 1, col: 1, orientation: "horizontal" },
+  { name: "Battleship", row: 2, col: 8, orientation: "vertical" },
+  { name: "Destroyer", row: 4, col: 4, orientation: "horizontal" },
 ];
 
-const FLEET_ORDER: ShipType[] = ["carrier", "battleship", "cruiser", "submarine", "destroyer"];
+// the whole fleet, for the locked sample
+const FULL: Layout = [
+  ...PLACED,
+  { name: "Cruiser", row: 7, col: 1, orientation: "horizontal" },
+  { name: "Submarine", row: 9, col: 5, orientation: "horizontal" },
+];
 
-// a fixed sample: the selected ship hangs over the destroyer, so it shows as an invalid ghost
-const GHOST_AT = { x: 3, y: 4 };
+// the error sample: the cruiser hangs over the destroyer, so it shows as an invalid ghost
+const GHOST = { type: "cruiser", x: 3, y: 4, orientation: "horizontal" } as const;
+const GHOST_ERROR = placementError(PLACED, GHOST.type, GHOST.x, GHOST.y, GHOST.orientation);
+
+const OPPONENT = { name: "Teddy", ready: true };
+
+// the real editor, with Ready locking the fleet here instead of sending it
+function Editor({ onReady }: { onReady: (layout: Layout) => void }) {
+  const placement = usePlacement(PLACED);
+  return (
+    <PlacementView
+      {...placement.editor}
+      ready={{
+        label: readyLabel(placement.left),
+        disabled: !placement.complete,
+        onClick: () => onReady(placement.layout),
+      }}
+      opponent={OPPONENT}
+    />
+  );
+}
 
 export function PlacementScreen() {
-  const [selected, setSelected] = useState<ShipType>("cruiser");
-  const placedTypes = new Set(PLACED.map((s) => s.type));
-  const fleet = FLEET_ORDER.map((type) => ({ type, placed: placedTypes.has(type) }));
-  const left = fleet.filter((f) => !f.placed).length;
-  const showGhost = !placedTypes.has(selected);
-  const error = showGhost ? `${SHIPS[selected].name} overlaps another ship.` : null;
+  const [stage, setStage] = useState<Stage>("editing");
+  const [locked, setLocked] = useState<Layout>(FULL);
 
-  const ships: ShipPlacement[] = showGhost
-    ? [...PLACED, { type: selected, ...GHOST_AT, orientation: "horizontal", ghost: "invalid" }]
-    : PLACED;
-
-  const tray = <FleetStatus mode="placement" selected={selected} onSelect={setSelected} fleet={fleet} />;
-  const ready = (
-    <Button variant="primary" block disabled={left > 0}>
-      {left > 0 ? `Ready · ${left} ships left` : "Ready"}
-    </Button>
-  );
+  let screen;
+  if (stage === "locked") {
+    screen = (
+      <PlacementView
+        title="Fleet ready"
+        board={{ ships: toShipPlacements(locked) }}
+        fleet={FLEET_ORDER.map((type) => ({ type, placed: true }))}
+        ready={{ label: "Waiting for Teddy…", disabled: true }}
+        opponent={{ ...OPPONENT, ready: false }}
+      />
+    );
+  } else if (stage === "error") {
+    const ghost: ShipPlacement = { ...GHOST, ghost: "invalid" };
+    screen = (
+      <PlacementView
+        board={{
+          ships: [...toShipPlacements(PLACED), ghost],
+          highlight: { keys: squareKeys(GHOST.type, GHOST.x, GHOST.y, GHOST.orientation), valid: false },
+        }}
+        fleet={FLEET_ORDER.map((type) => ({ type, placed: isPlaced(PLACED, type) }))}
+        selected={GHOST.type}
+        error={GHOST_ERROR === null ? null : placementErrorText(GHOST_ERROR, GHOST.type)}
+        ready={{ label: readyLabel(2), disabled: true }}
+        opponent={OPPONENT}
+      />
+    );
+  } else {
+    screen = (
+      <Editor
+        onReady={(layout) => {
+          setLocked(layout);
+          setStage("locked");
+        }}
+      />
+    );
+  }
 
   return (
-    <div className={SCREEN}>
-      <ScreenBar>
-        <span className="mb-label min-[600px]:hidden">Teddy · Ready</span>
-        <div className="max-[599px]:hidden">
-          <PlayerChip name="Teddy" ready />
-        </div>
-      </ScreenBar>
-      <main className="grid content-start gap-(--space-6) px-(--space-4) pt-(--space-4) min-[900px]:grid-cols-[auto_300px] min-[900px]:px-(--space-6) min-[900px]:pt-(--space-5) min-[900px]:pb-(--space-6)">
-        <div className="grid content-start gap-(--space-4)">
-          <h1 className="text-title">Place your fleet</h1>
-          {/* phones: pick a ship right above the board you place it on */}
-          <div className="min-[900px]:hidden">{tray}</div>
-          <div className="max-[480px]:justify-self-center">
-            <Board variant="own" ships={ships} cellSize="lg" />
-          </div>
-          {/* phones: a quiet line under the board, with its height kept so nothing jumps */}
-          <p className="mb-field-msg min-h-[18px] text-danger min-[900px]:hidden" role="alert">
-            {error && (
-              <>
-                <Icon name="warning" size={16} />
-                {error}
-              </>
-            )}
-          </p>
-          {error && (
-            <div className="max-[899px]:hidden">
-              <Banner tone="danger" icon="warning">
-                {error}
-              </Banner>
-            </div>
-          )}
-        </div>
-
-        {/* tablets and desktop: the fleet and the actions beside the board */}
-        <div className="grid content-start gap-(--space-3) max-[899px]:hidden min-[900px]:pt-[46px]">
-          {tray}
-          <div className="mb-row">
-            <Button size="sm" icon="rotate">
-              Rotate (R)
-            </Button>
-            <Button size="sm" icon="shuffle">
-              Randomise
-            </Button>
-          </div>
-          {ready}
-        </div>
-
-        {/* phones: the actions stay in reach at the bottom of the screen */}
-        <div className="sticky bottom-0 -mx-(--space-4) flex items-center gap-(--space-2) border-t border-line bg-surface-000 px-(--space-4) pt-(--space-3) pb-[max(var(--space-3),env(safe-area-inset-bottom))] min-[900px]:hidden">
-          <Button icon="rotate" iconOnly>
-            Rotate
-          </Button>
-          <Button icon="shuffle" iconOnly>
-            Randomise
-          </Button>
-          <div className="flex-1">{ready}</div>
-        </div>
-      </main>
-    </div>
+    <>
+      <ShowcaseStrip name="Placement screen">
+        <SampleStates
+          label="Sample state"
+          value={stage}
+          onChange={setStage}
+          options={[
+            { value: "editing", label: "Editing" },
+            { value: "error", label: "Overlap error" },
+            { value: "locked", label: "Fleet ready" },
+          ]}
+        />
+      </ShowcaseStrip>
+      {screen}
+    </>
   );
 }
