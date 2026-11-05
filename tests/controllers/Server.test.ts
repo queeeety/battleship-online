@@ -317,6 +317,14 @@ describe("Server.placeShips", () =>
         await expect(as("host").placeShips(code, bad)).rejects.toBeInstanceOf(InvalidRequestError);
     });
 
+    it("refuses a fleet with ships touching", async () =>
+    {
+        const { as, code } = await battle();
+        const touching = layout();
+        touching.ships[1] = { ...touching.ships[1], row: 1 };   // the Battleship right under the Carrier
+        await expect(as("host").placeShips(code, touching)).rejects.toBeInstanceOf(InvalidRequestError);
+    });
+
     it("refuses before a guest has joined", async () =>
     {
         const { as } = await battle();
@@ -398,16 +406,16 @@ describe("Server.getMyState", () =>
     it("shows where an opponent's ship lay once you sink it, and no other", async () =>
     {
         const { as, code, first } = await startedBattle();
-        await as(first).fireShot(code, { row: 4, col: 0 });
+        await as(first).fireShot(code, { row: 8, col: 0 });
         expect((await as(first).getMyState(code)).opponentSunkShips).toEqual([]);
 
-        await as(first).fireShot(code, { row: 4, col: 1 });
+        await as(first).fireShot(code, { row: 8, col: 1 });
         expect((await as(first).getMyState(code)).opponentSunkShips).toEqual([
-            { name: "Destroyer", row: 4, col: 0, orientation: "horizontal" }
+            { name: "Destroyer", row: 8, col: 0, orientation: "horizontal" }
         ]);
     });
 
-    it("shows the opponent's shots at you and yours at them", async () =>
+        it("shows the opponent's shots at you and yours at them", async () =>
     {
         const { as, code, first, second } = await startedBattle();
         await as(first).fireShot(code, { row: 9, col: 9 });
@@ -793,12 +801,12 @@ describe("Server.useAbility", () =>
         const mine = await as(first).getMyState(code);
         expect(mine.heldAbility).toBeNull();
         expect(mine.yourTurn).toBe(false);
-        expect(mine.revealedSquares).toHaveLength(9);                  // the known fleet fills that corner
+        expect(mine.revealedSquares).toHaveLength(6);                  // the Carrier and Battleship rows of that corner
 
         const theirs = await as(second).getMyState(code);
         expect(theirs.revealedSquares).toEqual([]);
         expect(JSON.stringify(theirs)).not.toContain("Radar Sweep");
-        expect(sentTo(notifier, first, "scanResult")[0].cells).toHaveLength(9);
+        expect(sentTo(notifier, first, "scanResult")[0].cells).toHaveLength(6);
         expect(sentTo(notifier, second, "abilityUsed")[0]).toMatchObject({ by: first === "host" ? "Cian" : "Aoife" });
         expect(sentTo(notifier, second, "scanResult")).toEqual([]);
     });
@@ -806,8 +814,8 @@ describe("Server.useAbility", () =>
     it("scans a row with Line Scan", async () =>
     {
         const { as, code, first } = await withAbility("line_scan");
-        await as(first).useAbility(code, { name: "Line Scan", line: "row" }, { row: 4, col: 0 });
-        expect((await as(first).getMyState(code)).revealedSquares).toEqual([{ row: 4, col: 0 }, { row: 4, col: 1 }]);
+        await as(first).useAbility(code, { name: "Line Scan", line: "row" }, { row: 8, col: 0 });
+        expect((await as(first).getMyState(code)).revealedSquares).toEqual([{ row: 8, col: 0 }, { row: 8, col: 1 }]);
     });
 
     it("keeps a revealed square highlighted until it's shot", async () =>
@@ -816,7 +824,7 @@ describe("Server.useAbility", () =>
         await as(first).useAbility(code, { name: "Radar Sweep" }, { row: 0, col: 0 });
         await as(second).fireShot(code, { row: 9, col: 9 });           // a miss, back to first
         await as(first).fireShot(code, { row: 0, col: 0 });
-        expect((await as(first).getMyState(code)).revealedSquares).toHaveLength(8);
+        expect((await as(first).getMyState(code)).revealedSquares).toHaveLength(5);
     });
 
     it("arms Double Shot without a target and keeps the turn", async () =>
@@ -834,7 +842,7 @@ describe("Server.useAbility", () =>
         const firstSeat = first === "host" ? 1 : 2;
         Object.assign(db.games.get(code)!, { [`ability_p${3 - firstSeat}`]: "line_scan" });
         await as(first).fireShot(code, { row: 9, col: 9 });            // a miss, second to move
-        await as(second).useAbility(code, { name: "Line Scan", line: "row" }, { row: 4, col: 0 });
+        await as(second).useAbility(code, { name: "Line Scan", line: "row" }, { row: 8, col: 0 });
         expect((await as(second).getMyState(code)).revealedSquares).toHaveLength(2);
 
         Object.assign(db.games.get(code)!, { [`ability_p${firstSeat}`]: "reroute" });
@@ -925,8 +933,8 @@ describe("Server ability offers and scans", () =>
         const { as, code, first, second, db, notifier } = await startedBattle();
         const seat = second === "host" ? 1 : 2;
         Object.assign(db.games.get(code)!, { [`ability_p${seat}`]: "radar_sweep" });
-        await as(first).fireShot(code, { row: 4, col: 0 });
-        await as(first).fireShot(code, { row: 4, col: 1 });           // sinks the Destroyer
+        await as(first).fireShot(code, { row: 8, col: 0 });
+        await as(first).fireShot(code, { row: 8, col: 1 });           // sinks the Destroyer
 
         const [offer] = sentTo(notifier, second, "abilityOffer");
         expect(offer.current.getName()).toBe("Radar Sweep");
@@ -949,7 +957,7 @@ describe("Server ability offers and scans", () =>
         notifier.sendPrivate.mockRejectedValue(new Error("Realtime down"));
         const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
         await expect(as(first).useAbility(code, { name: "Radar Sweep" }, { row: 0, col: 0 })).resolves.toBeUndefined();
-        expect((await as(first).getMyState(code)).revealedSquares).toHaveLength(9);
+        expect((await as(first).getMyState(code)).revealedSquares).toHaveLength(6);
         quiet.mockRestore();
     });
 });

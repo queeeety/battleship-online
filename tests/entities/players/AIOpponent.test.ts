@@ -108,12 +108,12 @@ describe("AIOpponent", () =>
     {
         const ai = new AIOpponent(Difficulty.NORMAL);
         const board = placeKnownFleet();
-        // hit the Submarine (row 4) and Destroyer (row 5) on column A, then sink the Destroyer
-        for (const c of [new Coordinate(0, 3), new Coordinate(0, 4), new Coordinate(1, 4)])
+        // hit the Submarine (row 7) and Destroyer (row 9) on column A, then sink the Destroyer
+        for (const c of [new Coordinate(0, 6), new Coordinate(0, 8), new Coordinate(1, 8)])
         {
             ai.recordShot(board.receiveShot(c, ai));
         }
-        expect(ai.toJSON().activeHits).toEqual([{ x: 0, y: 3 }]);
+        expect(ai.toJSON().activeHits).toEqual([{ x: 0, y: 6 }]);
         expect(ai.toJSON().huntQueue.length).toBeGreaterThan(0);
     });
 

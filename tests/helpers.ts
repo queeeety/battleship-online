@@ -15,13 +15,16 @@ import { Difficulty, GameType, Orientation } from "../lib/enums";
  * Helpers that only one test file needs stay in that file.
  */
 
-// every ship horizontal from column A: Carrier on row 1, Battleship row 2, ..., Destroyer row 5
+// every ship horizontal from column A, a free row between each: Carrier on row 1, Battleship
+// row 3, Cruiser row 5, Submarine row 7, Destroyer row 9
+export const KNOWN_FLEET_ROWS = [0, 2, 4, 6, 8];
+
 export function placeKnownFleet(b: Board = new Board()): Board
 {
     const ships: Ship[] = [new Carrier(), new Battleship(), new Cruiser(), new Submarine(), new Destroyer()];
-    ships.forEach((s, row) =>
+    ships.forEach((s, i) =>
     {
-        if (!b.placeShip(s, new Coordinate(0, row), Orientation.HORIZONTAL)) throw new Error("fixture fleet didn't fit");
+        if (!b.placeShip(s, new Coordinate(0, KNOWN_FLEET_ROWS[i]), Orientation.HORIZONTAL)) throw new Error("fixture fleet didn't fit");
     });
     return b;
 }
@@ -30,7 +33,7 @@ export function placeKnownFleet(b: Board = new Board()): Board
 export function knownFleetSquares(): Coordinate[]
 {
     const lengths = [5, 4, 3, 3, 2];
-    return lengths.flatMap((length, row) => Array.from({ length }, (_, x) => new Coordinate(x, row)));
+    return lengths.flatMap((length, i) => Array.from({ length }, (_, x) => new Coordinate(x, KNOWN_FLEET_ROWS[i])));
 }
 
 // a square the known fleet never covers
@@ -73,8 +76,8 @@ export function gameWithAiToMove(difficulty: Difficulty = Difficulty.NORMAL): { 
 // sinks the opponent's Destroyer (row 5, columns A-B in the known fleet)
 export function sinkDestroyer(game: Game, shooter: Player): Shot
 {
-    game.fireShot(shooter, new Coordinate(0, 4));
-    return game.fireShot(shooter, new Coordinate(1, 4));
+    game.fireShot(shooter, new Coordinate(0, 8));
+    return game.fireShot(shooter, new Coordinate(1, 8));
 }
 
 // lets an ability pass Teddy's canUse and isValidTarget checks, and returns a spy on its apply

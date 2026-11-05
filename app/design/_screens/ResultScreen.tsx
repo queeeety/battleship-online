@@ -20,7 +20,7 @@ const ENEMY_SHIPS: ShipPlacement[] = [
   { type: "carrier", x: 1, y: 8, orientation: "horizontal" },
   { type: "battleship", x: 7, y: 1, orientation: "vertical" },
   { type: "cruiser", x: 2, y: 2, orientation: "horizontal" },
-  { type: "submarine", x: 5, y: 5, orientation: "vertical" },
+  { type: "submarine", x: 5, y: 4, orientation: "vertical" },
   { type: "destroyer", x: 0, y: 0, orientation: "vertical" },
 ];
 

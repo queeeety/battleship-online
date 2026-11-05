@@ -44,8 +44,28 @@ export class Board
     public canPlace(s: Ship, start: Coordinate, o: Orientation): boolean
     {
         if (this.ships.includes(s)) return false;
-        return Ship.squaresFrom(start, o, s.getLength()).every(sq =>
-            sq.isWithinBounds(this.width, this.height) && this.getCell(sq).getShip() === null);
+        return this.hasRoomFor(Ship.squaresFrom(start, o, s.getLength()));
+    }
+
+    // on the board and empty, with no other ship on any square around them (corners too), so
+    // ships always have at least one free square between them
+    public hasRoomFor(squares: Coordinate[], ignore: Ship | null = null): boolean
+    {
+        if (!squares.every(sq => sq.isWithinBounds(this.width, this.height))) return false;
+        return squares.every(sq =>
+        {
+            for (let dy = -1; dy <= 1; dy++)
+            {
+                for (let dx = -1; dx <= 1; dx++)
+                {
+                    const near = new Coordinate(sq.getX() + dx, sq.getY() + dy);
+                    if (!near.isWithinBounds(this.width, this.height)) continue;
+                    const ship = this.getCell(near).getShip();
+                    if (ship !== null && ship !== ignore) return false;
+                }
+            }
+            return true;
+        });
     }
 
     public placeShip(s: Ship, start: Coordinate, o: Orientation): boolean
@@ -164,10 +184,8 @@ export class Board
 
         for (const sq of s.getCoordinates()) this.getCell(sq).clear();
 
-        const fits = Ship.squaresFrom(start, o, s.getLength()).every(sq =>
-            sq.isWithinBounds(this.width, this.height)
-            && this.getCell(sq).getShip() === null
-            && !this.getCell(sq).isAlreadyShot());
+        const squares = Ship.squaresFrom(start, o, s.getLength());
+        const fits = this.hasRoomFor(squares) && squares.every(sq => !this.getCell(sq).isAlreadyShot());
 
         s.place(fits ? start : oldStart, fits ? o : oldOrientation);
         for (const sq of s.getCoordinates()) this.getCell(sq).occupy(s);

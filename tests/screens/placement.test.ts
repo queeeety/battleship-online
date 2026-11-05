@@ -38,10 +38,12 @@ describe("placement", () =>
         expect(placementError([], "destroyer", 0, 9, "vertical")).toBe(PlacementError.OUT_OF_BOUNDS);
     });
 
-    it("refuses an overlap but lets ships touch", () =>
+    it("refuses an overlap, and a ship touching another, corners included", () =>
     {
         expect(placementError(carrierAtB2, "cruiser", 3, 0, "vertical")).toBe(PlacementError.OVERLAPS_SHIP);
-        expect(placementError(carrierAtB2, "cruiser", 1, 2, "horizontal")).toBeNull();
+        expect(placementError(carrierAtB2, "cruiser", 1, 2, "horizontal")).toBe(PlacementError.TOO_CLOSE);
+        expect(placementError(carrierAtB2, "cruiser", 6, 2, "horizontal")).toBe(PlacementError.TOO_CLOSE);
+        expect(placementError(carrierAtB2, "cruiser", 1, 3, "horizontal")).toBeNull();
     });
 
     it("refuses a second copy of a placed ship", () =>
@@ -86,6 +88,7 @@ describe("placement", () =>
     it("words each error for the player", () =>
     {
         expect(placementErrorText(PlacementError.OVERLAPS_SHIP, "cruiser")).toBe("Cruiser overlaps another ship.");
+        expect(placementErrorText(PlacementError.TOO_CLOSE, "cruiser")).toBe("Cruiser needs a free square between it and other ships.");
     });
 
     it("counts the ships left on the Ready button", () =>

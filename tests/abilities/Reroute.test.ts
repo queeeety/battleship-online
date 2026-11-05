@@ -57,10 +57,11 @@ describe("Reroute", () =>
     {
         const board = placeKnownFleet();
         const options = new Reroute().validPositions(board, destroyerOf(board));
-        // rows 1-4 are full from column A, so the Destroyer can't start inside them
+        // the Carrier fills A1-E1, and F1 has to stay free next to it
         expect(has(options, new Coordinate(0, 0))).toBe(false);
         expect(has(options, new Coordinate(3, 0))).toBe(false);
-        expect(has(options, new Coordinate(5, 0))).toBe(true);
+        expect(has(options, new Coordinate(5, 0))).toBe(false);
+        expect(has(options, new Coordinate(6, 0))).toBe(true);
     });
 
     it("validPositions is empty for a damaged ship or one not on the board", () =>

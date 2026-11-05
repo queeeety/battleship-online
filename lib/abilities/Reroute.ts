@@ -47,7 +47,8 @@ export class Reroute extends Ability
     }
 
     // every start square the ship could move to in orientation o (the chosen one by default).
-    // It may overlap its own old squares, but no other ship and no square that's been fired at.
+    // It may overlap its own old squares, but must keep clear of other ships and of squares
+    // that have been fired at.
     // Its current spot doesn't count, that isn't a move.
     public validPositions(b: Board, s: Ship, o: Orientation = this.orientation): Coordinate[]
     {
@@ -75,11 +76,7 @@ export class Reroute extends Ability
 
     private static fits(b: Board, s: Ship, start: Coordinate, o: Orientation): boolean
     {
-        return Ship.squaresFrom(start, o, s.getLength()).every(sq =>
-        {
-            if (!sq.isWithinBounds(b.getWidth(), b.getHeight())) return false;
-            const occupant = b.getCell(sq).getShip();
-            return (occupant === null || occupant === s) && !b.hasBeenTargeted(sq);
-        });
+        const squares = Ship.squaresFrom(start, o, s.getLength());
+        return b.hasRoomFor(squares, s) && squares.every(sq => !b.hasBeenTargeted(sq));
     }
 }

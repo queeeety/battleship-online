@@ -50,6 +50,7 @@ export function placementError(layout: Layout, type: ShipType, x: number, y: num
   if (!covered.every((c) => c.isWithinBounds(BOARD_SIZE, BOARD_SIZE))) return PlacementError.OUT_OF_BOUNDS;
   const board = boardOf(layout);
   if (covered.some((c) => board.getCell(c).getShip() !== null)) return PlacementError.OVERLAPS_SHIP;
+  if (!board.hasRoomFor(covered)) return PlacementError.TOO_CLOSE;
   return null;
 }
 
@@ -101,5 +102,7 @@ export function placementErrorText(error: PlacementError, type: ShipType): strin
       return `${name} is already on the board.`;
     case PlacementError.FLEET_INCOMPLETE:
       return "Place every ship before you confirm.";
+    case PlacementError.TOO_CLOSE:
+      return `${name} needs a free square between it and other ships.`;
   }
 }
