@@ -86,6 +86,13 @@
   @media (max-width: 480px) {
     .mb-board.mb-board { --mb-cell: var(--cell-sm); }
     .mb-board.mb-board.is-cell-lg { --mb-cell: clamp(var(--cell-sm), calc((100vw - 2 * var(--space-4)) / 10.7), var(--cell-md)); }
+    .mb-board-centred .mb-board.mb-board { --mb-cell: min(var(--cell-sm), calc((100vw - 2 * var(--space-4)) / 11.4)); }
+    .mb-board-centred .mb-board.mb-board.is-cell-lg { --mb-cell: clamp(24px, calc((100vw - 2 * var(--space-4)) / 11.4), var(--cell-md)); }
+  }
+  /* one column (phones, tablets upright): the grid itself in the middle, with as much room on the
+     right as the row numbers take on the left */
+  @media (max-width: 899px) {
+    .mb-board-centred .mb-board-frame, .mb-board-centred .mb-board-head { padding-right: calc(var(--mb-cell) * .7); }
   }
   .mb-board-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3); padding-left: calc(var(--mb-cell) * .7); }
   .mb-board-title { margin: 0; font-size: 17px; line-height: 24px; font-weight: 600; }

@@ -68,10 +68,10 @@ export function BattleView({
       <main className="mb-battle flex flex-col gap-(--space-5) px-(--space-4) pt-(--space-4) pb-(--space-6) min-[900px]:grid min-[900px]:grid-cols-[auto_auto] min-[900px]:items-start min-[900px]:justify-center min-[900px]:gap-(--space-6) min-[900px]:pt-(--space-5) min-[1200px]:grid-cols-[auto_auto_var(--hud-width)] min-[1200px]:px-(--space-6)">
         <h1 className="sr-only">Battle against {opponentName}</h1>
         {notice && <div className="order-first min-[900px]:col-span-full">{notice}</div>}
-        <div className="order-1 max-[480px]:self-center min-[900px]:order-none">
+        <div className="mb-board-centred order-1 max-[899px]:self-center min-[900px]:order-none">
           <Board variant="target" title="Enemy waters" cellSize="lg" {...target} />
         </div>
-        <div className="order-3 grid content-start gap-(--space-3) max-[480px]:justify-items-center min-[900px]:order-none">
+        <div className="mb-board-centred order-3 grid content-start gap-(--space-3) max-[899px]:justify-items-center min-[900px]:order-none">
           <Board variant="own" title="Your waters" cellSize="sm" {...own} />
           <div className="max-[899px]:hidden">
             <Legend />

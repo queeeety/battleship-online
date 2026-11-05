@@ -75,7 +75,7 @@ export function PlacementView({
           <div className="min-[900px]:hidden">{tray}</div>
           <div
             {...boardArea}
-            className={cx("max-[480px]:justify-self-center", editing && "mb-placing")}
+            className={cx("mb-board-centred max-[899px]:justify-self-center", editing && "mb-placing")}
           >
             <Board variant="own" cellSize="lg" {...board} />
           </div>

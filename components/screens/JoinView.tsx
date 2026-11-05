@@ -27,8 +27,8 @@ export function JoinView({ code, name, onNameChange, onJoin, pending, nameError,
   return (
     <div className={SCREEN}>
       <ScreenBar homeHref="/" />
-      <main className="grid w-full max-w-[880px] content-start px-(--space-4) pt-(--space-5) pb-(--space-6) min-[900px]:px-(--space-6)">
-        <form className="grid max-w-md content-start gap-(--space-4)" onSubmit={submit}>
+      <main className="mx-auto grid w-full max-w-[880px] content-start px-(--space-4) pt-(--space-5) pb-(--space-6) min-[900px]:px-(--space-6)">
+        <form className="grid w-full max-w-md content-start gap-(--space-4) justify-self-center" onSubmit={submit}>
           <div className="grid gap-(--space-1)">
             <span className="mb-label">You&apos;re invited</span>
             <h1 className="text-title">

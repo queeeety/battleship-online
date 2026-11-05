@@ -55,7 +55,7 @@ export function HomeView({
   return (
     <div className={SCREEN}>
       <ScreenBar />
-      <main className="grid w-full max-w-[880px] content-start gap-(--space-6) px-(--space-4) pt-(--space-5) pb-(--space-6) min-[900px]:grid-cols-2 min-[900px]:px-(--space-6)">
+      <main className="mx-auto grid w-full max-w-[880px] content-start gap-(--space-6) px-(--space-4) pt-(--space-5) pb-(--space-6) min-[900px]:grid-cols-2 min-[900px]:px-(--space-6)">
         {/* no box of its own, so an empty or still-streaming notice leaves no gap */}
         {notice && <div className="contents *:min-[900px]:col-span-2">{notice}</div>}
         <form className="grid content-start gap-(--space-4)" onSubmit={submit(onCreate)}>
