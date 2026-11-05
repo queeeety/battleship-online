@@ -31,9 +31,11 @@ export interface AbilityTargetingInput {
     yourShots: Square[];
     /** Ship squares your scans found and nobody has shot yet (PlayerView.revealedSquares). */
     revealedSquares: Square[];
+    /** Change it to forget the empty scan marks, e.g. after the opponent's Reroute. */
+    scanReset?: unknown;
     /** Sends the ability; resolve true once the server took it (useAbility's ok). */
     onUse: (request: AbilityRequest, target?: Square) => Promise<boolean> | boolean;
-    /** Answers the keep-or-replace prompt (chooseAbility). */
+    /** Answers the keep-or-replace prompt (chooseAbility); resolve false if it failed and the prompt comes back. */
     onChoose: (keep: boolean) => unknown;
 }
 
@@ -75,7 +77,7 @@ const keyOf = (c: Coordinate) => coordKey(c.getX(), c.getY());
  */
 export function useAbilityTargeting(input: AbilityTargetingInput): AbilityTargeting
 {
-    const { heldAbility, offeredAbility, yourTurn, doubleShotActive, yourBoard, yourShots, revealedSquares, onUse, onChoose } = input;
+    const { heldAbility, offeredAbility, yourTurn, doubleShotActive, yourBoard, yourShots, revealedSquares, scanReset, onUse, onChoose } = input;
 
     const ownBoard = useBoard(yourBoard);
     const enemyBoard = useBoard({ ships: [], shots: yourShots });
@@ -98,6 +100,12 @@ export function useAbilityTargeting(input: AbilityTargetingInput): AbilityTarget
     const [hover, setHover] = useState<{ board: AbilityBoard; x: number; y: number } | null>(null);
     const [busy, setBusy] = useState(false);
     const [scanned, setScanned] = useState<string[]>([]);
+    const [scansFrom, setScansFrom] = useState(scanReset);
+    if (scansFrom !== scanReset)
+    {
+        setScansFrom(scanReset);
+        setScanned([]);
+    }
 
     const ability = card.getAbility();
     const armed = card.isArmed() && !busy;
@@ -121,8 +129,8 @@ export function useAbilityTargeting(input: AbilityTargetingInput): AbilityTarget
     let unavailable: string | null = null;
     if (ability)
     {
-        if (!yourTurn) unavailable = "You can use it on your turn.";
-        else if (busy) unavailable = "Sending…";
+        if (busy) unavailable = "Sending…";
+        else if (!yourTurn) unavailable = "You can use it on your turn.";
         else if (ability instanceof DoubleShot && doubleShotActive) unavailable = "Double Shot is already active this turn.";
         else if (ability instanceof Reroute && !ownBoard.getShips().some(s => ability.canMove(ownBoard, s)))
         {
@@ -226,9 +234,19 @@ export function useAbilityTargeting(input: AbilityTargetingInput): AbilityTarget
 
     function answer(keep: boolean)
     {
+        const asked = card.getOffer();
         card.answerOffer(keep);
         rerender();
-        void onChoose(keep);
+        void Promise.resolve(onChoose(keep)).then(ok =>
+        {
+            // not answered after all: ask again
+            if (ok === false && asked && !card.getOffer())
+            {
+                card.show(asked.current);
+                card.showKeepOrReplace(asked.current, asked.drawn);
+                rerender();
+            }
+        });
     }
 
     return {
