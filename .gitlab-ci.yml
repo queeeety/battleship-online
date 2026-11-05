@@ -1,4 +1,5 @@
 # Runs on every push and merge request: lint, typecheck and tests in parallel, then a production build.
+# On main it then deploys the live site to Vercel.
 # Uses the DCU shared runner (untagged jobs). Node 22 meets Next 16's >= 20.9.
 
 default:
@@ -17,6 +18,7 @@ stages:
   - install
   - check
   - build
+  - deploy
 
 # fills the npm cache once so the other jobs only pull it
 install:
@@ -52,3 +54,24 @@ build:
   stage: build
   script:
     - npm run build
+
+# publishes main to https://ooad-battleship.vercel.app once everything above passes. Vercel builds it
+# with the Supabase keys set in the Vercel project. Needs VERCEL_TOKEN as a protected, masked CI/CD
+# variable.
+deploy:
+  stage: deploy
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $VERCEL_TOKEN
+  # nothing to install: the Vercel CLI uploads the source and Vercel runs the build
+  cache: []
+  before_script: []
+  variables:
+    VERCEL_ORG_ID: team_Q1evxiwchtBMNyzzJwllAuCQ
+    VERCEL_PROJECT_ID: prj_8vDX6h14fFwT9lRPlY5WguAWrjKU
+  # one deploy at a time
+  resource_group: production
+  environment:
+    name: production
+    url: https://ooad-battleship.vercel.app
+  script:
+    - npx --yes vercel@65.11.0 deploy --prod --yes --token "$VERCEL_TOKEN"
