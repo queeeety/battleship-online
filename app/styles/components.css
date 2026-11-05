@@ -269,6 +269,7 @@
   .mb-ability.is-fresh { border-color: var(--sonar); box-shadow: inset 0 0 0 1px var(--sonar); animation: mb-fresh 1.2s var(--mb-ease) 4; }
   .mb-ability.is-fresh .mb-label { color: var(--sonar); }
   @keyframes mb-fresh { 50% { box-shadow: inset 0 0 0 1px var(--sonar), 0 0 0 6px var(--sonar-soft); } }
+  .mb-ability-actions, .mb-ability-inline { display: flex; flex-wrap: wrap; gap: var(--space-2); }
   .mb-ability-head > div { min-width: 0; }
   .mb-ability-inline { margin-left: auto; }
 

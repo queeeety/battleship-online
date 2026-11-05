@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useReducer, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { BoardProps, ShipPlacement } from "@/components/game/Board";
 import {
     abilityIdFromName,
@@ -46,6 +46,8 @@ export interface AbilityTargeting {
         state: "ready" | "armed" | "unavailable";
         onUse: () => void;
         onCancel: () => void;
+        /** While armed: Rotate switches Line Scan between row and column, or turns the rerouted ship (R does the same). */
+        turn?: { label: string; onTurn: () => void };
     };
     /** One line on what to do next, or why the ability can't be used. Show it in a live region. */
     hint: string | null;
@@ -69,6 +71,9 @@ function useBoard(snapshot: BoardSnapshot): Board
 }
 
 const keyOf = (c: Coordinate) => coordKey(c.getX(), c.getY());
+
+// Radar Sweep's area is 3×3; it's aimed by its middle square
+const RADAR_SPAN = 3;
 
 /**
  * Connects the AbilityCard boundary class to the battle screen: the card, the keep-or-replace
@@ -98,6 +103,10 @@ export function useAbilityTargeting(input: AbilityTargetingInput): AbilityTarget
     // the card is a plain object, so changes to it ask for a render by hand
     const [, rerender] = useReducer((n: number) => n + 1, 0);
     const [hover, setHover] = useState<{ board: AbilityBoard; x: number; y: number } | null>(null);
+    // touch screens have no hover: the first tap aims (and shows where it lands), a second tap on
+    // the same square confirms
+    const [aimed, setAimed] = useState<string | null>(null);
+    const lastPointer = useRef("mouse");
     const [busy, setBusy] = useState(false);
     const [scanned, setScanned] = useState<string[]>([]);
     const [scansFrom, setScansFrom] = useState(scanReset);
@@ -107,9 +116,18 @@ export function useAbilityTargeting(input: AbilityTargetingInput): AbilityTarget
         setScanned([]);
     }
 
+    if (!card.isArmed() && aimed !== null) setAimed(null);
+
     const ability = card.getAbility();
     const armed = card.isArmed() && !busy;
     const armedOn: AbilityBoard | null = armed ? card.targetBoard() : null;
+
+    useEffect(() =>
+    {
+        const note = (e: PointerEvent) => { lastPointer.current = e.pointerType; };
+        window.addEventListener("pointerdown", note, true);
+        return () => window.removeEventListener("pointerdown", note, true);
+    }, []);
 
     // Escape cancels, R turns Line Scan between row and column or rotates the rerouted ship
     useEffect(() =>
@@ -170,22 +188,59 @@ export function useAbilityTargeting(input: AbilityTargetingInput): AbilityTarget
     {
         card.cancel();
         setHover(null);
+        setAimed(null);
         rerender();
+    }
+
+    // the square the ability is sent with: Radar Sweep's top left, kept on the board
+    function anchor(t: Coordinate): Coordinate
+    {
+        if (!(card.getAbility() instanceof RadarSweep)) return t;
+        const fit = (n: number, size: number) => Math.min(Math.max(n - 1, 0), size - RADAR_SPAN);
+        return new Coordinate(fit(t.getX(), enemyBoard.getWidth()), fit(t.getY(), enemyBoard.getHeight()));
+    }
+
+    // false on a touch screen's first tap at a square: that tap only aims
+    function confirmed(board: AbilityBoard, cell: Cell): boolean
+    {
+        const key = `${board}:${cell.key}`;
+        if (lastPointer.current !== "touch" || aimed === key) return true;
+        setAimed(key);
+        setHover({ board, x: cell.x, y: cell.y });
+        return false;
     }
 
     function onTargetClick(cell: Cell)
     {
-        const t = new Coordinate(cell.x, cell.y);
-        if (card.isValidTarget(enemyBoard, t)) void send(t);
+        const t = anchor(new Coordinate(cell.x, cell.y));
+        if (!card.isValidTarget(enemyBoard, t) || !confirmed("target", cell)) return;
+        setAimed(null);
+        void send(t);
     }
 
     // Reroute: a click on a valid square moves the selected ship, a click on a ship selects it
     function onOwnClick(cell: Cell)
     {
         const t = new Coordinate(cell.x, cell.y);
-        if (card.getSelectedShip() && card.isValidTarget(ownBoard, t)) { void send(t); return; }
+        if (card.getSelectedShip() && card.isValidTarget(ownBoard, t))
+        {
+            if (!confirmed("own", cell)) return;
+            setAimed(null);
+            void send(t);
+            return;
+        }
         const ship = ownBoard.getCell(t).getShip();
-        if (ship && card.selectShip(ownBoard, ship)) rerender();
+        if (ship && card.selectShip(ownBoard, ship))
+        {
+            setAimed(null);
+            rerender();
+        }
+    }
+
+    function turn()
+    {
+        card.rotate();
+        rerender();
     }
 
     function hoverOn(board: AbilityBoard)
@@ -199,7 +254,7 @@ export function useAbilityTargeting(input: AbilityTargetingInput): AbilityTarget
     if (armedOn && hover?.board === armedOn)
     {
         const board = armedOn === "own" ? ownBoard : enemyBoard;
-        const t = new Coordinate(hover.x, hover.y);
+        const t = armedOn === "target" ? anchor(new Coordinate(hover.x, hover.y)) : new Coordinate(hover.x, hover.y);
         const preview = card.previewAt(board, t);
         if (preview) highlight = { keys: preview.squares.map(keyOf), valid: preview.valid };
 
@@ -249,14 +304,16 @@ export function useAbilityTargeting(input: AbilityTargetingInput): AbilityTarget
         });
     }
 
+    const turnable = armed && (ability instanceof LineScan || (ability instanceof Reroute && card.getSelectedShip() !== null));
     return {
         card: {
             ability: abilityIdFromName(ability?.getName() ?? null),
             state: armed ? "armed" : unavailable ? "unavailable" : "ready",
             onUse: use,
-            onCancel: cancel
+            onCancel: cancel,
+            turn: turnable ? { label: "Rotate", onTurn: turn } : undefined
         },
-        hint: armed ? hintFor(card) : unavailable,
+        hint: !armed ? unavailable : aimed ? "Tap the same square again to confirm." : hintFor(card),
         offer: currentId && drawnId
             ? { current: currentId, drawn: drawnId, onKeep: () => answer(true), onReplace: () => answer(false) }
             : null,
@@ -274,19 +331,19 @@ export function useAbilityTargeting(input: AbilityTargetingInput): AbilityTarget
 function hintFor(card: AbilityCard): string
 {
     const a = card.getAbility();
-    if (a instanceof RadarSweep) return "Pick the top-left square of a 3×3 area to scan. Esc cancels.";
+    if (a instanceof RadarSweep) return "Pick the middle of the 3×3 area to scan.";
     if (a instanceof LineScan)
     {
         return card.isLineRow()
-            ? "Pick a square to scan its row. R switches to a column. Esc cancels."
-            : "Pick a square to scan its column. R switches to a row. Esc cancels.";
+            ? "Pick a square to scan its whole row. Rotate to scan a column."
+            : "Pick a square to scan its whole column. Rotate to scan a row.";
     }
     if (a instanceof Reroute)
     {
         const ship = card.getSelectedShip();
         return ship
-            ? `Pick where your ${ship.getName()} starts (its top or left end). R rotates. Esc cancels.`
-            : "Pick one of your undamaged ships to move. Esc cancels.";
+            ? `Pick where your ${ship.getName()} starts (its top or left end). Rotate to turn it.`
+            : "Pick one of your undamaged ships to move.";
     }
-    return "Esc cancels.";
+    return "";
 }

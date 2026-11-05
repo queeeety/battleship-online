@@ -167,8 +167,14 @@ describe("abilityLogEntry", () =>
 {
     it("logs an ability with its target square", () =>
     {
-        expect(abilityLogEntry("you", "Radar Sweep", 2, { row: 3, col: 1 })).toEqual({
-            turn: 2, by: "you", ability: "radar-sweep", coord: "B4", note: "used"
+        expect(abilityLogEntry("you", "Line Scan", 2, { row: 3, col: 1 })).toEqual({
+            turn: 2, by: "you", ability: "line-scan", coord: "B4", note: "used"
         });
+    });
+
+    it("logs Radar Sweep by the middle of its area, the square it was aimed at", () =>
+    {
+        // sent with the area's top left, B4
+        expect(abilityLogEntry("you", "Radar Sweep", 2, { row: 3, col: 1 }).coord).toBe("C5");
     });
 });

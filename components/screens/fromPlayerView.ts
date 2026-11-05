@@ -152,11 +152,13 @@ export function abilityLogEntry(
   turn: number,
   target?: { row: number; col: number },
 ): ShotLogEntry {
+  // Radar Sweep is sent with its area's top left but aimed by the middle, so the log shows that
+  const at = target && abilityName === "Radar Sweep" ? { row: target.row + 1, col: target.col + 1 } : target;
   return {
     turn,
     by,
     ability: abilityIdFromName(abilityName) ?? undefined,
-    coord: target && shotKey(target),
+    coord: at && shotKey(at),
     note: "used",
   };
 }
