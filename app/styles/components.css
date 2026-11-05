@@ -265,6 +265,10 @@
   .mb-ability.is-unavailable .mb-ability-icon { background: var(--surface-200); color: var(--ink-faint); }
   .mb-ability.is-empty { border-style: dashed; border-color: var(--line-control); }
   .mb-ability.is-compact { padding: var(--space-3); }
+  /* just received: a glow that pulses a few times, then a steady outline until it's used */
+  .mb-ability.is-fresh { border-color: var(--sonar); box-shadow: inset 0 0 0 1px var(--sonar); animation: mb-fresh 1.2s var(--mb-ease) 4; }
+  .mb-ability.is-fresh .mb-label { color: var(--sonar); }
+  @keyframes mb-fresh { 50% { box-shadow: inset 0 0 0 1px var(--sonar), 0 0 0 6px var(--sonar-soft); } }
   .mb-ability-head > div { min-width: 0; }
   .mb-ability-inline { margin-left: auto; }
 
@@ -388,7 +392,7 @@
 
   @media (prefers-reduced-motion: reduce) {
     .mb-sweep { display: none; }
-    .mb-mk-ping, .mb-pulse, .mb-turn-text, .mb-turn-dot, .mb-screen-in { animation: none; }
+    .mb-mk-ping, .mb-pulse, .mb-turn-text, .mb-turn-dot, .mb-screen-in, .mb-ability.is-fresh { animation: none; }
     .mb-timer-fill, .mb-btn { transition: none; }
   }
 }

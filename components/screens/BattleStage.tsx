@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition, type ReactNode } from "react";
 import { TurnTimer, type ShotLogEntry } from "@/components/game";
 import { MuteToggle } from "@/components/feedback/MuteToggle";
+import { abilityIdFromName } from "@/components/game/data";
 import { SunkMessage } from "@/components/feedback/SunkMessage";
 import { Banner, Toast } from "@/components/ui";
 import { useAbilityTargeting } from "@/hooks/useAbilityTargeting";
@@ -82,11 +83,18 @@ export function BattleStage({
   // worked out while rendering, so a new view and its notice show up in the same paint
   const [seen, setSeen] = useState(view);
   const [notice, setNotice] = useState<SunkNotice | null>(null);
+  // an ability just handed to you (one of your ships sank): a toast, and the card glows until used
+  const [gift, setGift] = useState<string | null>(null);
+  const [fresh, setFresh] = useState<string | null>(null);
   if (seen !== view) {
     setSeen(view);
     setLog((l) => [...l, ...newLogEntries(seen, view, l.length)]);
     const sunk = sunkNotice(seen, view);
     if (sunk) setNotice(sunk);
+    if (view.heldAbility && !seen.heldAbility) {
+      setGift(view.heldAbility);
+      setFresh(view.heldAbility);
+    }
   }
 
   useEffect(() => {
@@ -100,6 +108,12 @@ export function BattleStage({
     const id = setTimeout(() => setHeads(null), NOTICE_MS);
     return () => clearTimeout(id);
   }, [heads]);
+
+  useEffect(() => {
+    if (!gift) return;
+    const id = setTimeout(() => setGift(null), NOTICE_MS + 2000);
+    return () => clearTimeout(id);
+  }, [gift]);
 
   // a shot or an ability on its way: the board waits until the next view arrives
   const [pending, setPending] = useState<{ key: string | null; view: PlayerView } | null>(null);
@@ -148,6 +162,8 @@ export function BattleStage({
       return result.ok;
     },
   });
+
+  if (fresh !== null && (fresh !== view.heldAbility || ability.card.state === "armed")) setFresh(null);
 
   // the server pauses the clock only while the player to move is away
   const opponentAwaySince = view.opponent && !view.opponent.connected ? view.opponent.disconnectedAt : null;
@@ -204,7 +220,7 @@ export function BattleStage({
           size={size}
         />
       )}
-      ability={{ card: ability.card, hint: ability.hint }}
+      ability={{ card: { ...ability.card, fresh: fresh !== null }, hint: ability.hint }}
       log={log}
       notice={
         won !== null ? (
@@ -231,6 +247,11 @@ export function BattleStage({
                 {heads}
               </Toast>
             )
+          )}
+          {gift && (
+            <Toast icon={abilityIdFromName(gift) ?? "info"} onClose={() => setGift(null)}>
+              You got {gift}! It&apos;s in your ability card, ready for your turn.
+            </Toast>
           )}
         </>
       }

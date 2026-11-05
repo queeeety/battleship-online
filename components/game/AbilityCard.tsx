@@ -13,11 +13,13 @@ export interface AbilityCardProps {
   state?: "ready" | "armed" | "unavailable" | "new";
   onUse?: () => void;
   onCancel?: () => void;
+  /** Just received: the card glows and says so until it's used. */
+  fresh?: boolean;
   /** No description. The Use/Cancel button moves into the head row, and only shows when onUse or onCancel is given. */
   compact?: boolean;
 }
 
-export function AbilityCard({ ability, state = "ready", onUse, onCancel, compact }: AbilityCardProps) {
+export function AbilityCard({ ability, state = "ready", onUse, onCancel, fresh, compact }: AbilityCardProps) {
   if (!ability) {
     return (
       <div className="mb-ability is-empty">
@@ -40,14 +42,16 @@ export function AbilityCard({ ability, state = "ready", onUse, onCancel, compact
     );
 
   return (
-    <div className={cx("mb-ability", `is-${state}`, compact && "is-compact")}>
+    <div className={cx("mb-ability", `is-${state}`, fresh && state !== "armed" && "is-fresh", compact && "is-compact")}>
       <div className="mb-ability-head">
         <span className="mb-ability-icon">
           <Icon name={ability} size={24} />
         </span>
         <div>
           <span className="mb-label">
-            {state === "armed" ? "Armed · pick a target" : usesTurnShot ? "Uses your shot" : "Extra shot"}
+            {state === "armed"
+              ? "Armed · pick a target"
+              : `${fresh ? "New · " : ""}${usesTurnShot ? "Uses your shot" : "Extra shot"}`}
           </span>
           <h4 className="mb-ability-name">{name}</h4>
         </div>
