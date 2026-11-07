@@ -31,6 +31,9 @@ export function Countdown({ from = DEFAULT_FROM_SECONDS, onComplete }: Countdown
     // remember the last number ticked so re-renders never tick it twice
     const lastTicked = useRef<number | null>(null);
     useEffect(() => {
+        audio.installUnlock();
+    }, []);
+    useEffect(() => {
         if (hasExpired || lastTicked.current === secondsLeft) {
             return;
         }

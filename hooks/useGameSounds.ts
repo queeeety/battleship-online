@@ -11,6 +11,11 @@ export function useGameSounds(view: SoundState | null): void {
     // the last view we heard, so each update is compared with the one before it
     const previous = useRef<SoundState | null>(null);
 
+    // the opponent's shots arrive without a click, so get the browser's permission on the first one
+    useEffect(() => {
+        audio.installUnlock();
+    }, []);
+
     useEffect(() => {
         if (view === null) {
             // the next view counts as a first load again, so old shots stay silent

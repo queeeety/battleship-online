@@ -13,6 +13,11 @@ function state(parts: Partial<SoundState> = {}): SoundState
     return { yourShots: [], opponentShots: [], yourTurn: false, ...parts };
 }
 
+function ended(won: boolean): SoundState["result"]
+{
+    return { won, shotsFired: 20, accuracy: 0.5, shipsSunk: won ? 5 : 2 };
+}
+
 describe("soundForUpdate", () =>
 {
     it("is silent on first load, even with old shots and my turn", () =>
@@ -103,5 +108,30 @@ describe("soundForUpdate", () =>
         const prev = state({ yourTurn: false });
         const next = state({ opponentShots: [shot(6, 2, ShotResult.MISS)], yourTurn: true });
         expect(soundForUpdate(prev, next)).toBe("miss");
+    });
+
+    it.each([
+        [true, "win"],
+        [false, "lose"]
+    ] as const)("plays %s on the update that ends the game, over the last shot", (won, sound) =>
+    {
+        const prev = state({ yourTurn: true, result: null });
+        const next = state({ yourShots: [shot(8, 8, ShotResult.SUNK)], result: ended(won) });
+        expect(soundForUpdate(prev, next)).toBe(sound);
+    });
+
+    it("plays the end sound for a game that ends without a shot (forfeit or timeout)", () =>
+    {
+        expect(soundForUpdate(state({ result: null }), state({ result: ended(true) }))).toBe("win");
+    });
+
+    it("is silent when a finished game re-sends its result", () =>
+    {
+        expect(soundForUpdate(state({ result: ended(false) }), state({ result: ended(false) }))).toBeNull();
+    });
+
+    it("is silent when a finished game is reloaded", () =>
+    {
+        expect(soundForUpdate(null, state({ result: ended(true) }))).toBeNull();
     });
 });

@@ -1,8 +1,9 @@
 import type { PlayerView, ShotView } from "../controllers/Server";
 import { SHOT_SOUNDS, type SoundName } from "./AudioManager";
 
-/** The parts of a PlayerView that decide which sound plays. */
-export type SoundState = Pick<PlayerView, "yourShots" | "opponentShots" | "yourTurn">;
+/** The parts of a PlayerView that decide which sound plays. result is optional so small demos can leave it out. */
+export type SoundState = Pick<PlayerView, "yourShots" | "opponentShots" | "yourTurn">
+    & Partial<Pick<PlayerView, "result">>;
 
 // higher wins when one update brings several new shots
 const SHOT_SOUND_RANK: Readonly<Partial<Record<SoundName, number>>> = {
@@ -35,14 +36,28 @@ function loudestShotSound(shots: readonly ShotView[]): SoundName | null
     return best;
 }
 
+// the update that ends the game, however it ended (last ship sunk, forfeit, timeout)
+function endSound(prev: SoundState, next: SoundState): SoundName | null
+{
+    if (prev.result || !next.result) {
+        return null;
+    }
+    return next.result.won ? "win" : "lose";
+}
+
 /**
  * Picks the one sound to play when the view changes from prev to next.
  * First load (prev null) is silent so old shots never replay.
+ * The game ending beats the shot that ended it.
  */
 export function soundForUpdate(prev: SoundState | null, next: SoundState): SoundName | null
 {
     if (prev === null) {
         return null;
+    }
+    const ending = endSound(prev, next);
+    if (ending !== null) {
+        return ending;
     }
     const shots = [
         ...newShots(prev.yourShots, next.yourShots),
