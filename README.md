@@ -86,6 +86,11 @@ You can also document commands to lint the code or run tests. These steps help t
 ## Authors and acknowledgment
 Show your appreciation to those who have contributed to the project.
 
+## Credits
+- **Music:** "Enemy Ship Approaching" by yd (via OpenGameArt.org). Licensed under Creative Commons CC0.
+  Track page: https://opengameart.org/node/15203, author: https://opengameart.org/users/yd.
+  Files: `public/music/battle-theme.ogg`, plus `battle-theme.m4a`, an AAC copy for browsers that can't play Ogg.
+
 ## License
 For open source projects, say how it is licensed.
 

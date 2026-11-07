@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { soundForUpdate, type SoundState } from "../../lib/audio/soundForUpdate";
+import { musicWanted, soundForUpdate, type SoundState } from "../../lib/audio/soundForUpdate";
 import type { ShotView } from "../../lib/controllers/Server";
-import { ShotResult } from "../../lib/enums";
+import { GameState, ShotResult } from "../../lib/enums";
 
 function shot(row: number, col: number, result: ShotResult): ShotView
 {
@@ -133,5 +133,36 @@ describe("soundForUpdate", () =>
     it("is silent when a finished game is reloaded", () =>
     {
         expect(soundForUpdate(null, state({ result: ended(true) }))).toBeNull();
+    });
+});
+
+describe("musicWanted", () =>
+{
+    const over = { won: true, shotsFired: 20, accuracy: 0.5, shipsSunk: 5 };
+
+    it("wants music during the battle", () =>
+    {
+        expect(musicWanted(state({ gameState: GameState.IN_PROGRESS, result: null }))).toBe(true);
+    });
+
+    // these screens have no Sound menu yet, so music there couldn't be turned off
+    it.each([
+        ["placement", GameState.PLACEMENT],
+        ["the result screen", GameState.FINISHED],
+        ["a lobby (no game yet)", null]
+    ] as const)("stays quiet on %s", (_screen, gameState) =>
+    {
+        expect(musicWanted(state({ gameState }))).toBe(false);
+    });
+
+    it("stops on the update that ends the game, even before the state says finished", () =>
+    {
+        expect(musicWanted(state({ gameState: GameState.IN_PROGRESS, result: over }))).toBe(false);
+    });
+
+    it("stays quiet while loading and for demos without a game state", () =>
+    {
+        expect(musicWanted(null)).toBe(false);
+        expect(musicWanted(state())).toBe(false);
     });
 });

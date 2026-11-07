@@ -1,9 +1,19 @@
 import type { PlayerView, ShotView } from "../controllers/Server";
+import { GameState } from "../enums";
 import { SHOT_SOUNDS, type SoundName } from "./AudioManager";
 
-/** The parts of a PlayerView that decide which sound plays. result is optional so small demos can leave it out. */
+/** The parts of a PlayerView that decide which sound plays. result and gameState are optional so small demos can leave them out. */
 export type SoundState = Pick<PlayerView, "yourShots" | "opponentShots" | "yourTurn">
-    & Partial<Pick<PlayerView, "result">>;
+    & Partial<Pick<PlayerView, "result" | "gameState">>;
+
+/**
+ * Music plays only during the battle, the one screen with the Sound menu for now,
+ * so nobody hears music they can't turn off. Once every screen has the menu this can widen.
+ */
+export function musicWanted(view: SoundState | null): boolean
+{
+    return view !== null && view.gameState === GameState.IN_PROGRESS && !view.result;
+}
 
 // higher wins when one update brings several new shots
 const SHOT_SOUND_RANK: Readonly<Partial<Record<SoundName, number>>> = {

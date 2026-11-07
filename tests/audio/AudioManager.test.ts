@@ -1,58 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AudioManager } from "../../lib/audio/AudioManager";
-import { MUTE_KEY } from "../../lib/audio/muteStorage";
+import { DUCK_LEVEL, DUCK_MS, FADE_IN_MS, FADE_OUT_MS } from "../../lib/audio/MusicChannel";
+import { MUSIC_MUTE_KEY, MUTE_KEY } from "../../lib/audio/muteStorage";
 import { ShotResult } from "../../lib/enums";
-
-// stands in for HTMLAudioElement: records every element made and every play() call
-class FakeAudio
-{
-    public static made: FakeAudio[] = [];
-    public static rejectPlay = false;
-
-    public paused = true;
-    public ended = false;
-    public muted = false;
-    public volume = 1;
-    public currentTime = 0;
-    public preload = "";
-    public readonly play = vi.fn(() => {
-        if (FakeAudio.rejectPlay) {
-            return Promise.reject(new Error("NotAllowedError"));
-        }
-        this.paused = false;
-        return Promise.resolve();
-    });
-    public readonly pause = vi.fn(() => { this.paused = true; });
-
-    public readonly src: string;
-
-    public constructor(src: string)
-    {
-        this.src = src;
-        FakeAudio.made.push(this);
-    }
-
-    public cloneNode(): FakeAudio
-    {
-        return new FakeAudio(this.src);
-    }
-}
-
-function fakeWindow(saved: Record<string, string> = {}): EventTarget & { localStorage: Pick<Storage, "getItem" | "setItem"> }
-{
-    const target = new EventTarget();
-    return Object.assign(target, {
-        localStorage: {
-            getItem: (key: string) => saved[key] ?? null,
-            setItem: (key: string, value: string) => { saved[key] = value; }
-        }
-    });
-}
-
-function madeFor(file: string): FakeAudio[]
-{
-    return FakeAudio.made.filter(a => a.src === `/sounds/${file}.mp3`);
-}
+import { FakeAudio, effectsMade as madeFor, fakeDocument, fakeWindow, musicMade } from "./fakes";
 
 // lets the prime's then/finally run
 async function flush(): Promise<void>
@@ -64,8 +15,7 @@ describe("AudioManager", () =>
 {
     beforeEach(() =>
     {
-        FakeAudio.made = [];
-        FakeAudio.rejectPlay = false;
+        FakeAudio.reset();
         vi.stubGlobal("Audio", FakeAudio);
         vi.stubGlobal("window", fakeWindow());
     });
@@ -174,8 +124,9 @@ describe("AudioManager", () =>
         window.dispatchEvent(new Event("keydown"));
         await flush();
 
-        expect(FakeAudio.made).toHaveLength(8);
-        for (const element of FakeAudio.made) {
+        const effects = FakeAudio.made.filter(a => a.src.startsWith("/sounds/"));
+        expect(effects).toHaveLength(8);
+        for (const element of effects) {
             expect(element.play).toHaveBeenCalledOnce();
             expect(element.pause).toHaveBeenCalledOnce();
             expect(element.muted).toBe(false);
@@ -189,7 +140,7 @@ describe("AudioManager", () =>
         manager.installUnlock();
         window.dispatchEvent(new Event("keydown"));
         await flush();
-        expect(FakeAudio.made).toHaveLength(8);
+        expect(FakeAudio.made.filter(a => a.src.startsWith("/sounds/"))).toHaveLength(8);
     });
 
     it("never throws when the browser blocks play()", async () =>
@@ -201,5 +152,330 @@ describe("AudioManager", () =>
         window.dispatchEvent(new Event("pointerdown"));
         await flush();
         expect(FakeAudio.made.every(a => !a.muted)).toBe(true);
+    });
+});
+
+describe("AudioManager music", () =>
+{
+    let doc: ReturnType<typeof fakeDocument>;
+
+    beforeEach(() =>
+    {
+        vi.useFakeTimers();
+        FakeAudio.reset();
+        doc = fakeDocument();
+        vi.stubGlobal("Audio", FakeAudio);
+        vi.stubGlobal("window", fakeWindow());
+        vi.stubGlobal("document", doc);
+    });
+
+    afterEach(() =>
+    {
+        vi.useRealTimers();
+        vi.unstubAllGlobals();
+    });
+
+    function music(): FakeAudio
+    {
+        expect(musicMade()).toHaveLength(1);
+        return musicMade()[0];
+    }
+
+    it("defaults to effects 0.8 and music 0.2", () =>
+    {
+        const manager = new AudioManager(true);
+        expect(manager.getVolume()).toBe(0.8);
+        expect(manager.getMusicVolume()).toBe(0.2);
+    });
+
+    // promise callbacks (the prime's then/finally) without moving the fake clock
+    async function settle(): Promise<void>
+    {
+        for (let i = 0; i < 5; i++) {
+            await Promise.resolve();
+        }
+    }
+
+    it("primes the music silently on the first press, without starting it", async () =>
+    {
+        const manager = new AudioManager(true);
+        manager.installUnlock();
+        expect(musicMade()).toHaveLength(0);
+
+        window.dispatchEvent(new Event("pointerdown"));
+        expect(music().loop).toBe(true);
+        expect(music().src).toBe("/music/battle-theme.ogg");
+        expect(music().play).toHaveBeenCalledOnce();
+        await settle();
+        expect(music().paused).toBe(true);
+        expect(music().muted).toBe(false);
+    });
+
+    it("keeps playing if the battle starts while the prime is still settling", async () =>
+    {
+        const manager = new AudioManager(true);
+        manager.installUnlock();
+        window.dispatchEvent(new Event("pointerdown"));
+        manager.startMusic();
+        await settle();
+        expect(music().paused).toBe(false);
+    });
+
+    it("doesn't prime (or download) the music while it is muted", () =>
+    {
+        const manager = new AudioManager(true);
+        manager.setMusicMuted(true);
+        manager.installUnlock();
+        window.dispatchEvent(new Event("pointerdown"));
+        expect(musicMade()).toHaveLength(0);
+    });
+
+    it("starts looping and fades in to the music volume", () =>
+    {
+        const manager = new AudioManager(true);
+        manager.startMusic();
+        expect(music().play).toHaveBeenCalledOnce();
+        expect(music().volume).toBe(0);
+
+        vi.advanceTimersByTime(FADE_IN_MS / 2);
+        expect(music().volume).toBeGreaterThan(0);
+        expect(music().volume).toBeLessThan(0.2);
+        vi.advanceTimersByTime(FADE_IN_MS / 2);
+        expect(music().volume).toBeCloseTo(0.2);
+    });
+
+    it("fades out and pauses on stopMusic (leaving the battle)", () =>
+    {
+        const manager = new AudioManager(true);
+        manager.startMusic();
+        vi.advanceTimersByTime(FADE_IN_MS);
+        manager.stopMusic();
+        expect(music().paused).toBe(false);
+        vi.advanceTimersByTime(FADE_OUT_MS);
+        expect(music().paused).toBe(true);
+    });
+
+    it("never restarts on repeated start calls (every screen calls it)", () =>
+    {
+        const manager = new AudioManager(true);
+        manager.startMusic();
+        vi.advanceTimersByTime(FADE_IN_MS);
+        music().currentTime = 42;
+
+        manager.startMusic();
+        manager.startMusic();
+        vi.advanceTimersByTime(FADE_IN_MS);
+        expect(music().play).toHaveBeenCalledOnce();
+        expect(music().currentTime).toBe(42);
+        expect(music().volume).toBeCloseTo(0.2);
+    });
+
+    it("tries again on the next start if the browser blocked the first", () =>
+    {
+        FakeAudio.rejectPlay = true;
+        const manager = new AudioManager(true);
+        manager.startMusic();
+        expect(music().paused).toBe(true);
+
+        FakeAudio.rejectPlay = false;
+        manager.startMusic();
+        expect(music().play).toHaveBeenCalledTimes(2);
+        expect(music().paused).toBe(false);
+    });
+
+    it("muting music leaves effects playing", () =>
+    {
+        const manager = new AudioManager(true);
+        manager.startMusic();
+        manager.setMusicMuted(true);
+        expect(music().paused).toBe(true);
+
+        manager.play("miss");
+        expect(madeFor("miss")[0].play).toHaveBeenCalledOnce();
+    });
+
+    it("muting effects leaves the music playing", () =>
+    {
+        const manager = new AudioManager(true);
+        manager.startMusic();
+        manager.setMuted(true);
+        manager.play("miss");
+        expect(madeFor("miss")).toHaveLength(0);
+        expect(music().paused).toBe(false);
+    });
+
+    it("doesn't download the track while music is muted, and fades in once unmuted", () =>
+    {
+        const manager = new AudioManager(true);
+        manager.setMusicMuted(true);
+        manager.startMusic();
+        expect(musicMade()).toHaveLength(0);
+
+        manager.setMusicMuted(false);
+        expect(music().play).toHaveBeenCalledOnce();
+        vi.advanceTimersByTime(FADE_IN_MS);
+        expect(music().volume).toBeCloseTo(0.2);
+    });
+
+    it("starts muted when music was muted on an earlier visit", () =>
+    {
+        vi.stubGlobal("window", fakeWindow({ [MUSIC_MUTE_KEY]: "true" }));
+        const manager = new AudioManager(true);
+        expect(manager.isMusicMuted()).toBe(true);
+        expect(manager.isMuted()).toBe(false);
+        manager.startMusic();
+        expect(musicMade()).toHaveLength(0);
+    });
+
+    it("clamps the music volume and applies it at once", () =>
+    {
+        const manager = new AudioManager(true);
+        manager.startMusic();
+        vi.advanceTimersByTime(FADE_IN_MS);
+        manager.setMusicVolume(5);
+        expect(manager.getMusicVolume()).toBe(1);
+        expect(music().volume).toBe(1);
+        manager.setMusicVolume(-3);
+        expect(manager.getMusicVolume()).toBe(0);
+        manager.setMusicVolume(Number.NaN);
+        expect(manager.getMusicVolume()).toBe(0);
+        manager.setMusicVolume(0.5);
+        expect(music().volume).toBeCloseTo(0.5);
+    });
+
+    it.each(["hit", "sunk"] as const)("ducks the music under %s, then brings it back", (sound) =>
+    {
+        const manager = new AudioManager(true);
+        manager.startMusic();
+        vi.advanceTimersByTime(FADE_IN_MS);
+
+        manager.play(sound);
+        expect(music().volume).toBeCloseTo(0.2 * DUCK_LEVEL);
+        vi.advanceTimersByTime(DUCK_MS - 1);
+        expect(music().volume).toBeCloseTo(0.2 * DUCK_LEVEL);
+        vi.advanceTimersByTime(1);
+        expect(music().volume).toBeCloseTo(0.2);
+    });
+
+    it("keeps the duck going while shots keep landing", () =>
+    {
+        const manager = new AudioManager(true);
+        manager.startMusic();
+        vi.advanceTimersByTime(FADE_IN_MS);
+        manager.play("hit");
+        vi.advanceTimersByTime(DUCK_MS - 100);
+        manager.play("hit");
+        vi.advanceTimersByTime(DUCK_MS - 100);
+        expect(music().volume).toBeCloseTo(0.2 * DUCK_LEVEL);
+    });
+
+    it.each(["miss", "tick", "turn", "error"] as const)("doesn't duck for %s", (sound) =>
+    {
+        const manager = new AudioManager(true);
+        manager.startMusic();
+        vi.advanceTimersByTime(FADE_IN_MS);
+        manager.play(sound);
+        expect(music().volume).toBeCloseTo(0.2);
+    });
+
+    it.each(["win", "lose"] as const)("fades the music out at game over, then plays %s", (sound) =>
+    {
+        const manager = new AudioManager(true);
+        manager.startMusic();
+        vi.advanceTimersByTime(FADE_IN_MS);
+
+        manager.play(sound);
+        expect(madeFor(sound)).toHaveLength(0);
+        vi.advanceTimersByTime(FADE_OUT_MS);
+        expect(music().volume).toBe(0);
+        expect(music().paused).toBe(true);
+        expect(madeFor(sound)[0].play).toHaveBeenCalledOnce();
+    });
+
+    it("plays win straight away when no music is playing", () =>
+    {
+        const manager = new AudioManager(true);
+        manager.setMusicMuted(true);
+        manager.play("win");
+        expect(madeFor("win")[0].play).toHaveBeenCalledOnce();
+    });
+
+    it("still fades the music at game over when effects are muted", () =>
+    {
+        const manager = new AudioManager(true);
+        manager.startMusic();
+        vi.advanceTimersByTime(FADE_IN_MS);
+        manager.setMuted(true);
+        manager.play("lose");
+        vi.advanceTimersByTime(FADE_OUT_MS);
+        expect(music().paused).toBe(true);
+        expect(madeFor("lose")).toHaveLength(0);
+    });
+
+    it("comes back with a fade in when the next game starts, from where it paused", () =>
+    {
+        const manager = new AudioManager(true);
+        manager.startMusic();
+        vi.advanceTimersByTime(FADE_IN_MS);
+        manager.play("win");
+        vi.advanceTimersByTime(FADE_OUT_MS);
+        music().currentTime = 30;
+
+        manager.startMusic();
+        expect(music().paused).toBe(false);
+        expect(music().currentTime).toBe(30);
+        vi.advanceTimersByTime(FADE_IN_MS);
+        expect(music().volume).toBeCloseTo(0.2);
+    });
+
+    it("pauses while the tab is hidden and resumes when it is visible", () =>
+    {
+        const manager = new AudioManager(true);
+        manager.installUnlock();
+        manager.startMusic();
+        vi.advanceTimersByTime(FADE_IN_MS);
+
+        doc.setHidden(true);
+        expect(music().paused).toBe(true);
+        doc.setHidden(false);
+        expect(music().paused).toBe(false);
+        expect(music().play).toHaveBeenCalledTimes(2);
+    });
+
+    it("stays paused on return to the tab if music was muted meanwhile", () =>
+    {
+        const manager = new AudioManager(true);
+        manager.installUnlock();
+        manager.startMusic();
+        doc.setHidden(true);
+        manager.setMusicMuted(true);
+        doc.setHidden(false);
+        expect(music().paused).toBe(true);
+    });
+
+    it("uses the AAC copy where Ogg can't play (older Safari)", () =>
+    {
+        FakeAudio.playable = ["audio/mp4"];
+        new AudioManager(true).startMusic();
+        expect(music().src).toBe("/music/battle-theme.m4a");
+    });
+
+    it("stays quiet without throwing when no music format can play", () =>
+    {
+        FakeAudio.playable = [];
+        const manager = new AudioManager(true);
+        expect(() => manager.startMusic()).not.toThrow();
+        expect(musicMade()).toHaveLength(0);
+        manager.play("hit");
+        expect(madeFor("hit")[0].play).toHaveBeenCalledOnce();
+    });
+
+    it("plays no music while the flag is off", () =>
+    {
+        const manager = new AudioManager(false);
+        manager.startMusic();
+        manager.installUnlock();
+        window.dispatchEvent(new Event("pointerdown"));
+        expect(FakeAudio.made).toHaveLength(0);
     });
 });

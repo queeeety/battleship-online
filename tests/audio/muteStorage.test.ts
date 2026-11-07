@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { loadMuted, saveMuted, MUTE_KEY } from "../../lib/audio/muteStorage";
+import { clampVolume, loadMuted, loadVolume, saveMuted, saveSetting, MUTE_KEY, MUSIC_VOLUME_KEY } from "../../lib/audio/muteStorage";
 
 // a plain object that behaves like localStorage for the two methods we use
 function fakeStorage(initial: Record<string, string> = {}): Pick<Storage, "getItem" | "setItem">
@@ -56,5 +56,54 @@ describe("loadMuted", () =>
     {
         expect(loadMuted(throwingStorage, true)).toBe(true);
         expect(loadMuted(null, false)).toBe(false);
+    });
+});
+
+describe("clampVolume", () =>
+{
+    it.each([
+        [0.5, 0.5], [0, 0], [1, 1], [-0.2, 0], [7, 1],
+        [Number.NaN, 0.3], [Number.POSITIVE_INFINITY, 0.3]
+    ])("clampVolume(%s) is %s", (volume, expected) =>
+    {
+        expect(clampVolume(volume, 0.3)).toBe(expected);
+    });
+});
+
+describe("loadVolume", () =>
+{
+    it("loads a saved volume", () =>
+    {
+        const storage = fakeStorage();
+        saveSetting(storage, MUSIC_VOLUME_KEY, 0.35);
+        expect(loadVolume(storage, MUSIC_VOLUME_KEY, 0.2)).toBe(0.35);
+    });
+
+    it.each(["2", "-1"])("clamps a saved %s into 0..1", (saved) =>
+    {
+        const volume = loadVolume(fakeStorage({ [MUSIC_VOLUME_KEY]: saved }), MUSIC_VOLUME_KEY, 0.2);
+        expect(volume).toBe(saved === "2" ? 1 : 0);
+    });
+
+    // "" would become 0 (silent) if read as a number
+    it.each(["loud", "", "  ", "NaN", "Infinity"])("falls back for the bad value %j", (saved) =>
+    {
+        expect(loadVolume(fakeStorage({ [MUSIC_VOLUME_KEY]: saved }), MUSIC_VOLUME_KEY, 0.2)).toBe(0.2);
+    });
+
+    it("falls back when nothing is saved, storage throws, or there is no storage", () =>
+    {
+        expect(loadVolume(fakeStorage(), MUSIC_VOLUME_KEY, 0.2)).toBe(0.2);
+        expect(loadVolume(throwingStorage, MUSIC_VOLUME_KEY, 0.2)).toBe(0.2);
+        expect(loadVolume(null, MUSIC_VOLUME_KEY, 0.2)).toBe(0.2);
+    });
+});
+
+describe("saveSetting", () =>
+{
+    it("does not crash when storage throws or is missing", () =>
+    {
+        expect(() => saveSetting(throwingStorage, MUSIC_VOLUME_KEY, 0.5)).not.toThrow();
+        expect(() => saveSetting(null, MUSIC_VOLUME_KEY, 0.5)).not.toThrow();
     });
 });
