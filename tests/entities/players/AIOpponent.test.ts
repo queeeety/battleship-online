@@ -78,6 +78,43 @@ describe("AIOpponent", () =>
         expect(["1,0", "0,1"]).toContain(next.key());
     });
 
+    it("Normal follows a horizontal ship line after two adjacent hits", () =>
+    {
+        const ai = new AIOpponent(Difficulty.NORMAL);
+        const board = placeKnownFleet();
+        ai.recordShot(board.receiveShot(new Coordinate(0, 0), ai));
+        ai.recordShot(board.receiveShot(new Coordinate(1, 0), ai));
+
+        expect(ai.chooseTarget().key()).toBe("2,0");
+    });
+
+    it("Normal follows the opposite end when the newest hit's side is blocked", () =>
+    {
+        const ai = new AIOpponent(Difficulty.NORMAL);
+        const board = new Board();
+        const fleet = placeKnownFleet();
+        const cruiser = fleet.getShips().find(s => s.getName() === "Cruiser")!;
+        fleet.removeShip(cruiser);
+        board.placeShip(cruiser, new Coordinate(0, 7), Orientation.VERTICAL);
+
+        ai.recordShot(board.receiveShot(new Coordinate(0, 8), ai));
+        ai.recordShot(board.receiveShot(new Coordinate(0, 9), ai));
+
+        expect(ai.chooseTarget().key()).toBe("0,7");
+    });
+
+    it("Normal reverses along the line after its first extension misses", () =>
+    {
+        const ai = new AIOpponent(Difficulty.NORMAL);
+        const board = placeKnownFleet();
+
+        ai.recordShot(board.receiveShot(new Coordinate(1, 4), ai));
+        ai.recordShot(board.receiveShot(new Coordinate(2, 4), ai));
+        ai.recordShot(board.receiveShot(new Coordinate(3, 4), ai));
+
+        expect(ai.chooseTarget().key()).toBe("0,4");
+    });
+
     it("Normal sinks a ship it has found, then goes back to hunting", () =>
     {
         const ai = new AIOpponent(Difficulty.NORMAL);
