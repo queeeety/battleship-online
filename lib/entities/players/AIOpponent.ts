@@ -155,15 +155,59 @@ export class AIOpponent extends Player
         return this.randomFrom(parity.length > 0 ? parity : open);
     }
 
-    // the next queued neighbour of a hit, or null when there's nothing left to chase
+    // once two hits line up, follow that ship before trying unrelated neighbours
     private target(): Coordinate | null
     {
+        const lineTarget = this.targetAlongHitLine();
+        if (lineTarget) return lineTarget;
+
         while (this.huntQueue.length > 0)
         {
             const next = this.huntQueue.shift() as Coordinate;
             if (!this.targeted.has(next.key())) return next;
         }
         return null;
+    }
+
+    private targetAlongHitLine(): Coordinate | null
+    {
+        for (let newestIndex = this.activeHits.length - 1; newestIndex >= 0; newestIndex--)
+        {
+            const newest = this.activeHits[newestIndex];
+            for (const [dx, dy] of [[1, 0], [0, 1]])
+            {
+                const run = this.hitRunThrough(newest, dx, dy);
+                if (run.length < 2) continue;
+
+                const forward = new Coordinate(run.at(-1)!.getX() + dx, run.at(-1)!.getY() + dy);
+                const backward = new Coordinate(run[0].getX() - dx, run[0].getY() - dy);
+                const newestAtForwardEnd = newest.equals(run.at(-1)!);
+                const options = newestAtForwardEnd ? [forward, backward] : [backward, forward];
+                const target = options.find(c => this.canTarget(c));
+                if (target) return target;
+            }
+        }
+        return null;
+    }
+
+    private hitRunThrough(at: Coordinate, dx: number, dy: number): Coordinate[]
+    {
+        const hits = new Set(this.activeHits.map(h => h.key()));
+        const run = [at];
+        for (let i = 1; hits.has(new Coordinate(at.getX() - dx * i, at.getY() - dy * i).key()); i++)
+        {
+            run.unshift(new Coordinate(at.getX() - dx * i, at.getY() - dy * i));
+        }
+        for (let i = 1; hits.has(new Coordinate(at.getX() + dx * i, at.getY() + dy * i).key()); i++)
+        {
+            run.push(new Coordinate(at.getX() + dx * i, at.getY() + dy * i));
+        }
+        return run;
+    }
+
+    private canTarget(c: Coordinate): boolean
+    {
+        return c.isWithinBounds(BOARD_SIZE, BOARD_SIZE) && !this.targeted.has(c.key());
     }
 
     private queueNeighbours(c: Coordinate): void
@@ -176,7 +220,7 @@ export class AIOpponent extends Player
         ];
         for (const n of around)
         {
-            if (!n.isWithinBounds(BOARD_SIZE, BOARD_SIZE) || this.targeted.has(n.key())) continue;
+            if (!this.canTarget(n)) continue;
             if (this.huntQueue.some(q => q.equals(n))) continue;
             this.huntQueue.push(n);
         }
