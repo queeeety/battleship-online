@@ -123,11 +123,58 @@ class GameBroadcast <<value>> {
 
 class AudioManager <<boundary>> {
   - sounds : Map<SoundName, HTMLAudioElement>
-  - muted : boolean
+  - settings : SoundSettings | null
+  - music : MusicChannel | null
+  - unlockInstalled : boolean
+  - enabled : boolean
+  + getSettings() : SoundSettings
+  + applySettings(settings : SoundSettings) : void
   + setMuted(muted : boolean) : void
   + isMuted() : boolean
+  + setVolume(volume : number) : void
+  + getVolume() : number
+  + setMusicMuted(muted : boolean) : void
+  + isMusicMuted() : boolean
+  + setMusicVolume(volume : number) : void
+  + getMusicVolume() : number
+  + startMusic() : void
+  + stopMusic() : void
   + play(sound : SoundName) : void
   + playForShot(result : ShotResult) : void
+  + installUnlock() : void
+}
+
+class MusicChannel <<boundary>> {
+  - element : HTMLAudioElement | null
+  - wanted : boolean
+  - muted : boolean
+  - hidden : boolean
+  - volume : number
+  - ducked : boolean
+  - fade : number
+  + start() : void
+  + prime() : void
+  + stop() : void
+  + isPlaying() : boolean
+  + setMuted(muted : boolean) : void
+  + setVolume(volume : number) : void
+  + setHidden(hidden : boolean) : void
+  + duck() : void
+}
+
+class SoundSettings <<value>> {
+  + effectsMuted : boolean
+  + effectsVolume : number
+  + musicMuted : boolean
+  + musicVolume : number
+}
+
+class SoundSettingsStore <<boundary>> {
+  - listeners : Set<() => void>
+  + subscribe(listener : () => void) : () => void
+  + get() : SoundSettings
+  + getServer() : SoundSettings
+  + update(change : Partial<SoundSettings>) : void
 }
 
 class Timer <<boundary>> {
@@ -162,6 +209,10 @@ NetworkHandler "1" --> "1" NetworkListener : notifies >
 NetworkListener ..> GameBroadcast : receives >
 UIManager ..> Server : calls actions >
 UIManager "1" --> "0..1" AudioManager : plays sounds with >
+AudioManager "1" --> "0..1" MusicChannel : plays music with >
+AudioManager ..> SoundSettings : applies >
+SoundSettingsStore "1" --> "1" AudioManager : changes settings of >
+SoundSettingsStore ..> SoundSettings : saves to localStorage >
 Timer ..> Server : claimTimeout() >
 NetworkHandler ..> HumanPlayer : tracks presence >
 Server "1" --> "1" NetworkHandler : private messages via >
@@ -188,8 +239,24 @@ note bottom of NetworkHandler
   are those server actions (fakes in tests).
 end note
 note bottom of AudioManager
-  Optional. Does nothing while
-  AUDIO_ENABLED is false.
+  Optional. Does nothing while AUDIO_ENABLED
+  is false; it is true by default, so the
+  player mutes with the Sound menu. Effects
+  and music have separate mute and volume.
+  Browsers block sound until a first press
+  or key, so installUnlock() waits for one.
+end note
+note bottom of MusicChannel
+  One looping battle theme shared by every
+  screen. Fades in and out, dips under big
+  effects (duck) and pauses while the tab is
+  hidden. Plays the AAC copy where Ogg is
+  not supported.
+end note
+note bottom of SoundSettingsStore
+  What the Sound menu reads and changes.
+  AudioManager holds the current values; the
+  store saves changes and tells listeners.
 end note
 legend bottom right
   Grey dashed boxes are classes detailed in another figure.
