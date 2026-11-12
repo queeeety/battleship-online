@@ -1,0 +1,42 @@
+# Lint, typecheck, tests and a production build on every push to main and every pull request.
+# Vercel deploys main on its own once it builds; this keeps broken code from getting there unnoticed.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NEXT_TELEMETRY_DISABLED: 1
+
+jobs:
+  check:
+    name: Lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - run: npm run lint
+
+      - name: Typecheck
+        run: |
+          # generate Next's route types (LayoutProps etc.) so tsc can find them
+          npx next typegen
+          npm run typecheck
+
+      - run: npm test
+
+      - run: npm run build

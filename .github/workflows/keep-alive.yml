@@ -1,0 +1,31 @@
+# Free Supabase projects pause after a week without database traffic, which would take the live demo
+# down. This reads one row every three days so that never happens.
+#
+# Repository variable:
+#   SUPABASE_PROJECT_ID  the project ref. The job is skipped until it is set.
+# Repository secret:
+#   SUPABASE_SECRET_KEY  the sb_secret_... key. Every table is closed to the public key, so a real
+#                        database read needs the secret one. It never leaves this job.
+
+name: Keep Supabase awake
+
+on:
+  schedule:
+    - cron: "17 6 */3 * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    name: Read one row
+    if: vars.SUPABASE_PROJECT_ID != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Query the games table
+        env:
+          SUPABASE_PROJECT_ID: ${{ vars.SUPABASE_PROJECT_ID }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: |
+          curl --fail --silent --show-error --output /dev/null \
+            --write-out "Supabase answered HTTP %{http_code}\n" \
+            --header "apikey: $SUPABASE_SECRET_KEY" \
+            "https://$SUPABASE_PROJECT_ID.supabase.co/rest/v1/games?select=code&limit=1"
