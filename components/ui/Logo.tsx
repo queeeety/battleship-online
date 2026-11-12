@@ -27,7 +27,7 @@ export function Logo({ size = 28, wordmark = true }: LogoProps) {
         <circle cx="16" cy="16" r="1.6" className="f" />
         <circle cx="20.5" cy="19.5" r="2" className="f" />
       </svg>
-      <span className={wordmark ? "mb-logo-word" : "mb-sr"}>MyBattleship</span>
+      <span className={wordmark ? "mb-logo-word" : "mb-sr"}>Battleship Online</span>
     </span>
   );
 }

@@ -268,9 +268,9 @@ export function LobbyCodeDemo() {
     <div className="grid max-w-[420px] justify-items-start gap-(--space-3)">
       <LobbyCode
         code="K7Q2XM"
-        link="mybattleship.app/j/K7Q2XM"
+        link="battleship-online.vercel.app/j/K7Q2XM"
         onCopyCode={() => copy("K7Q2XM", "Lobby code copied.")}
-        onCopyLink={() => copy("https://mybattleship.app/j/K7Q2XM", "Link copied.")}
+        onCopyLink={() => copy("https://battleship-online.vercel.app/j/K7Q2XM", "Link copied.")}
       />
       {toast && (
         <Toast icon="copy" onClose={() => setToast(null)}>

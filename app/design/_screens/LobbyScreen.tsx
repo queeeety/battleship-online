@@ -7,7 +7,7 @@ import { SampleStates, ShowcaseStrip } from "./chrome";
 type Stage = "waiting" | "joined";
 
 const CODE = "K7Q2XM";
-const LINK = `mybattleship.app/game/${CODE}`;
+const LINK = `battleship-online.vercel.app/game/${CODE}`;
 
 export function LobbyScreen() {
   const [stage, setStage] = useState<Stage>("waiting");

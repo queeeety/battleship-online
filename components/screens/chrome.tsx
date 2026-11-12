@@ -54,7 +54,7 @@ export function ScreenBar({ children, homeHref }: { children?: ReactNode; homeHr
   return (
     <div className="flex items-center gap-(--space-4) border-b border-line bg-surface-000 px-(--space-4) py-(--space-3) min-[900px]:px-(--space-6)">
       {homeHref ? (
-        <Link href={homeHref} className="flex text-ink" aria-label="MyBattleship home">
+        <Link href={homeHref} className="flex text-ink" aria-label="Battleship Online home">
           <Logo size={24} />
         </Link>
       ) : (

@@ -24,8 +24,8 @@ const plexMono = localFont({
 
 export const metadata: Metadata = {
   title: {
-    default: "MyBattleship",
-    template: "%s · MyBattleship",
+    default: "Battleship Online",
+    template: "%s · Battleship Online",
   },
   description:
     "Two-player Battleship in the browser: lobbies with a share code, timed turns, four abilities and a computer opponent.",
