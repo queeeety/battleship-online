@@ -1,98 +1,187 @@
-# OOAD-Battleship-Project2026
+<div align="center">
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="public/brand/mybattleship-mark-on-dark.svg">
+  <img src="public/brand/mybattleship-mark-on-light.svg" width="64" height="64" alt="">
+</picture>
 
+# Battleship Online
 
-## Getting started
+**Real-time two-player Battleship in the browser.**<br>
+Share a lobby code, place your fleet, race the turn clock, and turn the game with four special abilities. Or warm up against the computer.
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+### [▶ Play it live](https://battleship-online.vercel.app)
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+[![CI](https://github.com/queeeety/battleship-online/actions/workflows/ci.yml/badge.svg)](https://github.com/queeeety/battleship-online/actions/workflows/ci.yml)
+![Next.js 16](https://img.shields.io/badge/Next.js-16-000?logo=nextdotjs)
+![React 19](https://img.shields.io/badge/React-19-149eca?logo=react&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)
+![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20Realtime-3ecf8e?logo=supabase&logoColor=white)
+![Tailwind CSS 4](https://img.shields.io/badge/Tailwind-4-38bdf8?logo=tailwindcss&logoColor=white)
 
-## Add your files
+<img src="docs/screenshots/battle.png" alt="A battle in progress: your fleet on the left, the enemy waters on the right, the turn timer and an ability card" width="900">
 
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+</div>
 
+## Features
+
+- **Online multiplayer, no sign-up.** Create a lobby and share its six-character code. Codes skip 0/O, 1/I and L, so they're easy to read out. Every player gets an anonymous session behind the scenes.
+- **Three game types.** Beginner gives you 30 seconds a turn, Original 15 and Quick Fire 5. If the clock runs out, a random shot is fired for you.
+- **Four comeback abilities.** Lose a ship and you draw one at random to fight back with:
+
+  | Ability | What it does |
+  |---|---|
+  | **Double Shot** | Your next miss this turn doesn't end the turn. |
+  | **Radar Sweep** | Reveals which squares in a 3×3 area hide a ship. |
+  | **Line Scan** | Reveals ship squares along a whole row or column. |
+  | **Reroute** | Moves one undamaged ship to a new spot, away from squares already fired at. |
+
+- **Play against the computer.** On Easy it fires at random. On Normal it hunts on a checkerboard, then follows a ship's direction once it scores adjacent hits. It never looks at your board. The whole game runs in your browser and survives a page reload.
+- **Built for real networks.** A dropped player has 60 seconds to come back before the game counts as a forfeit, and a banner on the home page offers to rejoin. Abandoned lobbies are cleaned up on a schedule.
+- **Rematch** with one click when the game ends.
+- **Polish.** Drag-and-drop fleet placement, hit, miss and sink effects, sound effects and music with a mute toggle, keyboard navigation on the boards, light and dark themes, and layouts for phones, tablets and desktops.
+
+## Screenshots
+
+<table>
+  <tr>
+    <td><img src="docs/screenshots/home.png" alt="Home screen: create a lobby, join with a code or play the computer"></td>
+    <td><img src="docs/screenshots/placement.png" alt="Fleet placement: drag ships onto the board"></td>
+  </tr>
+  <tr>
+    <td align="center">Home</td>
+    <td align="center">Fleet placement</td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/lobby.png" alt="Lobby waiting for an opponent, with the share code"></td>
+    <td><img src="docs/screenshots/result.png" alt="Result screen with game stats and a rematch button"></td>
+  </tr>
+  <tr>
+    <td align="center">Lobby</td>
+    <td align="center">Result</td>
+  </tr>
+</table>
+
+## How it works
+
+The game is **server-authoritative**. Browsers never see the opponent's fleet, and every move is checked on the server before it counts.
+
+```mermaid
+flowchart LR
+    subgraph Browser
+        UI["React screens<br/>app/ · components/"]
+        NH["NetworkHandler<br/>Realtime client"]
+        AI["AIOpponent<br/>vs-computer games"]
+    end
+    subgraph Vercel["Next.js on Vercel"]
+        SA["Server actions<br/>Zod validation"]
+        CTRL["Controllers<br/>Server · Lobby · Game"]
+        ENT["Domain model<br/>Board · Ship · Player · Ability"]
+    end
+    subgraph Supabase
+        DB[("Postgres<br/>RLS + column grants")]
+        RT["Realtime<br/>private channels"]
+        CRON["pg_cron<br/>lobby sweep"]
+    end
+    UI -- "fire, place, use ability" --> SA --> CTRL --> ENT
+    CTRL -- "save_game()" --> DB
+    DB -- "broadcast trigger" --> RT --> NH --> UI
+    CRON --> DB
+    AI -.-> ENT
 ```
-cd existing_repo
-git remote add origin https://gitlab.computing.dcu.ie/nathan.pascale2/ooad-battleship-project2026.git
-git branch -M main
-git push -uf origin main
+
+- **Hidden information stays hidden.** Fleets live in a table only the server's service role can read. Players read their own game through row-level security and column grants, so nobody can query the opponent's ships or abilities.
+- **One write path.** Moves go through Next.js server actions. They validate the input with Zod, load the game into the domain model, apply the rules, and save the result in a single `save_game()` database call.
+- **Live updates.** A database trigger broadcasts every change on a private Realtime channel that only the two seated players can join. Presence shows when an opponent drops.
+- **Designed before it was coded.** The project started as UML: use cases, class, state, sequence and communication diagrams. The code keeps the same entity, boundary and control split, so `lib/entities`, `lib/boundary` and `lib/controllers` map straight onto the [diagrams](docs/uml/).
+
+## Tech stack
+
+| Layer | Tools |
+|---|---|
+| Front end | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4, Framer Motion |
+| Back end | Next.js server actions, Zod, Supabase (Postgres, anonymous auth, Realtime, pg_cron) |
+| Testing | Vitest unit tests for the rules, abilities, AI, server validation and UI logic |
+| Delivery | GitHub Actions (CI, database migrations), Vercel |
+
+## Project structure
+
+```text
+app/                  routes: home, /game/[code] (online), /play (vs computer), /design (dev-only showcase)
+components/           design system and game UI: boards, ships, ability cards, effects, screens
+hooks/                game state, placement, sounds, timers
+lib/
+  entities/           Board, Cell, Coordinate, the five ship classes, players and the AI
+  abilities/          Ability base class and the four abilities
+  controllers/        Game, Lobby and Server: the rules and the turn flow
+  boundary/           UI and network boundary classes from the class diagram
+  server/             server actions, GameRepository, SessionManager, RequestValidator, RateLimiter
+supabase/migrations/  schema, RLS, the save_game function, Realtime permissions, the cron sweep
+docs/uml/             PlantUML sources for every diagram
+tests/                Vitest tests, mirroring lib/
 ```
 
-## Integrate with your tools
+## Run it locally
 
-* [Set up project integrations](https://gitlab.computing.dcu.ie/nathan.pascale2/ooad-battleship-project2026/-/settings/integrations)
+You need **Node 22+** and a free [Supabase](https://supabase.com) project.
 
-## Collaborate with your team
+1. **Install**
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+   ```bash
+   git clone https://github.com/queeeety/battleship-online.git
+   cd battleship-online
+   npm install
+   ```
 
-## Test and Deploy
+2. **Add your keys.** Copy `.env.example` to `.env.local` and fill it in from Supabase → Project Settings → API Keys.
 
-Use the built-in continuous integration in GitLab.
+   | Variable | Where it's used |
+   |---|---|
+   | `NEXT_PUBLIC_SUPABASE_URL` | browser and server |
+   | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | browser and server, safe to expose |
+   | `SUPABASE_SECRET_KEY` | server only, bypasses row-level security |
+   | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | optional, rate-limits lobby creation |
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+3. **Create the database.**
 
-***
+   ```bash
+   npx supabase login
+   npx supabase link --project-ref <your-project-ref>
+   npx supabase db push
+   ```
 
-# Editing this README
+   Then turn on **Authentication → Sign In / Providers → Allow anonymous sign-ins** in the Supabase dashboard.
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+4. **Play.** Run `npm run dev` and open <http://localhost:3000>. To play online against yourself, use a second browser or a private window. The design-system showcase is at <http://localhost:3000/design>.
 
-## Suggestions for a good README
+| Command | What it does |
+|---|---|
+| `npm run dev` | dev server |
+| `npm test` | Vitest suite |
+| `npm run lint` | ESLint |
+| `npm run typecheck` | TypeScript |
+| `npm run build` | production build |
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+## Deployment
 
-## Name
-Choose a self-explaining name for your project.
+Vercel builds every push to `main`, with the Supabase keys stored as encrypted environment variables in the Vercel project. GitHub Actions does the rest. Its keys live in encrypted Actions secrets (`SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`, `SUPABASE_SECRET_KEY`), and the non-secret project ref in the `SUPABASE_PROJECT_ID` variable:
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+| Workflow | When | What |
+|---|---|---|
+| [CI](.github/workflows/ci.yml) | every push and pull request | lint, typecheck, tests, production build |
+| [Database migrations](.github/workflows/db-migrations.yml) | a new file in `supabase/migrations` reaches `main` | `supabase db push` to the hosted project |
+| [Keep Supabase awake](.github/workflows/keep-alive.yml) | every three days | one database read, so the free project never pauses |
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+## Team
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+Built in autumn 2026 by five students as the group project for the Object-Oriented Analysis and Design module at Dublin City University.
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+| | Main areas |
+|---|---|
+| **Tymofii Bezverkhyi** | Design system and UI components, every game screen, wiring the screens to the back end (online play from home to rematch, the in-browser computer game), drag-and-drop placement and ability targeting, mobile layouts, CI/CD and deployment, class diagrams |
+| **Nathan Pascale** | Supabase schema and security, server actions, sessions, Realtime networking, lobbies, disconnects and forfeits, rematch, turn timer, rate limiting |
+| **Chukwuma Anyanwu** | Rules engine, the computer opponent, saving and restoring games |
+| **Alexander Abramov** | Sound and music, hit, miss and sink effects, error states, keyboard navigation, turn countdown |
+| **Teddy Essomba** | The four abilities and their targeting, use case diagrams |
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## Credits
-- **Music:** "Enemy Ship Approaching" by yd (via OpenGameArt.org). Licensed under Creative Commons CC0.
-  Track page: https://opengameart.org/node/15203, author: https://opengameart.org/users/yd.
-  Files: `public/music/battle-theme.ogg`, plus `battle-theme.m4a`, an AAC copy for browsers that can't play Ogg.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+Originally developed on the university's GitLab and mirrored here with its full history.
