@@ -10,7 +10,7 @@
 **Real-time two-player Battleship in the browser.**<br>
 Share a lobby code, place your fleet, race the turn clock, and turn the game with four special abilities. Or warm up against the computer.
 
-### [▶ Play it live](https://battleship-online.vercel.app)
+### [▶ Play it live](https://battleship-online-ten.vercel.app)
 
 [![CI](https://github.com/queeeety/battleship-online/actions/workflows/ci.yml/badge.svg)](https://github.com/queeeety/battleship-online/actions/workflows/ci.yml)
 ![Next.js 16](https://img.shields.io/badge/Next.js-16-000?logo=nextdotjs)
