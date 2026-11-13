@@ -41,4 +41,5 @@ jobs:
 
       - run: supabase link --project-ref "$SUPABASE_PROJECT_ID"
 
-      - run: supabase db push --remote
+      # --yes: CI has no terminal to confirm the push in
+      - run: supabase db push --remote --yes
