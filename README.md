@@ -147,7 +147,7 @@ You need **Node 22+** and a free [Supabase](https://supabase.com) project.
    ```bash
    npx supabase login
    npx supabase link --project-ref <your-project-ref>
-   npx supabase db push
+   npx supabase db push --remote
    ```
 
    Then turn on **Authentication → Sign In / Providers → Allow anonymous sign-ins** in the Supabase dashboard.

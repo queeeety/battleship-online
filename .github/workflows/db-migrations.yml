@@ -34,10 +34,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # pinned: CLI 3 changed db push to target the local stack unless told otherwise
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 3.1.0
 
       - run: supabase link --project-ref "$SUPABASE_PROJECT_ID"
 
-      - run: supabase db push
+      - run: supabase db push --remote
